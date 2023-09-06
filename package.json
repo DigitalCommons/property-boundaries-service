@@ -1,0 +1,28 @@
+{
+  "name": "property-boundaries-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node dist/app.js",
+    "generate": "node dist/generate.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.4.9",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@hapi/hapi": "^21.3.2",
+    "axios": "^1.4.0",
+    "dotenv": "^16.3.1",
+    "extract-zip": "^2.0.1",
+    "joi": "^17.9.2",
+    "path": "^0.12.7",
+    "puppeteer": "^21.0.2",
+    "sequelize": "^6.32.1"
+  }
+}
