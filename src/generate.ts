@@ -3,11 +3,12 @@ import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import extract from 'extract-zip';
+import csvParser from 'csv-parser';
 import 'dotenv/config';
 
 const downloadPath = path.resolve('./downloads');
 
-async function download() {
+async function downloadInspire() {
     //headless browser getting INSPIRE files
 
     const url = "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
@@ -60,7 +61,69 @@ async function unzip() {
     })
 }
 
+async function downloadOwnerships() {
+    const datasetsUKResponse = await axios.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod", {
+        headers: {
+            Authorization: process.env.GOV_API_KEY
+        }
+    });
+    const datasetsOverseasResponse = await axios.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod", {
+        headers: {
+            Authorization: process.env.GOV_API_KEY
+        }
+    })
+
+    const filenameUK = datasetsUKResponse.data.result.public_resources[0].file_name;
+    const filenameOverseas = datasetsOverseasResponse.data.result.public_resources[0].file_name;
+
+    const ownershipsUKResponse = await axios.get(`https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/${filenameUK}`, {
+        headers: {
+            Authorization: process.env.GOV_API_KEY
+        }
+    })
+    const ownershipsOverseasResponse = await axios.get(`https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/${filenameOverseas}`, {
+        headers: {
+            Authorization: process.env.GOV_API_KEY
+        }
+    })
+
+    const exampleUKResponse = await axios.get(ownershipsUKResponse.data.result.download_url);
+    const exampleOverseasResponse = await axios.get(ownershipsOverseasResponse.data.result.download_url);
+
+    const exampleCSVPathUK = path.resolve('./downloads/exampleUK.csv')
+    const exampleCSVPathOverseas = path.resolve('./downloads/exampleOverseas.csv')
+
+    fs.writeFile(exampleCSVPathUK, exampleUKResponse.data, err => {
+        if (err) {
+            console.error(err);
+        }
+    });
+    fs.writeFile(exampleCSVPathOverseas, exampleOverseasResponse.data, err => {
+        if (err) {
+            console.error(err);
+        }
+    });
+    fs.createReadStream(exampleCSVPathUK)
+        .pipe(csvParser())
+        .on('data', (item) => {
+            console.log(item)
+            //determine update type
+            //either add or delete or update in database
+        })
+    fs.createReadStream(exampleCSVPathOverseas)
+        .pipe(csvParser())
+        .on('data', (item) => {
+            console.log(item)
+            //determine update type
+            //either add or delete or update in database
+        })
+}
+
 //delete all the files already there?
-download().then(() => {
+//fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
+
+downloadInspire().then(() => {
     unzip();
 });
+
+downloadOwnerships();
