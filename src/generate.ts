@@ -5,6 +5,7 @@ import fs from 'fs';
 import extract from 'extract-zip';
 import csvParser from 'csv-parser';
 import 'dotenv/config';
+import { createLandOwnership } from './queries/query';
 
 const downloadPath = path.resolve('./downloads');
 
@@ -61,6 +62,21 @@ async function unzip() {
     })
 }
 
+async function transformGML() {
+    fs.readdir(downloadPath, (err, files) => {
+        files.forEach(async file => {
+            const filePath = downloadPath + "/" + file;
+
+            if (!fs.lstatSync(filePath).isFile()) {
+                fs.readdir(filePath, (err, files) => {
+                    if (files.includes('Land_Registry_Cadastral_Parcels.gml'))
+                        console.log("found GML file")
+                })
+            }
+        })
+    })
+}
+
 async function downloadOwnerships() {
     const datasetsUKResponse = await axios.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod", {
         headers: {
@@ -71,7 +87,7 @@ async function downloadOwnerships() {
         headers: {
             Authorization: process.env.GOV_API_KEY
         }
-    })
+    });
 
     const filenameUK = datasetsUKResponse.data.result.public_resources[0].file_name;
     const filenameOverseas = datasetsOverseasResponse.data.result.public_resources[0].file_name;
@@ -80,18 +96,18 @@ async function downloadOwnerships() {
         headers: {
             Authorization: process.env.GOV_API_KEY
         }
-    })
+    });
     const ownershipsOverseasResponse = await axios.get(`https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/${filenameOverseas}`, {
         headers: {
             Authorization: process.env.GOV_API_KEY
         }
-    })
+    });
 
     const exampleUKResponse = await axios.get(ownershipsUKResponse.data.result.download_url);
     const exampleOverseasResponse = await axios.get(ownershipsOverseasResponse.data.result.download_url);
 
-    const exampleCSVPathUK = path.resolve('./downloads/exampleUK.csv')
-    const exampleCSVPathOverseas = path.resolve('./downloads/exampleOverseas.csv')
+    const exampleCSVPathUK = path.resolve('./downloads/exampleUK.csv');
+    const exampleCSVPathOverseas = path.resolve('./downloads/exampleOverseas.csv');
 
     fs.writeFile(exampleCSVPathUK, exampleUKResponse.data, err => {
         if (err) {
@@ -105,25 +121,28 @@ async function downloadOwnerships() {
     });
     fs.createReadStream(exampleCSVPathUK)
         .pipe(csvParser())
-        .on('data', (item) => {
-            console.log(item)
+        .on('data', (ownership) => {
+            ownership.proprietor_uk_based = true;
+            createLandOwnership(ownership);
             //determine update type
             //either add or delete or update in database
-        })
+        });
     fs.createReadStream(exampleCSVPathOverseas)
         .pipe(csvParser())
-        .on('data', (item) => {
-            console.log(item)
+        .on('data', (ownership) => {
+            ownership.proprietor_uk_based = false;
+            createLandOwnership(ownership);
             //determine update type
             //either add or delete or update in database
-        })
+        });
 }
 
 //delete all the files already there?
 //fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
 
-downloadInspire().then(() => {
-    unzip();
-});
 
-downloadOwnerships();
+//downloadInspire().then(unzip).then(transformGML);
+
+transformGML();
+
+//downloadOwnerships();

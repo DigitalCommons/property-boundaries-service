@@ -19,6 +19,7 @@ const fs_1 = __importDefault(require("fs"));
 const extract_zip_1 = __importDefault(require("extract-zip"));
 const csv_parser_1 = __importDefault(require("csv-parser"));
 require("dotenv/config");
+const query_1 = require("./queries/query");
 const downloadPath = path_1.default.resolve('./downloads');
 function downloadInspire() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -64,6 +65,22 @@ function unzip() {
         });
     });
 }
+function transformGML() {
+    return __awaiter(this, void 0, void 0, function* () {
+        fs_1.default.readdir(downloadPath, (err, files) => {
+            files.forEach((file) => __awaiter(this, void 0, void 0, function* () {
+                const filePath = downloadPath + "/" + file;
+                if (!fs_1.default.lstatSync(filePath).isFile()) {
+                    console.log(file);
+                    fs_1.default.readdir(filePath, (err, files) => {
+                        if (files.includes('Land_Registry_Cadastral_Parcels.gml'))
+                            console.log("found GML file");
+                    });
+                }
+            }));
+        });
+    });
+}
 function downloadOwnerships() {
     return __awaiter(this, void 0, void 0, function* () {
         const datasetsUKResponse = yield axios_1.default.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod", {
@@ -104,15 +121,17 @@ function downloadOwnerships() {
         });
         fs_1.default.createReadStream(exampleCSVPathUK)
             .pipe((0, csv_parser_1.default)())
-            .on('data', (item) => {
-            console.log(item);
+            .on('data', (ownership) => {
+            ownership.proprietor_uk_based = true;
+            (0, query_1.createLandOwnership)(ownership);
             //determine update type
             //either add or delete or update in database
         });
         fs_1.default.createReadStream(exampleCSVPathOverseas)
             .pipe((0, csv_parser_1.default)())
-            .on('data', (item) => {
-            console.log(item);
+            .on('data', (ownership) => {
+            ownership.proprietor_uk_based = false;
+            (0, query_1.createLandOwnership)(ownership);
             //determine update type
             //either add or delete or update in database
         });
@@ -120,8 +139,7 @@ function downloadOwnerships() {
 }
 //delete all the files already there?
 //fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
-downloadInspire().then(() => {
-    unzip();
-});
-downloadOwnerships();
+//downloadInspire().then(unzip).then(transformGML);
+transformGML();
+//downloadOwnerships();
 //# sourceMappingURL=generate.js.map

@@ -117,6 +117,9 @@ module.exports = {
       additional_proprietor_indicator: {
         type: Sequelize.STRING
       },
+      proprietor_uk_based: {
+        type: Sequelize.BOOLEAN
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE
