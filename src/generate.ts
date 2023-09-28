@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import axios from 'axios';
 import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import extract from 'extract-zip';
 import csvParser from 'csv-parser';
-import 'dotenv/config';
+import ogr2ogr from 'ogr2ogr'
 import { createLandOwnership } from './queries/query';
 
 const downloadPath = path.resolve('./downloads');
@@ -68,9 +69,29 @@ async function transformGML() {
             const filePath = downloadPath + "/" + file;
 
             if (!fs.lstatSync(filePath).isFile()) {
-                fs.readdir(filePath, (err, files) => {
-                    if (files.includes('Land_Registry_Cadastral_Parcels.gml'))
-                        console.log("found GML file")
+                fs.readdir(filePath, async (err, files) => {
+                    if (files.includes('Land_Registry_Cadastral_Parcels.gml')) {
+                        const gmlFile = filePath + "/Land_Registry_Cadastral_Parcels.gml";
+
+                        const { data } = await ogr2ogr(gmlFile, {
+                            options: ["-t_srs", "EPSG:4269"],
+                        });
+
+                        fs.writeFile(filePath + "/parcels.json", JSON.stringify(data), err => {
+                            if (err) {
+                                console.error(err);
+                            }
+                        });
+
+                        //for each geojson we need to see if it's already in the database
+                        //if it is, do nothing, if it's not, add it
+                        //and do we need to remove polygons in the database that are no longer there?
+                        //how we going to know that? remove from global list of ids the ones
+                        //that appear or are replaced? i think we probably need to replace
+                        //them all anyway in case the bounds shift a bit right?
+
+                        //and then there's a question about if we're trying to geocode the new ones
+                    }
                 })
             }
         })

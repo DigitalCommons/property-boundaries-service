@@ -12,13 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const axios_1 = __importDefault(require("axios"));
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const extract_zip_1 = __importDefault(require("extract-zip"));
 const csv_parser_1 = __importDefault(require("csv-parser"));
-require("dotenv/config");
+const ogr2ogr_1 = __importDefault(require("ogr2ogr"));
 const query_1 = require("./queries/query");
 const downloadPath = path_1.default.resolve('./downloads');
 function downloadInspire() {
@@ -71,11 +72,22 @@ function transformGML() {
             files.forEach((file) => __awaiter(this, void 0, void 0, function* () {
                 const filePath = downloadPath + "/" + file;
                 if (!fs_1.default.lstatSync(filePath).isFile()) {
-                    console.log(file);
-                    fs_1.default.readdir(filePath, (err, files) => {
-                        if (files.includes('Land_Registry_Cadastral_Parcels.gml'))
+                    fs_1.default.readdir(filePath, (err, files) => __awaiter(this, void 0, void 0, function* () {
+                        if (files.includes('Land_Registry_Cadastral_Parcels.gml')) {
                             console.log("found GML file");
-                    });
+                            const gmlFile = filePath + "/Land_Registry_Cadastral_Parcels.gml";
+                            console.log(gmlFile);
+                            const { data } = yield (0, ogr2ogr_1.default)(gmlFile, {
+                                options: ["-t_srs", "EPSG:4269"],
+                            });
+                            fs_1.default.writeFile(filePath + "/parcels.json", JSON.stringify(data), err => {
+                                if (err) {
+                                    console.error(err);
+                                }
+                            });
+                            //try some kind of transform script
+                        }
+                    }));
                 }
             }));
         });

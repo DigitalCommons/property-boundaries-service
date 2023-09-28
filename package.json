@@ -23,6 +23,7 @@
     "extract-zip": "^2.0.1",
     "joi": "^17.9.2",
     "mysql2": "^3.6.1",
+    "ogr2ogr": "^4.0.1",
     "path": "^0.12.7",
     "puppeteer": "^21.0.2",
     "sequelize": "^6.32.1"
