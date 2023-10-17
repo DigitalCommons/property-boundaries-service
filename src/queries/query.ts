@@ -1,14 +1,37 @@
-import { Sequelize, DataTypes } from "sequelize";
+import { Sequelize, DataTypes, Op } from "sequelize";
 
 export const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
     host: 'localhost',
     dialect: 'mysql'
 });
 
-export const LandOwnershipModel = sequelize.define('LandOwnership', {
+export const PolygonModel = sequelize.define('Polygon', {
     id: {
         allowNull: false,
         autoIncrement: true,
+        primaryKey: true,
+        type: DataTypes.INTEGER
+    },
+    poly_id: DataTypes.STRING,
+    title_no: {
+        unique: true,
+        type: DataTypes.STRING
+    },
+    geom: DataTypes.GEOMETRY,
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE
+    },
+    updatedAt: {
+        allowNull: false,
+        type: DataTypes.DATE
+    }
+}, {
+    tableName: 'land_ownership_polygons',
+});
+
+export const LandOwnershipModel = sequelize.define('LandOwnership', {
+    id: {
         primaryKey: true,
         type: DataTypes.INTEGER,
     },
@@ -60,6 +83,8 @@ export const LandOwnershipModel = sequelize.define('LandOwnership', {
     tableName: 'land_ownerships',
 });
 
+PolygonModel.hasMany(LandOwnershipModel, { foreignKey: "title_no" });
+LandOwnershipModel.belongsTo(PolygonModel, { foreignKey: "title_no" });
 
 export async function createLandOwnership(ownership) {
     await LandOwnershipModel.create({
@@ -82,4 +107,33 @@ export async function createLandOwnership(ownership) {
         additional_proprietor_indicator: ownership['Additional Proprietor Indicator'],
         proprietor_uk_based: ownership.proprietor_uk_based,
     })
+}
+
+export async function getLandOwnership(title_no: string) {
+    const landOwnership = await LandOwnershipModel.findOne({
+        where: {
+            title_no: title_no
+        },
+        raw: true
+    });
+
+    return landOwnership;
+}
+
+export async function getPolygons() {
+    const polygons = await PolygonModel.findAll();
+
+    return polygons;
+}
+
+export async function getPolygonsByArea(searchArea: string) {
+    const query = `SELECT *
+    FROM boundary_service.land_ownership_polygons
+    LEFT JOIN boundary_service.land_ownerships
+    ON boundary_service.land_ownership_polygons.title_no = boundary_service.land_ownerships.title_no
+    WHERE ST_Intersects(boundary_service.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
+
+    const polygonsAndOwnerships = await sequelize.query(query);
+
+    return polygonsAndOwnerships;
 }

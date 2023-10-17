@@ -25,7 +25,6 @@ async function downloadInspire() {
 
     await page.goto(url);
 
-    //const inspireDownloadUrls = await page.evaluate(() => {
     const inspireDownloadLinks = await page.evaluate(() => {
         const inspireDownloadLinks = [];
         const pageLinks = document.getElementsByTagName("a");
@@ -83,8 +82,10 @@ async function transformGML() {
                             }
                         });
 
-                        //for each geojson we need to see if it's already in the database
+                        //for each geojson we need to see if we have an inspire id for that geojson
+                        //already in the database, if the idea is there, check the coords match
                         //if it is, do nothing, if it's not, add it
+
                         //and do we need to remove polygons in the database that are no longer there?
                         //how we going to know that? remove from global list of ids the ones
                         //that appear or are replaced? i think we probably need to replace
@@ -159,11 +160,10 @@ async function downloadOwnerships() {
 }
 
 //delete all the files already there?
-//fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
+fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
 
+downloadInspire().then(unzip).then(transformGML);
 
-//downloadInspire().then(unzip).then(transformGML);
+//transformGML();
 
-transformGML();
-
-//downloadOwnerships();
+downloadOwnerships();

@@ -9,9 +9,6 @@ module.exports = {
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      id: {
-        type: Sequelize.BIGINT
-      },
       poly_id: {
         type: Sequelize.STRING
       },

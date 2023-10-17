@@ -9,16 +9,38 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createLandOwnership = exports.LandOwnershipModel = exports.sequelize = void 0;
+exports.getPolygonsByArea = exports.getPolygons = exports.getLandOwnership = exports.createLandOwnership = exports.LandOwnershipModel = exports.PolygonModel = exports.sequelize = void 0;
 const sequelize_1 = require("sequelize");
 exports.sequelize = new sequelize_1.Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
     host: 'localhost',
     dialect: 'mysql'
 });
-exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
+exports.PolygonModel = exports.sequelize.define('Polygon', {
     id: {
         allowNull: false,
         autoIncrement: true,
+        primaryKey: true,
+        type: sequelize_1.DataTypes.INTEGER
+    },
+    poly_id: sequelize_1.DataTypes.STRING,
+    title_no: {
+        unique: true,
+        type: sequelize_1.DataTypes.STRING
+    },
+    geom: sequelize_1.DataTypes.GEOMETRY,
+    createdAt: {
+        allowNull: false,
+        type: sequelize_1.DataTypes.DATE
+    },
+    updatedAt: {
+        allowNull: false,
+        type: sequelize_1.DataTypes.DATE
+    }
+}, {
+    tableName: 'land_ownership_polygons',
+});
+exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
+    id: {
         primaryKey: true,
         type: sequelize_1.DataTypes.INTEGER,
     },
@@ -69,6 +91,8 @@ exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
 }, {
     tableName: 'land_ownerships',
 });
+exports.PolygonModel.hasMany(exports.LandOwnershipModel, { foreignKey: "title_no" });
+exports.LandOwnershipModel.belongsTo(exports.PolygonModel, { foreignKey: "title_no" });
 function createLandOwnership(ownership) {
     return __awaiter(this, void 0, void 0, function* () {
         yield exports.LandOwnershipModel.create({
@@ -94,4 +118,36 @@ function createLandOwnership(ownership) {
     });
 }
 exports.createLandOwnership = createLandOwnership;
+function getLandOwnership(title_no) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const landOwnership = yield exports.LandOwnershipModel.findOne({
+            where: {
+                title_no: title_no
+            },
+            raw: true
+        });
+        return landOwnership;
+    });
+}
+exports.getLandOwnership = getLandOwnership;
+function getPolygons() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const polygons = yield exports.PolygonModel.findAll();
+        return polygons;
+    });
+}
+exports.getPolygons = getPolygons;
+function getPolygonsByArea(searchArea) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const query = `SELECT *
+    FROM boundary_service.land_ownership_polygons
+    LEFT JOIN boundary_service.land_ownerships
+    ON boundary_service.land_ownership_polygons.title_no = boundary_service.land_ownerships.title_no
+    WHERE ST_Intersects(boundary_service.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
+        const polygonsAndOwnerships = yield exports.sequelize.query(query);
+        console.log(polygonsAndOwnerships[0].length);
+        return polygonsAndOwnerships;
+    });
+}
+exports.getPolygonsByArea = getPolygonsByArea;
 //# sourceMappingURL=query.js.map

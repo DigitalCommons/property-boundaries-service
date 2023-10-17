@@ -34,7 +34,6 @@ function downloadInspire() {
             downloadPath: downloadPath,
         });
         yield page.goto(url);
-        //const inspireDownloadUrls = await page.evaluate(() => {
         const inspireDownloadLinks = yield page.evaluate(() => {
             const inspireDownloadLinks = [];
             const pageLinks = document.getElementsByTagName("a");
@@ -74,9 +73,7 @@ function transformGML() {
                 if (!fs_1.default.lstatSync(filePath).isFile()) {
                     fs_1.default.readdir(filePath, (err, files) => __awaiter(this, void 0, void 0, function* () {
                         if (files.includes('Land_Registry_Cadastral_Parcels.gml')) {
-                            console.log("found GML file");
                             const gmlFile = filePath + "/Land_Registry_Cadastral_Parcels.gml";
-                            console.log(gmlFile);
                             const { data } = yield (0, ogr2ogr_1.default)(gmlFile, {
                                 options: ["-t_srs", "EPSG:4269"],
                             });
@@ -85,7 +82,14 @@ function transformGML() {
                                     console.error(err);
                                 }
                             });
-                            //try some kind of transform script
+                            //for each geojson we need to see if we have an inspire id for that geojson
+                            //already in the database, if the idea is there, check the coords match
+                            //if it is, do nothing, if it's not, add it
+                            //and do we need to remove polygons in the database that are no longer there?
+                            //how we going to know that? remove from global list of ids the ones
+                            //that appear or are replaced? i think we probably need to replace
+                            //them all anyway in case the bounds shift a bit right?
+                            //and then there's a question about if we're trying to geocode the new ones
                         }
                     }));
                 }
@@ -150,8 +154,8 @@ function downloadOwnerships() {
     });
 }
 //delete all the files already there?
-//fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
-//downloadInspire().then(unzip).then(transformGML);
-transformGML();
-//downloadOwnerships();
+fs_1.default.rmSync(path_1.default.resolve(`./downloads`), { recursive: true, force: true });
+downloadInspire().then(unzip).then(transformGML);
+//transformGML();
+downloadOwnerships();
 //# sourceMappingURL=generate.js.map
