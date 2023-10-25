@@ -140,10 +140,10 @@ exports.getPolygons = getPolygons;
 function getPolygonsByArea(searchArea) {
     return __awaiter(this, void 0, void 0, function* () {
         const query = `SELECT *
-    FROM boundary_service.land_ownership_polygons
-    LEFT JOIN boundary_service.land_ownerships
-    ON boundary_service.land_ownership_polygons.title_no = boundary_service.land_ownerships.title_no
-    WHERE ST_Intersects(boundary_service.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
+    FROM ${process.env.DB_NAME}.land_ownership_polygons
+    LEFT JOIN ${process.env.DB_NAME}.land_ownerships
+    ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
         const polygonsAndOwnerships = yield exports.sequelize.query(query);
         return polygonsAndOwnerships;
     });
