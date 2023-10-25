@@ -24,6 +24,14 @@ exports.server.route({
     }
 });
 exports.server.route(boundary_1.default);
+exports.server.route({
+    method: "GET",
+    path: "/work",
+    handler: () => "works",
+    options: {
+        auth: false
+    }
+});
 console.log(`Listening on ${exports.server.settings.host}:${exports.server.settings.port}`);
 exports.server.start();
 process.on('unhandledRejection', (err) => {
