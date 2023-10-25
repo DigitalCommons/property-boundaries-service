@@ -11,7 +11,7 @@ export const server: Server = Hapi.server({
 
 function index(request: Request): string {
     console.log("Processing request", request);
-    return "Nice to meet you!";
+    return "Is it nice to meet you?";
 }
 
 server.route({
