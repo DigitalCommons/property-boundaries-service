@@ -9,7 +9,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBoundariesRoute = void 0;
 const query_1 = require("../queries/query");
 function getBoundaries(request) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -22,7 +21,7 @@ function getBoundaries(request) {
         return polygons;
     });
 }
-exports.getBoundariesRoute = {
+const getBoundariesRoute = {
     method: "GET",
     path: "/boundaries",
     handler: getBoundaries,
@@ -30,6 +29,6 @@ exports.getBoundariesRoute = {
         auth: false
     }
 };
-const boundaryRoutes = [exports.getBoundariesRoute];
+const boundaryRoutes = [getBoundariesRoute];
 exports.default = boundaryRoutes;
 //# sourceMappingURL=boundary.js.map

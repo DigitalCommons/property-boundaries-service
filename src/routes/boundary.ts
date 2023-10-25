@@ -15,7 +15,7 @@ async function getBoundaries(request: Request): Promise<any> {
     return polygons;
 }
 
-export const getBoundariesRoute: ServerRoute = {
+const getBoundariesRoute: ServerRoute = {
     method: "GET",
     path: "/boundaries",
     handler: getBoundaries,

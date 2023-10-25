@@ -2,7 +2,6 @@ import 'dotenv/config';
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
 import boundaryRoutes from "./routes/boundary";
-import { getBoundariesRoute } from './routes/boundary';
 
 export const server: Server = Hapi.server({
     port: process.env.PORT || 4000,
@@ -23,29 +22,7 @@ server.route({
     }
 });
 
-server.route({
-    method: "GET",
-    path: "/work",
-    handler: () => "worked",
-    options: {
-        auth: false
-    }
-});
-
 server.route(boundaryRoutes);
-server.route(getBoundariesRoute);
-
-server.route({
-    method: ['GET', 'POST'],
-    path: '/{any*}',
-    handler: (request, h) => {
-        const accept = request.headers.accept
-
-
-        return 'Fuckity fuck, this resource isnt available.'
-
-    }
-})
 
 console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
 server.start();
