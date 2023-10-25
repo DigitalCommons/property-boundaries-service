@@ -23,6 +23,15 @@ server.route({
     }
 });
 
+server.route({
+    method: "GET",
+    path: "/work",
+    handler: () => "worked",
+    options: {
+        auth: false
+    }
+});
+
 server.route(boundaryRoutes);
 server.route(getBoundariesRoute);
 
