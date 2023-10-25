@@ -12,8 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const query_1 = require("../queries/query");
 function getBoundaries(request) {
     return __awaiter(this, void 0, void 0, function* () {
-        const payload = request.query;
-        const { sw_lng, sw_lat, ne_lng, ne_lat } = payload;
+        const { sw_lng, sw_lat, ne_lng, ne_lat } = request.query;
         if (!sw_lng)
             return "no bounds provided";
         const searchArea = `POLYGON ((${sw_lng} ${sw_lat}, ${ne_lng} ${sw_lat}, ${ne_lng} ${ne_lat}, ${sw_lng} ${ne_lat}, ${sw_lng} ${sw_lat}))`;
