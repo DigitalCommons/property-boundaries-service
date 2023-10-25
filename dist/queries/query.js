@@ -145,7 +145,6 @@ function getPolygonsByArea(searchArea) {
     ON boundary_service.land_ownership_polygons.title_no = boundary_service.land_ownerships.title_no
     WHERE ST_Intersects(boundary_service.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
         const polygonsAndOwnerships = yield exports.sequelize.query(query);
-        console.log(polygonsAndOwnerships[0].length);
         return polygonsAndOwnerships;
     });
 }

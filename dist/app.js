@@ -7,13 +7,14 @@ exports.server = void 0;
 require("dotenv/config");
 const hapi_1 = __importDefault(require("@hapi/hapi"));
 const boundary_1 = __importDefault(require("./routes/boundary"));
+const boundary_2 = require("./routes/boundary");
 exports.server = hapi_1.default.server({
     port: process.env.PORT || 4000,
     host: '0.0.0.0'
 });
 function index(request) {
-    console.log("Processing request", request);
-    return "Nice to meet you!";
+    console.log("Processing request");
+    return "Is it nice to meet you?";
 }
 exports.server.route({
     method: "GET",
@@ -23,7 +24,24 @@ exports.server.route({
         auth: false
     }
 });
+exports.server.route({
+    method: "GET",
+    path: "/work",
+    handler: () => "worked",
+    options: {
+        auth: false
+    }
+});
 exports.server.route(boundary_1.default);
+exports.server.route(boundary_2.getBoundariesRoute);
+exports.server.route({
+    method: ['GET', 'POST'],
+    path: '/{any*}',
+    handler: (request, h) => {
+        const accept = request.headers.accept;
+        return 'Fuckity fuck, this resource isnt available.';
+    }
+});
 console.log(`Listening on ${exports.server.settings.host}:${exports.server.settings.port}`);
 exports.server.start();
 process.on('unhandledRejection', (err) => {
