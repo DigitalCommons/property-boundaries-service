@@ -10,7 +10,7 @@ export const server: Server = Hapi.server({
 });
 
 function index(request: Request): string {
-    console.log("Processing request", request);
+    console.log("Processing request");
     return "Is it nice to meet you?";
 }
 
