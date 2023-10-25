@@ -117,19 +117,17 @@ module.exports = {
       additional_proprietor_indicator: {
         type: Sequelize.STRING
       },
-      proprietor_uk_based: {
-        type: Sequelize.BOOLEAN
-      },
       createdAt: {
         allowNull: false,
-        type: Sequelize.DATE,
-        default: Date.now()
+        type: Sequelize.DATE
       },
       updatedAt: {
         allowNull: false,
-        type: Sequelize.DATE,
-        default: Date.now()
-      }
+        type: Sequelize.DATE
+      },
+      proprietor_uk_based: {
+        type: Sequelize.BOOLEAN
+      },
     });
   },
   async down(queryInterface, Sequelize) {

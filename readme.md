@@ -14,3 +14,7 @@ This service manages a database and an api to serve data from the land registry'
  - `npx tsc` to transpile the typescript code into javascript in the `/dist` folder.
  - `npm run generate` to download the polygon and company data and store it in the database.
  - `npm start` to start the server responding to api requests.
+
+ ## Database Migration
+
+ - `npx sequelize-cli db:migrate:undo:all` to reset migration
