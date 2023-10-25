@@ -35,6 +35,18 @@ server.route({
 server.route(boundaryRoutes);
 server.route(getBoundariesRoute);
 
+server.route({
+    method: ['GET', 'POST'],
+    path: '/{any*}',
+    handler: (request, h) => {
+        const accept = request.headers.accept
+
+
+        return 'Fuckity fuck, this resource isnt available.'
+
+    }
+})
+
 console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
 server.start();
 
