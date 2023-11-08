@@ -7,13 +7,11 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
-      },
-      id: {
         type: Sequelize.BIGINT
       },
       title_no: {
-        type: Sequelize.STRING
+        type: Sequelize.STRING,
+        foreignKey: true
       },
       tenure: {
         type: Sequelize.STRING
