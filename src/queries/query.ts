@@ -131,7 +131,7 @@ export async function getPolygonsByArea(searchArea: string) {
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     LEFT JOIN ${process.env.DB_NAME}.land_ownerships
     ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}"));`;
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}",4326));`;
 
     const polygonsAndOwnerships = await sequelize.query(query);
 

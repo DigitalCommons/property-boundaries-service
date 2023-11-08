@@ -16,7 +16,9 @@ module.exports = {
         type: Sequelize.STRING
       },
       geom: {
-        type: Sequelize.GEOMETRY
+        type: Sequelize.GEOMETRY,
+        srid: 4326,
+        allowNull: false
       },
       createdAt: {
         allowNull: false,

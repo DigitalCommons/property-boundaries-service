@@ -24,15 +24,6 @@ server.route({
 
 server.route(boundaryRoutes);
 
-server.route({
-    method: "GET",
-    path: "/work",
-    handler: () => "works",
-    options: {
-        auth: false
-    }
-});
-
 console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
 server.start();
 
