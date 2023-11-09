@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
-import { validate } from './auth';
 import boundaryRoutes from "./routes/boundary";
 
 export const server: Server = Hapi.server({
@@ -15,9 +14,6 @@ function index(request: Request): string {
 }
 
 async function start() {
-    await server.register(require('@hapi/basic'));
-
-    server.auth.strategy('secret', 'basic', { validate });
 
     server.route({
         method: "GET",

@@ -10,7 +10,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validate = void 0;
-const validate = (request, secret) => __awaiter(void 0, void 0, void 0, function* () {
+const validate = (request) => __awaiter(void 0, void 0, void 0, function* () {
+    const { secret } = request.query;
     const isValid = secret === process.env.SECRET;
     return { isValid, credentials: [] };
 });

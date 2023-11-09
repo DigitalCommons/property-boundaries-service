@@ -2,7 +2,11 @@ import { ServerRoute, Request } from "@hapi/hapi";
 import { getPolygonsByArea } from "../queries/query";
 
 async function getBoundaries(request: Request): Promise<any> {
-    const { sw_lng, sw_lat, ne_lng, ne_lat } = request.query;
+    const { sw_lng, sw_lat, ne_lng, ne_lat, secret } = request.query;
+
+    if (!secret || secret !== process.env.SECRET) {
+        return "missing or incorrect secret"
+    }
 
     if (!sw_lng)
         return "no bounds provided";
@@ -19,7 +23,7 @@ const getBoundariesRoute: ServerRoute = {
     path: "/boundaries",
     handler: getBoundaries,
     options: {
-        auth: 'secret'
+        auth: false
     }
 }
 
