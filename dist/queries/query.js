@@ -158,7 +158,12 @@ function getPolygonsByProprietorName(name) {
             include: exports.PolygonModel,
             raw: true
         });
-        return polygonsAndOwnerships;
+        return polygonsAndOwnerships.map(polyAndOwn => {
+            const poly = Object.assign(Object.assign({}, polyAndOwn), { poly_id: polyAndOwn["Polygon.poly_id"], geom: polyAndOwn["Polygon.geom"] });
+            delete poly["Polygon.poly_id"];
+            delete poly["Polygon.geom"];
+            return poly;
+        });
     });
 }
 exports.getPolygonsByProprietorName = getPolygonsByProprietorName;

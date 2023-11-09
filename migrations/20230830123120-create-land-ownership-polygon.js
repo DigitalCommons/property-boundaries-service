@@ -13,7 +13,8 @@ module.exports = {
         type: Sequelize.STRING
       },
       title_no: {
-        type: Sequelize.STRING
+        type: Sequelize.STRING,
+        foreignKey: true
       },
       geom: {
         type: Sequelize.GEOMETRY,
