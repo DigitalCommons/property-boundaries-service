@@ -25,7 +25,7 @@ const getBoundariesRoute = {
     path: "/boundaries",
     handler: getBoundaries,
     options: {
-        auth: false
+        auth: 'secret'
     }
 };
 const boundaryRoutes = [getBoundariesRoute];

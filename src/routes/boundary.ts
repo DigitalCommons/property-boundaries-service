@@ -19,7 +19,7 @@ const getBoundariesRoute: ServerRoute = {
     path: "/boundaries",
     handler: getBoundaries,
     options: {
-        auth: false
+        auth: 'secret'
     }
 }
 
