@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPolygonsByArea = exports.getPolygons = exports.getLandOwnership = exports.createLandOwnership = exports.LandOwnershipModel = exports.PolygonModel = exports.sequelize = void 0;
+exports.getPolygonsByProprietorName = exports.getPolygonsByArea = exports.getPolygons = exports.getLandOwnership = exports.createLandOwnership = exports.LandOwnershipModel = exports.PolygonModel = exports.sequelize = void 0;
 const sequelize_1 = require("sequelize");
 exports.sequelize = new sequelize_1.Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
     host: 'localhost',
@@ -91,8 +91,8 @@ exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
 }, {
     tableName: 'land_ownerships',
 });
-exports.PolygonModel.hasMany(exports.LandOwnershipModel, { foreignKey: "title_no" });
-exports.LandOwnershipModel.belongsTo(exports.PolygonModel, { foreignKey: "title_no" });
+exports.PolygonModel.hasMany(exports.LandOwnershipModel, { foreignKey: "title_no", sourceKey: "title_no" });
+exports.LandOwnershipModel.belongsTo(exports.PolygonModel, { foreignKey: "title_no", targetKey: "title_no" });
 function createLandOwnership(ownership) {
     return __awaiter(this, void 0, void 0, function* () {
         yield exports.LandOwnershipModel.create({
@@ -149,4 +149,17 @@ function getPolygonsByArea(searchArea) {
     });
 }
 exports.getPolygonsByArea = getPolygonsByArea;
+function getPolygonsByProprietorName(name) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const polygonsAndOwnerships = yield exports.LandOwnershipModel.findAll({
+            where: {
+                proprietor_name_1: name
+            },
+            include: exports.PolygonModel,
+            raw: true
+        });
+        return polygonsAndOwnerships;
+    });
+}
+exports.getPolygonsByProprietorName = getPolygonsByProprietorName;
 //# sourceMappingURL=query.js.map

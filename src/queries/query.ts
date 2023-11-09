@@ -83,8 +83,8 @@ export const LandOwnershipModel = sequelize.define('LandOwnership', {
     tableName: 'land_ownerships',
 });
 
-PolygonModel.hasMany(LandOwnershipModel, { foreignKey: "title_no" });
-LandOwnershipModel.belongsTo(PolygonModel, { foreignKey: "title_no" });
+PolygonModel.hasMany(LandOwnershipModel, { foreignKey: "title_no", sourceKey: "title_no" });
+LandOwnershipModel.belongsTo(PolygonModel, { foreignKey: "title_no", targetKey: "title_no" });
 
 export async function createLandOwnership(ownership) {
     await LandOwnershipModel.create({
@@ -134,6 +134,18 @@ export async function getPolygonsByArea(searchArea: string) {
     WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}",4326));`;
 
     const polygonsAndOwnerships = await sequelize.query(query);
+
+    return polygonsAndOwnerships;
+}
+
+export async function getPolygonsByProprietorName(name: string) {
+    const polygonsAndOwnerships = await LandOwnershipModel.findAll({
+        where: {
+            proprietor_name_1: name
+        },
+        include: PolygonModel,
+        raw: true
+    });
 
     return polygonsAndOwnerships;
 }

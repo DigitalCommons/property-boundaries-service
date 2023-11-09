@@ -23,6 +23,16 @@ function getBoundaries(request) {
         return polygons;
     });
 }
+function search(request) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const { proprietorName, secret } = request.query;
+        if (!secret || secret !== process.env.SECRET) {
+            return "missing or incorrect secret";
+        }
+        const polygons = yield (0, query_1.getPolygonsByProprietorName)(proprietorName);
+        return polygons;
+    });
+}
 const getBoundariesRoute = {
     method: "GET",
     path: "/boundaries",
@@ -31,6 +41,14 @@ const getBoundariesRoute = {
         auth: false
     }
 };
-const boundaryRoutes = [getBoundariesRoute];
+const searchRoute = {
+    method: "GET",
+    path: "/search",
+    handler: search,
+    options: {
+        auth: false
+    }
+};
+const boundaryRoutes = [getBoundariesRoute, searchRoute];
 exports.default = boundaryRoutes;
 //# sourceMappingURL=boundary.js.map
