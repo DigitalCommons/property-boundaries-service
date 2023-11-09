@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.server = void 0;
 require("dotenv/config");
 const hapi_1 = __importDefault(require("@hapi/hapi"));
-const auth_1 = require("./auth");
 const boundary_1 = __importDefault(require("./routes/boundary"));
 exports.server = hapi_1.default.server({
     port: process.env.PORT || 4000,
@@ -27,8 +26,6 @@ function index(request) {
 }
 function start() {
     return __awaiter(this, void 0, void 0, function* () {
-        yield exports.server.register(require('@hapi/basic'));
-        exports.server.auth.strategy('secret', 'basic', { validate: auth_1.validate });
         exports.server.route({
             method: "GET",
             path: "/",
