@@ -13,22 +13,27 @@ function index(request: Request): string {
     return "Is it nice to meet you?";
 }
 
-server.route({
-    method: "GET",
-    path: "/",
-    handler: index,
-    options: {
-        auth: false
-    }
-});
+async function start() {
 
-server.route(boundaryRoutes);
+    server.route({
+        method: "GET",
+        path: "/",
+        handler: index,
+        options: {
+            auth: false
+        }
+    });
 
-console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
-server.start();
+    server.route(boundaryRoutes);
 
-process.on('unhandledRejection', (err) => {
-    console.error("unhandledRejection");
-    console.error(err);
-    process.exit(1);
-});
+    console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
+    server.start();
+
+    process.on('unhandledRejection', (err) => {
+        console.error("unhandledRejection");
+        console.error(err);
+        process.exit(1);
+    });
+}
+
+start();
