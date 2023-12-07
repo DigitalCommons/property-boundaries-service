@@ -159,11 +159,10 @@ async function downloadOwnerships() {
         });
 }
 
-//delete all the files already there?
+//delete all the files already there
+
 fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
 
 downloadInspire().then(unzip).then(transformGML);
-
-//transformGML();
 
 downloadOwnerships();

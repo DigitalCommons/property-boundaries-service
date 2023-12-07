@@ -153,9 +153,8 @@ function downloadOwnerships() {
         });
     });
 }
-//delete all the files already there?
+//delete all the files already there
 fs_1.default.rmSync(path_1.default.resolve(`./downloads`), { recursive: true, force: true });
 downloadInspire().then(unzip).then(transformGML);
-//transformGML();
 downloadOwnerships();
 //# sourceMappingURL=generate.js.map
