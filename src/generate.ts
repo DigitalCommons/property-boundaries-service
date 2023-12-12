@@ -159,7 +159,11 @@ async function downloadOwnerships() {
         });
 }
 
-//delete all the files already there
+// delete all the files already there
+// Before deleting we should also:
+// - Test that the new data looks okay (e.g. add at least a basic sanity check that the new data isn't corrupted or empty)
+// - Automatically save a backup of the previous month's data so that we can easily revert in an emergency
+
 
 fs.rmSync(path.resolve(`./downloads`), { recursive: true, force: true });
 
