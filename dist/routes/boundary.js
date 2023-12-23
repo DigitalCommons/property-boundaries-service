@@ -38,16 +38,16 @@ const getBoundariesRoute = {
     path: "/boundaries",
     handler: getBoundaries,
     options: {
-        auth: false
-    }
+        auth: false,
+    },
 };
 const searchRoute = {
     method: "GET",
     path: "/search",
     handler: search,
     options: {
-        auth: false
-    }
+        auth: false,
+    },
 };
 const boundaryRoutes = [getBoundariesRoute, searchRoute];
 exports.default = boundaryRoutes;

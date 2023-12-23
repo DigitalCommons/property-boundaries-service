@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.downloadLinks = void 0;
-exports.downloadLinks = ["https://use-land-property-data.service.gov.uk/datasets/inspire/download/Adur_District_Council.zip",
+exports.downloadLinks = [
+    "https://use-land-property-data.service.gov.uk/datasets/inspire/download/Adur_District_Council.zip",
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download/Amber_Valley_Borough_Council.zip",
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download/Arun_District_Council.zip",
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download/Ashfield_District_Council.zip",

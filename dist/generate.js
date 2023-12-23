@@ -21,7 +21,7 @@ const extract_zip_1 = __importDefault(require("extract-zip"));
 const csv_parser_1 = __importDefault(require("csv-parser"));
 const ogr2ogr_1 = __importDefault(require("ogr2ogr"));
 const query_1 = require("./queries/query");
-const downloadPath = path_1.default.resolve('./downloads');
+const downloadPath = path_1.default.resolve("./downloads");
 function downloadInspire() {
     return __awaiter(this, void 0, void 0, function* () {
         //headless browser getting INSPIRE files
@@ -29,8 +29,8 @@ function downloadInspire() {
         const browser = yield puppeteer_1.default.launch({ headless: true });
         const page = yield browser.newPage();
         const client = yield page.target().createCDPSession();
-        yield client.send('Page.setDownloadBehavior', {
-            behavior: 'allow',
+        yield client.send("Page.setDownloadBehavior", {
+            behavior: "allow",
             downloadPath: downloadPath,
         });
         yield page.goto(url);
@@ -46,6 +46,7 @@ function downloadInspire() {
             }
             return inspireDownloadLinks;
         });
+        // Just download data from first link for now
         const element = yield page.waitForSelector("#" + inspireDownloadLinks[0]);
         yield element.click();
         yield page.waitForTimeout(5000);
@@ -57,9 +58,11 @@ function unzip() {
     return __awaiter(this, void 0, void 0, function* () {
         fs_1.default.readdir(downloadPath, (err, files) => {
             files.forEach((file) => __awaiter(this, void 0, void 0, function* () {
-                console.log(file);
                 if (file.includes(".zip")) {
-                    yield (0, extract_zip_1.default)(path_1.default.resolve(`./downloads/${file}`), { dir: path_1.default.resolve(`./downloads/${file}`.replace(".zip", "")) });
+                    console.log("Unzip:", file);
+                    yield (0, extract_zip_1.default)(path_1.default.resolve(`${downloadPath}/${file}`), {
+                        dir: path_1.default.resolve(`${downloadPath}/${file}`.replace(".zip", "")),
+                    });
                 }
             }));
         });
@@ -69,18 +72,17 @@ function transformGML() {
     return __awaiter(this, void 0, void 0, function* () {
         fs_1.default.readdir(downloadPath, (err, files) => {
             files.forEach((file) => __awaiter(this, void 0, void 0, function* () {
-                const filePath = downloadPath + "/" + file;
-                if (!fs_1.default.lstatSync(filePath).isFile()) {
-                    fs_1.default.readdir(filePath, (err, files) => __awaiter(this, void 0, void 0, function* () {
-                        if (files.includes('Land_Registry_Cadastral_Parcels.gml')) {
-                            const gmlFile = filePath + "/Land_Registry_Cadastral_Parcels.gml";
+                const folderPath = `${downloadPath}/${file}`;
+                if (!fs_1.default.lstatSync(folderPath).isFile()) {
+                    fs_1.default.readdir(folderPath, (err, files) => __awaiter(this, void 0, void 0, function* () {
+                        if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
+                            const gmlFile = `${folderPath}/Land_Registry_Cadastral_Parcels.gml`;
+                            // TODO: comment to explain why we are using this projection
                             const { data } = yield (0, ogr2ogr_1.default)(gmlFile, {
                                 options: ["-t_srs", "EPSG:4269"],
                             });
-                            fs_1.default.writeFile(filePath + "/parcels.json", JSON.stringify(data), err => {
-                                if (err) {
-                                    console.error(err);
-                                }
+                            fs_1.default.writeFile(`${folderPath}/parcels.json`, JSON.stringify(data), (err) => {
+                                console.error(err);
                             });
                             //for each geojson we need to see if we have an inspire id for that geojson
                             //already in the database, if the idea is there, check the coords match
@@ -97,47 +99,52 @@ function transformGML() {
         });
     });
 }
+/** Download the Land Reg UK Companies and Land Reg Overseas Companies data. */
 function downloadOwnerships() {
     return __awaiter(this, void 0, void 0, function* () {
         const datasetsUKResponse = yield axios_1.default.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod", {
             headers: {
-                Authorization: process.env.GOV_API_KEY
-            }
+                Authorization: process.env.GOV_API_KEY,
+            },
         });
+        console.log("aaaaaa", datasetsUKResponse.data);
         const datasetsOverseasResponse = yield axios_1.default.get("https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod", {
             headers: {
-                Authorization: process.env.GOV_API_KEY
-            }
+                Authorization: process.env.GOV_API_KEY,
+            },
         });
         const filenameUK = datasetsUKResponse.data.result.public_resources[0].file_name;
         const filenameOverseas = datasetsOverseasResponse.data.result.public_resources[0].file_name;
         const ownershipsUKResponse = yield axios_1.default.get(`https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/${filenameUK}`, {
             headers: {
-                Authorization: process.env.GOV_API_KEY
-            }
+                Authorization: process.env.GOV_API_KEY,
+            },
         });
         const ownershipsOverseasResponse = yield axios_1.default.get(`https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/${filenameOverseas}`, {
             headers: {
-                Authorization: process.env.GOV_API_KEY
-            }
+                Authorization: process.env.GOV_API_KEY,
+            },
         });
         const exampleUKResponse = yield axios_1.default.get(ownershipsUKResponse.data.result.download_url);
         const exampleOverseasResponse = yield axios_1.default.get(ownershipsOverseasResponse.data.result.download_url);
-        const exampleCSVPathUK = path_1.default.resolve('./downloads/exampleUK.csv');
-        const exampleCSVPathOverseas = path_1.default.resolve('./downloads/exampleOverseas.csv');
-        fs_1.default.writeFile(exampleCSVPathUK, exampleUKResponse.data, err => {
-            if (err) {
-                console.error(err);
-            }
-        });
-        fs_1.default.writeFile(exampleCSVPathOverseas, exampleOverseasResponse.data, err => {
-            if (err) {
-                console.error(err);
-            }
-        });
+        const exampleCSVPathUK = path_1.default.resolve(`${downloadPath}/exampleUK.csv`);
+        const exampleCSVPathOverseas = path_1.default.resolve(`${downloadPath}/exampleOverseas.csv`);
+        try {
+            fs_1.default.writeFileSync(exampleCSVPathUK, exampleUKResponse.data);
+        }
+        catch (err) {
+            console.error(err);
+        }
+        try {
+            fs_1.default.writeFileSync(exampleCSVPathOverseas, exampleOverseasResponse.data);
+        }
+        catch (err) {
+            console.error(err);
+        }
+        // Add ownership data to the DB
         fs_1.default.createReadStream(exampleCSVPathUK)
             .pipe((0, csv_parser_1.default)())
-            .on('data', (ownership) => {
+            .on("data", (ownership) => {
             ownership.proprietor_uk_based = true;
             (0, query_1.createLandOwnership)(ownership);
             //determine update type
@@ -145,7 +152,7 @@ function downloadOwnerships() {
         });
         fs_1.default.createReadStream(exampleCSVPathOverseas)
             .pipe((0, csv_parser_1.default)())
-            .on('data', (ownership) => {
+            .on("data", (ownership) => {
             ownership.proprietor_uk_based = false;
             (0, query_1.createLandOwnership)(ownership);
             //determine update type
@@ -153,8 +160,11 @@ function downloadOwnerships() {
         });
     });
 }
-//delete all the files already there
-fs_1.default.rmSync(path_1.default.resolve(`./downloads`), { recursive: true, force: true });
+// Before deleting we should also:
+// - Test that the new data looks okay (e.g. add at least a basic sanity check that the new data isn't corrupted or empty)
+// - Automatically save a backup of the previous month's data so that we can easily revert in an emergency
+// delete all the files already there
+fs_1.default.rmSync(path_1.default.resolve(downloadPath), { recursive: true, force: true });
 downloadInspire().then(unzip).then(transformGML);
 downloadOwnerships();
 //# sourceMappingURL=generate.js.map

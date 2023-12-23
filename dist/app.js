@@ -18,7 +18,7 @@ const hapi_1 = __importDefault(require("@hapi/hapi"));
 const boundary_1 = __importDefault(require("./routes/boundary"));
 exports.server = hapi_1.default.server({
     port: process.env.PORT || 4000,
-    host: '0.0.0.0'
+    host: "0.0.0.0",
 });
 function index(request) {
     console.log("Processing request");
@@ -31,13 +31,13 @@ function start() {
             path: "/",
             handler: index,
             options: {
-                auth: false
-            }
+                auth: false,
+            },
         });
         exports.server.route(boundary_1.default);
         console.log(`Listening on ${exports.server.settings.host}:${exports.server.settings.port}`);
         exports.server.start();
-        process.on('unhandledRejection', (err) => {
+        process.on("unhandledRejection", (err) => {
             console.error("unhandledRejection");
             console.error(err);
             process.exit(1);

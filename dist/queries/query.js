@@ -9,37 +9,37 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPolygonsByProprietorName = exports.getPolygonsByArea = exports.getPolygons = exports.getLandOwnership = exports.createLandOwnership = exports.LandOwnershipModel = exports.PolygonModel = exports.sequelize = void 0;
+exports.getPolygonsByProprietorName = exports.getPolygonsByArea = exports.getLandOwnership = exports.createLandOwnership = exports.LandOwnershipModel = exports.PolygonModel = exports.sequelize = void 0;
 const sequelize_1 = require("sequelize");
 exports.sequelize = new sequelize_1.Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
-    host: 'localhost',
-    dialect: 'mysql'
+    host: "localhost",
+    dialect: "mysql",
 });
-exports.PolygonModel = exports.sequelize.define('Polygon', {
+exports.PolygonModel = exports.sequelize.define("Polygon", {
     id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: sequelize_1.DataTypes.INTEGER
+        type: sequelize_1.DataTypes.INTEGER,
     },
     poly_id: sequelize_1.DataTypes.STRING,
     title_no: {
         unique: true,
-        type: sequelize_1.DataTypes.STRING
+        type: sequelize_1.DataTypes.STRING,
     },
     geom: sequelize_1.DataTypes.GEOMETRY,
     createdAt: {
         allowNull: false,
-        type: sequelize_1.DataTypes.DATE
+        type: sequelize_1.DataTypes.DATE,
     },
     updatedAt: {
         allowNull: false,
-        type: sequelize_1.DataTypes.DATE
-    }
+        type: sequelize_1.DataTypes.DATE,
+    },
 }, {
-    tableName: 'land_ownership_polygons',
+    tableName: "land_ownership_polygons",
 });
-exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
+exports.LandOwnershipModel = exports.sequelize.define("LandOwnership", {
     id: {
         primaryKey: true,
         type: sequelize_1.DataTypes.INTEGER,
@@ -89,30 +89,36 @@ exports.LandOwnershipModel = exports.sequelize.define('LandOwnership', {
         type: sequelize_1.DataTypes.DATE,
     },
 }, {
-    tableName: 'land_ownerships',
+    tableName: "land_ownerships",
 });
-exports.PolygonModel.hasMany(exports.LandOwnershipModel, { foreignKey: "title_no", sourceKey: "title_no" });
-exports.LandOwnershipModel.belongsTo(exports.PolygonModel, { foreignKey: "title_no", targetKey: "title_no" });
+exports.PolygonModel.hasMany(exports.LandOwnershipModel, {
+    foreignKey: "title_no",
+    sourceKey: "title_no",
+});
+exports.LandOwnershipModel.belongsTo(exports.PolygonModel, {
+    foreignKey: "title_no",
+    targetKey: "title_no",
+});
 function createLandOwnership(ownership) {
     return __awaiter(this, void 0, void 0, function* () {
         yield exports.LandOwnershipModel.create({
-            title_no: ownership['Title Number'],
+            title_no: ownership["Title Number"],
             tenure: ownership.Tenure,
-            property_address: ownership['Property Address'],
+            property_address: ownership["Property Address"],
             district: ownership.District,
             county: ownership.County,
             region: ownership.Region,
             postcode: ownership.Postcode,
-            multiple_address_indicator: ownership['Multiple Address Indicator'],
-            price_paid: ownership['Price Paid'],
-            proprietor_name_1: ownership['Proprietor Name (1)'],
-            company_registration_no_1: ownership['Company Registration No. (1)'],
-            proprietor_category_1: ownership['Proprietorship Category (1)'],
-            proprietor_1_address_1: ownership['Proprietor (1) Address (1)'],
-            proprietor_1_address_2: ownership['Proprietor (1) Address (2)'],
-            proprietor_1_address_3: ownership['Proprietor (1) Address (3)'],
-            date_proprietor_added: ownership['Date Proprietor Added'],
-            additional_proprietor_indicator: ownership['Additional Proprietor Indicator'],
+            multiple_address_indicator: ownership["Multiple Address Indicator"],
+            price_paid: ownership["Price Paid"],
+            proprietor_name_1: ownership["Proprietor Name (1)"],
+            company_registration_no_1: ownership["Company Registration No. (1)"],
+            proprietor_category_1: ownership["Proprietorship Category (1)"],
+            proprietor_1_address_1: ownership["Proprietor (1) Address (1)"],
+            proprietor_1_address_2: ownership["Proprietor (1) Address (2)"],
+            proprietor_1_address_3: ownership["Proprietor (1) Address (3)"],
+            date_proprietor_added: ownership["Date Proprietor Added"],
+            additional_proprietor_indicator: ownership["Additional Proprietor Indicator"],
             proprietor_uk_based: ownership.proprietor_uk_based,
         });
     });
@@ -122,21 +128,19 @@ function getLandOwnership(title_no) {
     return __awaiter(this, void 0, void 0, function* () {
         const landOwnership = yield exports.LandOwnershipModel.findOne({
             where: {
-                title_no: title_no
+                title_no: title_no,
             },
-            raw: true
+            raw: true,
         });
         return landOwnership;
     });
 }
 exports.getLandOwnership = getLandOwnership;
-function getPolygons() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const polygons = yield exports.PolygonModel.findAll();
-        return polygons;
-    });
-}
-exports.getPolygons = getPolygons;
+// export async function getPolygons() {
+//     const polygons = await PolygonModel.findAll();
+//     return polygons;
+// }
+// use sequelize queries to prevent SQL injection and add error handling
 function getPolygonsByArea(searchArea) {
     return __awaiter(this, void 0, void 0, function* () {
         const query = `SELECT *
@@ -153,12 +157,12 @@ function getPolygonsByProprietorName(name) {
     return __awaiter(this, void 0, void 0, function* () {
         const polygonsAndOwnerships = yield exports.LandOwnershipModel.findAll({
             where: {
-                proprietor_name_1: name
+                proprietor_name_1: name,
             },
             include: exports.PolygonModel,
-            raw: true
+            raw: true,
         });
-        return polygonsAndOwnerships.map(polyAndOwn => {
+        return polygonsAndOwnerships.map((polyAndOwn) => {
             const poly = Object.assign(Object.assign({}, polyAndOwn), { poly_id: polyAndOwn["Polygon.poly_id"], geom: polyAndOwn["Polygon.geom"] });
             delete poly["Polygon.poly_id"];
             delete poly["Polygon.geom"];

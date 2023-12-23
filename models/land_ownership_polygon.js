@@ -1,7 +1,5 @@
-'use strict';
-const {
-  Model
-} = require('sequelize');
+"use strict";
+const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class land_ownership_polygon extends Model {
     /**
@@ -13,14 +11,17 @@ module.exports = (sequelize, DataTypes) => {
       // define association here
     }
   }
-  land_ownership_polygon.init({
-    id: DataTypes.BIGINT,
-    poly_id: DataTypes.STRING,
-    title_no: DataTypes.STRING,
-    geom: DataTypes.GEOMETRY
-  }, {
-    sequelize,
-    modelName: 'land_ownership_polygon',
-  });
+  land_ownership_polygon.init(
+    {
+      id: DataTypes.BIGINT,
+      poly_id: DataTypes.STRING,
+      title_no: DataTypes.STRING,
+      geom: DataTypes.GEOMETRY,
+    },
+    {
+      sequelize,
+      modelName: "land_ownership_polygon",
+    }
+  );
   return land_ownership_polygon;
 };
