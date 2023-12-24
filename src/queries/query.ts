@@ -140,11 +140,12 @@ export async function getLandOwnership(title_no: string) {
   return landOwnership;
 }
 
-// export async function getPolygons() {
-//     const polygons = await PolygonModel.findAll();
-
-//     return polygons;
-// }
+export const getPolygonById = async (poly_id: number) =>
+  await PolygonModel.findOne({
+    where: {
+      poly_id: poly_id,
+    },
+  });
 
 // use sequelize queries to prevent SQL injection and add error handling
 export async function getPolygonsByArea(searchArea: string) {

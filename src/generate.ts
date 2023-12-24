@@ -195,8 +195,8 @@ async function downloadOwnerships() {
 // - Automatically save a backup of the previous month's data so that we can easily revert in an emergency
 
 // delete all the files already there
-fs.rmSync(path.resolve(downloadPath), { recursive: true, force: true });
+// fs.rmSync(path.resolve(downloadPath), { recursive: true, force: true });
 
-downloadInspire().then(unzip).then(transformGML);
+// downloadInspire().then(unzip).then(transformGML);
 
-downloadOwnerships();
+// downloadOwnerships();
