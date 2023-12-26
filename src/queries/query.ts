@@ -1,4 +1,4 @@
-import { Sequelize, DataTypes, Op } from "sequelize";
+import { Sequelize, DataTypes, QueryTypes } from "sequelize";
 
 export const sequelize = new Sequelize(
   process.env.DB_NAME,
@@ -145,17 +145,21 @@ export const getPolygonById = async (poly_id: number) =>
     where: {
       poly_id: poly_id,
     },
+    raw: true,
   });
 
-// use sequelize queries to prevent SQL injection and add error handling
 export async function getPolygonsByArea(searchArea: string) {
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     LEFT JOIN ${process.env.DB_NAME}.land_ownerships
     ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("${searchArea}",4326));`;
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("?",4326));`;
 
-  const polygonsAndOwnerships = await sequelize.query(query);
+  const polygonsAndOwnerships = await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+    raw: true,
+  });
 
   return polygonsAndOwnerships;
 }
