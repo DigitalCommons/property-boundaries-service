@@ -37,7 +37,7 @@ async function downloadInspire() {
   await page.goto(url);
 
   const inspireDownloadLinks = await page.evaluate(() => {
-    const inspireDownloadLinks = [];
+    const inspireDownloadLinks: string[] = [];
     const pageLinks = document.getElementsByTagName("a");
     let linkIdCount = 0;
     for (const link of pageLinks) {
@@ -52,7 +52,7 @@ async function downloadInspire() {
 
   // Just download data from first council for now
   const downloadButton = await page.waitForSelector(
-    "#" + inspireDownloadLinks[0]
+    "#" + inspireDownloadLinks[5]
   );
 
   const downloadPromise = page.waitForEvent("download");
@@ -99,7 +99,12 @@ async function transformGML() {
 
           // TODO: comment to explain why we are using this projection
           const { data } = await ogr2ogr(gmlFile, {
-            options: ["-t_srs", "EPSG:4269"],
+            maxBuffer: 1024 * 1024 * 200,
+            // TODO: try instead with:
+            // - 3857 (web mercator, default for Mapbox)
+            // - 4326 (used by GPS, mentioned in FE README from initial commit)
+            // options: ["-t_srs", "EPSG:4269"],
+            options: ["-t_srs", "EPSG:4326"], // GPS projection
           });
 
           try {
