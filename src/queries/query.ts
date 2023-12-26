@@ -140,15 +140,21 @@ export async function getLandOwnership(title_no: string) {
   return landOwnership;
 }
 
-export const getPolygonById = async (poly_id: number) =>
-  await PolygonModel.findOne({
-    where: {
-      poly_id: poly_id,
-    },
-    raw: true,
+export const getPolygonById = async (poly_id: number) => {
+  const query = `SELECT *
+    FROM ${process.env.DB_NAME}.land_ownership_polygons
+    WHERE poly_id = ?
+    LIMIT 1;`;
+
+  const polygons = await sequelize.query(query, {
+    replacements: [poly_id],
+    type: QueryTypes.SELECT,
   });
 
-export async function getPolygonsByArea(searchArea: string) {
+  return polygons[0];
+};
+
+export const getPolygonsByArea = async (searchArea: string) => {
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     LEFT JOIN ${process.env.DB_NAME}.land_ownerships
@@ -158,11 +164,10 @@ export async function getPolygonsByArea(searchArea: string) {
   const polygonsAndOwnerships = await sequelize.query(query, {
     replacements: [searchArea],
     type: QueryTypes.SELECT,
-    raw: true,
   });
 
   return polygonsAndOwnerships;
-}
+};
 
 export async function getPolygonsByProprietorName(name: string) {
   const polygonsAndOwnerships = await LandOwnershipModel.findAll({
