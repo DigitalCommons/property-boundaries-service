@@ -1,8 +1,8 @@
 import { Sequelize, DataTypes, QueryTypes } from "sequelize";
 
 export const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
+  process.env.DB_NAME!,
+  process.env.DB_USER!,
   process.env.DB_PASSWORD,
   {
     host: "localhost",
@@ -140,18 +140,33 @@ export async function getLandOwnership(title_no: string) {
   return landOwnership;
 }
 
-export const getPolygonById = async (poly_id: number) => {
+/** Get polygons with the given IDs, and a list of IDs that didn't exist  */
+export const getPolygonsById = async (poly_ids: number[]) => {
+  const uniquePolyIds = new Set(poly_ids);
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE poly_id = ?
-    LIMIT 1;`;
+    WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")});`;
 
-  const polygons = await sequelize.query(query, {
-    replacements: [poly_id],
+  const polygons: any[] = await sequelize.query(query, {
+    replacements: Array.from(uniquePolyIds),
     type: QueryTypes.SELECT,
   });
 
-  return polygons[0];
+  if (polygons.length === uniquePolyIds.size) {
+    return {
+      polygons,
+      missing: [],
+    };
+  } else {
+    polygons.forEach((polygon) => {
+      uniquePolyIds.delete(polygon.poly_id);
+    });
+
+    return {
+      polygons,
+      missing: Array.from(uniquePolyIds),
+    };
+  }
 };
 
 export const getPolygonsByArea = async (searchArea: string) => {

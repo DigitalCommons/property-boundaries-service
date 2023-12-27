@@ -7,7 +7,7 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getPolygonById,
+  getPolygonsById,
 } from "../queries/query";
 
 // TODO: add error handling and appropriate responses
@@ -28,27 +28,30 @@ async function getBoundaries(request: Request): Promise<any> {
 }
 
 type GetPolygonRequest = Request & {
-  query: { poly_id: number; secret: string };
+  query: { poly_id: number | number[]; secret: string };
 };
 
-async function getPolygon(
+async function getPolygons(
   request: GetPolygonRequest,
   h: ResponseToolkit,
   d: any
 ): Promise<ResponseObject> {
   const { poly_id, secret } = request.query;
 
+  // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
+  const poly_ids = typeof poly_id === "number" ? [poly_id] : poly_id;
+
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const polygon = await getPolygonById(poly_id);
+  const { polygons, missing } = await getPolygonsById(poly_ids);
 
-  if (!polygon) {
-    return h.response("poly_id doesn't exist").code(404);
+  if (missing.length > 0) {
+    return h.response(`poly_ids don't exist: ${missing.join(",")}`).code(404);
   }
 
-  return h.response(polygon);
+  return h.response(polygons);
 }
 
 async function search(request: Request): Promise<any> {
@@ -73,10 +76,10 @@ const getBoundariesRoute: ServerRoute = {
   },
 };
 
-const getPolygonRoute: ServerRoute = {
+const getPolygonsRoute: ServerRoute = {
   method: "GET",
-  path: "/polygon",
-  handler: getPolygon,
+  path: "/polygons",
+  handler: getPolygons,
   options: {
     auth: false,
   },
@@ -91,6 +94,6 @@ const searchRoute: ServerRoute = {
   },
 };
 
-const boundaryRoutes = [getBoundariesRoute, getPolygonRoute, searchRoute];
+const routes = [getBoundariesRoute, getPolygonsRoute, searchRoute];
 
-export default boundaryRoutes;
+export default routes;

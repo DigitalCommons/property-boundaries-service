@@ -1,7 +1,7 @@
 import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
-import boundaryRoutes from "./routes/boundary";
+import routes from "./routes/index";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
@@ -23,7 +23,7 @@ async function start() {
     },
   });
 
-  server.route(boundaryRoutes);
+  server.route(routes);
 
   console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
   server.start();
