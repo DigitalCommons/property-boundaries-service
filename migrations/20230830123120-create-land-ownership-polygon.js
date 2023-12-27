@@ -9,6 +9,7 @@ module.exports = {
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
+      // TODO: convert to integer and create an index for faster searching
       poly_id: {
         type: Sequelize.STRING,
       },
