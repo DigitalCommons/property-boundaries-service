@@ -46,6 +46,7 @@ async function getPolygons(
   }
 
   const { polygons, missing } = await getPolygonsById(poly_ids);
+  console.error("bbbbbbbb");
 
   if (missing.length > 0) {
     return h.response(`poly_ids don't exist: ${missing.join(",")}`).code(404);

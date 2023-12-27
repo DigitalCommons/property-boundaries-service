@@ -152,6 +152,8 @@ export const getPolygonsById = async (poly_ids: number[]) => {
     type: QueryTypes.SELECT,
   });
 
+  console.error("aaaaaaa", polygons);
+
   if (polygons.length === uniquePolyIds.size) {
     return {
       polygons,
@@ -159,7 +161,7 @@ export const getPolygonsById = async (poly_ids: number[]) => {
     };
   } else {
     polygons.forEach((polygon) => {
-      uniquePolyIds.delete(polygon.poly_id);
+      uniquePolyIds.delete(Number(polygon.poly_id));
     });
 
     return {
