@@ -71,7 +71,6 @@ const getBoundariesRoute: ServerRoute = {
   path: "/boundaries",
   handler: getBoundaries,
   options: {
-    // TODO: use auth rather than secret in query
     auth: false,
   },
 };
