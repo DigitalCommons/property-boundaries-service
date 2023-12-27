@@ -145,14 +145,13 @@ export const getPolygonsById = async (poly_ids: number[]) => {
   const uniquePolyIds = new Set(poly_ids);
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")});`;
+    WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")})
+    LIMIT ${uniquePolyIds.size};`;
 
   const polygons: any[] = await sequelize.query(query, {
     replacements: Array.from(uniquePolyIds),
     type: QueryTypes.SELECT,
   });
-
-  console.error("aaaaaaa", polygons);
 
   if (polygons.length === uniquePolyIds.size) {
     return {
@@ -176,7 +175,7 @@ export const getPolygonsByArea = async (searchArea: string) => {
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     LEFT JOIN ${process.env.DB_NAME}.land_ownerships
     ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText("?",4326));`;
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
 
   const polygonsAndOwnerships = await sequelize.query(query, {
     replacements: [searchArea],
