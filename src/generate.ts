@@ -128,7 +128,7 @@ async function transformGML() {
           console.log("Transform GML:", council);
 
           const { data } = await ogr2ogr(gmlFile, {
-            maxBuffer: 1024 * 1024 * 200,
+            maxBuffer: 500 * 1024 * 1024, // 500 MB
             options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
           });
 

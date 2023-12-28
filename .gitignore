@@ -4,3 +4,4 @@ downloads
 generated
 analysed
 .env
+.DS_Store
