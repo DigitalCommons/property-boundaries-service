@@ -24,7 +24,8 @@ async function getBoundaries(request: Request): Promise<any> {
 
   const polygons = await getPolygonsByArea(searchArea);
 
-  return polygons;
+  // TODO: remove this double-nested array and fix on backend API too
+  return [polygons];
 }
 
 type GetPolygonRequest = Request & {
