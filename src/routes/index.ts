@@ -29,7 +29,7 @@ async function getBoundaries(request: Request): Promise<any> {
 }
 
 type GetPolygonRequest = Request & {
-  query: { poly_id: number | number[]; secret: string };
+  payload: { poly_ids: number[]; secret: string };
 };
 
 async function getPolygons(
@@ -37,13 +37,10 @@ async function getPolygons(
   h: ResponseToolkit,
   d: any
 ): Promise<ResponseObject> {
-  const { poly_id, secret } = request.query;
-
-  // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
-  const poly_ids = typeof poly_id === "object" ? poly_id : [poly_id];
+  const { poly_ids, secret } = request.payload;
 
   if (poly_ids.length === 0) {
-    return h.response("missing poly_id parameter").code(400);
+    return h.response("No poly_ids specified").code(400);
   }
 
   if (!secret || secret !== process.env.SECRET) {
@@ -81,8 +78,9 @@ const getBoundariesRoute: ServerRoute = {
   },
 };
 
+// Use POST so that it can receive a large list of poly_ids in one request
 const getPolygonsRoute: ServerRoute = {
-  method: "GET",
+  method: "POST",
   path: "/polygons",
   handler: getPolygons,
   options: {
