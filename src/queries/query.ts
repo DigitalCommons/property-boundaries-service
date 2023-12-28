@@ -19,18 +19,24 @@ export const PolygonModel = sequelize.define(
       primaryKey: true,
       type: DataTypes.INTEGER,
     },
-    poly_id: DataTypes.STRING,
+    poly_id: {
+      allowNull: false,
+      type: DataTypes.INTEGER,
+    },
     title_no: {
-      unique: true,
+      allowNull: false,
       type: DataTypes.STRING,
     },
-    geom: DataTypes.GEOMETRY,
-    createdAt: {
+    geom: {
       allowNull: false,
+      type: DataTypes.GEOMETRY,
+    },
+    createdAt: {
+      defaultValue: null,
       type: DataTypes.DATE,
     },
     updatedAt: {
-      allowNull: false,
+      defaultValue: null,
       type: DataTypes.DATE,
     },
   },
@@ -42,11 +48,16 @@ export const PolygonModel = sequelize.define(
 export const LandOwnershipModel = sequelize.define(
   "LandOwnership",
   {
-    id: {
+    idland_ownerships: {
+      allowNull: false,
+      autoIncrement: true,
       primaryKey: true,
       type: DataTypes.INTEGER,
     },
-    title_no: DataTypes.STRING,
+    title_no: {
+      allowNull: false,
+      type: DataTypes.STRING,
+    },
     tenure: DataTypes.STRING,
     property_address: DataTypes.TEXT,
     district: DataTypes.STRING,
@@ -83,11 +94,11 @@ export const LandOwnershipModel = sequelize.define(
     additional_proprietor_indicator: DataTypes.STRING,
     proprietor_uk_based: DataTypes.BOOLEAN,
     createdAt: {
-      allowNull: false,
+      defaultValue: null,
       type: DataTypes.DATE,
     },
     updatedAt: {
-      allowNull: false,
+      defaultValue: null,
       type: DataTypes.DATE,
     },
   },
