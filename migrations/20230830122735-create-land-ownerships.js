@@ -1,134 +1,55 @@
 "use strict";
-/** @type {import('sequelize-cli').Migration} */
+
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("land_ownerships", {
-      id: {
-        allowNull: false,
-        autoIncrement: true,
-        primaryKey: true,
-        type: Sequelize.BIGINT,
-      },
-      title_no: {
-        type: Sequelize.STRING,
-        foreignKey: true,
-      },
-      tenure: {
-        type: Sequelize.STRING,
-      },
-      property_address: {
-        type: Sequelize.TEXT,
-      },
-      district: {
-        type: Sequelize.STRING,
-      },
-      county: {
-        type: Sequelize.STRING,
-      },
-      region: {
-        type: Sequelize.STRING,
-      },
-      postcode: {
-        type: Sequelize.STRING,
-      },
-      multiple_address_indicator: {
-        type: Sequelize.STRING,
-      },
-      price_paid: {
-        type: Sequelize.STRING,
-      },
-      proprietor_name_1: {
-        type: Sequelize.TEXT,
-      },
-      company_registration_no_1: {
-        type: Sequelize.STRING,
-      },
-      proprietor_category_1: {
-        type: Sequelize.STRING,
-      },
-      proprietor_1_address_1: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_1_address_2: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_1_address_3: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_name_2: {
-        type: Sequelize.TEXT,
-      },
-      company_registration_no_2: {
-        type: Sequelize.STRING,
-      },
-      proprietor_category_2: {
-        type: Sequelize.STRING,
-      },
-      proprietor_2_address_1: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_2_address_2: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_2_address_3: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_name_3: {
-        type: Sequelize.TEXT,
-      },
-      company_registration_no_3: {
-        type: Sequelize.STRING,
-      },
-      proprietor_category_3: {
-        type: Sequelize.STRING,
-      },
-      proprietor_3_address_1: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_3_address_2: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_3_address_3: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_name_4: {
-        type: Sequelize.TEXT,
-      },
-      company_registration_no_4: {
-        type: Sequelize.STRING,
-      },
-      proprietor_category_4: {
-        type: Sequelize.STRING,
-      },
-      proprietor_4_address_1: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_4_address_2: {
-        type: Sequelize.TEXT,
-      },
-      proprietor_4_address_3: {
-        type: Sequelize.TEXT,
-      },
-      date_proprietor_added: {
-        type: Sequelize.STRING,
-      },
-      additional_proprietor_indicator: {
-        type: Sequelize.STRING,
-      },
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
-      proprietor_uk_based: {
-        type: Sequelize.BOOLEAN,
-      },
-    });
+    await queryInterface.sequelize.query(
+      `CREATE TABLE land_ownerships (
+        idland_ownerships int NOT NULL AUTO_INCREMENT,
+        title_no varchar(255) NOT NULL,
+        tenure varchar(255) DEFAULT NULL,
+        property_address text,
+        district varchar(255) DEFAULT NULL,
+        county varchar(255) DEFAULT NULL,
+        region varchar(255) DEFAULT NULL,
+        postcode varchar(255) DEFAULT NULL,
+        multiple_address_indicator varchar(255) DEFAULT NULL,
+        price_paid varchar(255) DEFAULT NULL,
+        proprietor_name_1 text,
+        company_registration_no_1 varchar(255) DEFAULT NULL,
+        proprietor_category_1 varchar(255) DEFAULT NULL,
+        proprietor_1_address_1 text,
+        proprietor_1_address_2 text,
+        proprietor_1_address_3 text,
+        proprietor_name_2 text,
+        company_registration_no_2 varchar(255) DEFAULT NULL,
+        proprietor_category_2 varchar(255) DEFAULT NULL,
+        proprietor_2_address_1 text,
+        proprietor_2_address_2 text,
+        proprietor_2_address_3 text,
+        proprietor_name_3 text,
+        company_registration_no_3 varchar(255) DEFAULT NULL,
+        proprietor_category_3 varchar(255) DEFAULT NULL,
+        proprietor_3_address_1 text,
+        proprietor_3_address_2 text,
+        proprietor_3_address_3 text,
+        proprietor_name_4 text,
+        company_registration_no_4 varchar(255) DEFAULT NULL,
+        proprietor_category_4 varchar(255) DEFAULT NULL,
+        proprietor_4_address_1 text,
+        proprietor_4_address_2 text,
+        proprietor_4_address_3 text,
+        date_proprietor_added varchar(255) DEFAULT NULL,
+        additional_proprietor_indicator varchar(255) DEFAULT NULL,
+        createdAt date DEFAULT NULL,
+        updatedAt date DEFAULT NULL,
+        proprietor_uk_based tinyint(1) DEFAULT NULL,
+        PRIMARY KEY (idland_ownerships),
+        KEY title_no (title_no),
+        KEY proprietor_name_1 (proprietor_name_1(255))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+    );
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("land_ownerships");
+    await queryInterface.sequelize.query(`DROP TABLE land_ownerships`);
   },
 };

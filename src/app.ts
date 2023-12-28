@@ -1,11 +1,12 @@
 import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
-import boundaryRoutes from "./routes/boundary";
+import routes from "./routes/index";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
   host: "0.0.0.0",
+  debug: { log: ["error"], request: ["error"] },
 });
 
 function index(request: Request): string {
@@ -23,16 +24,16 @@ async function start() {
     },
   });
 
-  server.route(boundaryRoutes);
+  server.route(routes);
 
   console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
   server.start();
-
-  process.on("unhandledRejection", (err) => {
-    console.error("unhandledRejection");
-    console.error(err);
-    process.exit(1);
-  });
 }
+
+process.on("unhandledRejection", (err) => {
+  console.error("unhandledRejection");
+  console.error(err);
+  process.exit(1);
+});
 
 start();

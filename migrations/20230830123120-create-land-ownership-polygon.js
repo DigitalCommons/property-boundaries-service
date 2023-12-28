@@ -1,39 +1,23 @@
 "use strict";
-/** @type {import('sequelize-cli').Migration} */
+
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("land_ownership_polygons", {
-      id: {
-        allowNull: false,
-        autoIncrement: true,
-        primaryKey: true,
-        type: Sequelize.INTEGER,
-      },
-      poly_id: {
-        type: Sequelize.STRING,
-      },
-      title_no: {
-        type: Sequelize.STRING,
-        foreignKey: true,
-      },
-      geom: {
-        type: Sequelize.GEOMETRY,
-        srid: 4326,
-        allowNull: false,
-      },
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-        default: Date.now(),
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-        default: Date.now(),
-      },
-    });
+    await queryInterface.sequelize.query(
+      `CREATE TABLE land_ownership_polygons (
+        id int NOT NULL AUTO_INCREMENT,
+        poly_id int NOT NULL,
+        title_no varchar(255) NOT NULL,
+        geom geometry NOT NULL,
+        createdAt date DEFAULT NULL,
+        updatedAt date DEFAULT NULL,
+        PRIMARY KEY (id),
+        SPATIAL KEY geom (geom),
+        KEY title_no (title_no),
+        KEY poly_id (poly_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+    );
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("land_ownership_polygons");
+    await queryInterface.sequelize.query(`DROP TABLE land_ownership_polygons`);
   },
 };
