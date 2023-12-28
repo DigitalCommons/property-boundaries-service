@@ -1,9 +1,10 @@
 import path from "path";
 import { readdirSync } from "fs";
 import { readFile } from "fs/promises";
-import { Match, getExistingPolygon, comparePolygons } from "./analysis/methods";
+import { Match, getExistingPolygons, comparePolygons } from "./methods";
 
-const ID = undefined; //Adur: 35984908;
+// Analyse a single polygon with the following INSPIRE ID (or just take any if undefined)
+const ID = undefined;
 let council: string | undefined;
 const generatePath = path.resolve("./generated");
 
@@ -31,7 +32,7 @@ const analysePolygonInJSON = async (
     }
 
     // TODO: Combine this into single API call for many polygons, to reduce network load
-    const existingPolygon = await getExistingPolygon(id);
+    const existingPolygon = (await getExistingPolygons([id]))[0];
 
     if (existingPolygon) {
       const oldCoords = existingPolygon.geom.coordinates[0];
@@ -42,7 +43,7 @@ const analysePolygonInJSON = async (
       ]);
       console.log("Coordinates diff:", diff);
 
-      const { match, percentageIntersect } = comparePolygons(
+      const { match, percentageIntersect, offsetStats } = comparePolygons(
         oldCoords,
         newCoords
       );
@@ -61,6 +62,14 @@ const analysePolygonInJSON = async (
             "Different vertices, percentage intersect:",
             percentageIntersect
           );
+          if (offsetStats) {
+            console.log(
+              `Offset stats: lat mean ${offsetStats?.latMean}, long mean ${offsetStats?.longMean},
+              lat std ${offsetStats?.latStd}, long std ${offsetStats?.longStd}`
+            );
+          } else {
+            console.log("Different number of vertices, so no offset stats");
+          }
           break;
       }
     } else {

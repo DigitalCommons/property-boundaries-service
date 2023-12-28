@@ -3,11 +3,15 @@ import axios from "axios";
 import { chromium } from "playwright";
 import path from "path";
 import fs from "fs";
-import { promisify } from "util";
+import { readdir, lstat, writeFile } from "fs/promises";
 import extract from "extract-zip";
 import csvParser from "csv-parser";
 import ogr2ogr from "ogr2ogr";
-import { createLandOwnership } from "./queries/query";
+import moment from "moment-timezone";
+// import { createLandOwnership } from "./queries/query";
+
+// Just download data from first 10 councils for now
+const maxCouncils = 15;
 
 const downloadPath = path.resolve("./downloads");
 const generatePath = path.resolve("./generated");
@@ -20,12 +24,24 @@ const userAgents = [
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.11.0.0 Safari/537.36",
 ];
 
-const readdir = promisify(fs.readdir);
-const lstat = promisify(fs.lstat);
-const writeFile = promisify(fs.writeFile);
+const newDownloads: string[] = [];
+
+/**
+ * INSPIRE data is published on the first Sunday of every month. So let's take 23:59:59 on this day
+ * as the latest publish time. We will be checking against this time to decide whether to refresh
+ * the data we have already downloaded.
+ */
+const date = moment().tz("Europe/London").startOf("month");
+date.day(7); // the next sunday
+if (date.date() > 7) {
+  // if the date is now after 7th, go back one week
+  date.day(-7);
+}
+const latestInspirePublishTimeMs = date.endOf("day").valueOf(); // UNIX timestamp
 
 /** Download INSPIRE files using a headless playwright browser */
 async function downloadInspire() {
+  fs.mkdirSync(downloadPath, { recursive: true });
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
@@ -50,44 +66,58 @@ async function downloadInspire() {
     return inspireDownloadLinks;
   });
 
-  // Just download data from first council for now
-  const downloadButton = await page.waitForSelector(
-    "#" + inspireDownloadLinks[5]
+  console.log(
+    `We found INSPIRE download links for ${inspireDownloadLinks.length} councils`
   );
 
-  const downloadPromise = page.waitForEvent("download");
-  await downloadButton.click();
-  const download = await downloadPromise;
+  for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
+    const downloadButton = await page.waitForSelector("#" + link);
 
-  // Wait for the download process to complete and save the file
-  await download.saveAs(`${downloadPath}/${download.suggestedFilename()}`);
+    const downloadPromise = page.waitForEvent("download");
+    await downloadButton.click();
+    const download = await downloadPromise;
+    const newDownloadFile = download.suggestedFilename();
+
+    // Check name against existing file and its creation date if it exists
+    const existingDownloadFile = `${downloadPath}/${newDownloadFile}`;
+    const creationTimeMs = fs.statSync(existingDownloadFile, {
+      throwIfNoEntry: false,
+    })?.birthtimeMs;
+
+    // If existing file was generated after the latest publish, skip this download
+    if (creationTimeMs && creationTimeMs > latestInspirePublishTimeMs) {
+      console.log(
+        `Skip ${newDownloadFile} since we have already generated data for this council`
+      );
+    } else {
+      console.log(`Downloading ${newDownloadFile}`);
+      await download.saveAs(`${downloadPath}/${newDownloadFile}`);
+      newDownloads.push(newDownloadFile);
+    }
+  }
 
   await browser.close();
 }
 
-/** Unzip archives for each council in the downloads folder in parallel */
+/** Unzip archives for each of the new downloads in parallel */
 async function unzip() {
-  const files = await readdir(downloadPath);
-
   await Promise.all(
-    files.map(async (file) => {
-      if (file.includes(".zip")) {
-        console.log("Unzip:", file);
-        await extract(path.resolve(`${downloadPath}/${file}`), {
-          dir: path.resolve(`${downloadPath}/${file}`.replace(".zip", "")),
-        });
-      }
+    newDownloads.map(async (file) => {
+      console.log("Unzip:", file);
+      await extract(path.resolve(`${downloadPath}/${file}`), {
+        dir: path.resolve(`${downloadPath}/${file}`.replace(".zip", "")),
+      });
     })
   );
 }
 
 /** Transform gml files into GeoJSON for each council in parallel */
 async function transformGML() {
-  const downloads = await readdir(downloadPath);
+  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
   fs.mkdirSync(generatePath, { recursive: true });
 
   await Promise.all(
-    downloads.map(async (council) => {
+    councils.map(async (council) => {
       const folderPath = `${downloadPath}/${council}`;
       const stat = await lstat(folderPath);
 
@@ -97,14 +127,9 @@ async function transformGML() {
           const gmlFile = `${folderPath}/Land_Registry_Cadastral_Parcels.gml`;
           console.log("Transform GML:", council);
 
-          // TODO: comment to explain why we are using this projection
           const { data } = await ogr2ogr(gmlFile, {
             maxBuffer: 1024 * 1024 * 200,
-            // TODO: try instead with:
-            // - 3857 (web mercator, default for Mapbox)
-            // - 4326 (used by GPS, mentioned in FE README from initial commit)
-            // options: ["-t_srs", "EPSG:4269"],
-            options: ["-t_srs", "EPSG:4326"], // GPS projection
+            options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
           });
 
           try {
@@ -213,9 +238,9 @@ async function downloadOwnerships() {
 // - Automatically save a backup of the previous month's data so that we can easily revert in an emergency
 
 // delete all the files already there
-// fs.rmSync(path.resolve(downloadPath), { recursive: true, force: true });
-// fs.rmSync(path.resolve(generatePath), { recursive: true, force: true });
+// fs.rmSync(downloadPath, { recursive: true, force: true });
+// fs.rmSync(generatePath, { recursive: true, force: true });
 
-// downloadInspire().then(unzip).then(transformGML);
+downloadInspire().then(unzip).then(transformGML);
 
 // downloadOwnerships();
