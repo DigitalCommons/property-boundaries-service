@@ -42,17 +42,22 @@ async function getPolygons(
   // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
   const poly_ids = typeof poly_id === "object" ? poly_id : [poly_id];
 
+  if (poly_ids.length === 0) {
+    return h.response("missing poly_id parameter").code(400);
+  }
+
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const { polygons, missing } = await getPolygonsById(poly_ids);
+  const result = await getPolygonsById(poly_ids);
 
-  if (missing.length > 0) {
-    return h.response(`poly_ids don't exist: ${missing.join(",")}`).code(404);
+  if (result.polygons.length > 0) {
+    // If at least some polygons exist, return with a 200 OK but indicate if any are missing in data
+    return h.response(result).code(200);
+  } else {
+    return h.response(result).code(404);
   }
-
-  return h.response(polygons);
 }
 
 async function search(request: Request): Promise<any> {

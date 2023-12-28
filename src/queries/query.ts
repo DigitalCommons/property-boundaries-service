@@ -171,7 +171,7 @@ export const getPolygonsById = async (poly_ids: number[]) => {
     };
   } else {
     polygons.forEach((polygon) => {
-      uniquePolyIds.delete(Number(polygon.poly_id));
+      uniquePolyIds.delete(polygon.poly_id);
     });
 
     return {
