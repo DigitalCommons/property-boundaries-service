@@ -1,4 +1,6 @@
-node_modules/
-dist/
-downloads/
+node_modules
+dist
+downloads
+generated
+analysed
 .env

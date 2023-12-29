@@ -170,6 +170,7 @@ export const getPolygonsById = async (poly_ids: number[]) => {
       missing: [],
     };
   } else {
+    // TODO: fix this, for some reason it isn't working and is listing ones that aren't missing
     polygons.forEach((polygon) => {
       uniquePolyIds.delete(polygon.poly_id);
     });

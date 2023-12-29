@@ -6,6 +6,7 @@ This service manages a database and an api to serve data from the land registry'
 
 - Nodejs
 - MySQL
+- [GDAL tools](https://gdal.org/download.html) (includes the `ogr2ogr` command line tool)
 
 ## Installation
 

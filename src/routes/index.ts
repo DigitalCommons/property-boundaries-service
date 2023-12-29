@@ -43,6 +43,10 @@ async function getPolygons(
     return h.response("No poly_ids specified").code(400);
   }
 
+  if (poly_ids.length === 0) {
+    return h.response("missing poly_id parameter").code(400);
+  }
+
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
