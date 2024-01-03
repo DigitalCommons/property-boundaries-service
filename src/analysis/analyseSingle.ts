@@ -57,19 +57,26 @@ const analysePolygonInJSON = async (
             "Same set of vertices but in different presentation order"
           );
           break;
-        case Match.DifferentVertices:
+        case Match.ExactOffset:
           console.log(
-            "Different vertices, percentage intersect:",
-            percentageIntersect
+            "Same vertices, each offset by the same lat and long (within distance and std thresholds)"
           );
-          if (offsetStats) {
-            console.log(
-              `Offset stats: lat mean ${offsetStats?.latMean}, long mean ${offsetStats?.longMean},
-              lat std ${offsetStats?.latStd}, long std ${offsetStats?.longStd}`
-            );
-          } else {
-            console.log("Different number of vertices, so no offset stats");
-          }
+          break;
+        case Match.HighOverlap:
+          console.log(
+            "Different vertices but with an overlap that meets the percentage intersect threshold"
+          );
+          break;
+        case Match.Fail:
+          console.log("Failed match, info:", {
+            ...offsetStats,
+            percentageIntersect,
+            oldCoords,
+            newCoords,
+          });
+          break;
+        default:
+          console.error("We shouldn't hit this, all cases should be handled");
           break;
       }
     } else {

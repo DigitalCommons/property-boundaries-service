@@ -9,6 +9,46 @@ import {
   getPolygonsByProprietorName,
   getPolygonsById,
 } from "../queries/query";
+import path from "path";
+import fs from "fs";
+
+/** Handler for testing our newly generated INSPIRE JSONs */
+async function getBoundariesDummy(request: Request): Promise<any> {
+  // Get dummy info from a specific council
+  const data = JSON.parse(
+    fs.readFileSync(
+      path.resolve(`./generated/Birmingham_City_Council.json`),
+      "utf8"
+    )
+  );
+  console.log(
+    "Last polygon in dataset:",
+    data.features.slice(-1)[0].geometry.coordinates[0]
+  );
+
+  const id_we_want = 23408026;
+  let index = data.features.findIndex(
+    (feature) => feature.properties.INSPIREID === id_we_want
+  );
+  if (index === -1) {
+    console.log("ID doesn't exist, so just show first 500");
+    index = 250;
+  }
+
+  // Transform into what LX expects
+  const polygons = data.features
+    .slice(index - 250, index + 250)
+    .map((feature) => ({
+      poly_id: feature.properties.INSPIREID,
+      geom: {
+        ...feature.geometry,
+        coordinates: [
+          feature.geometry.coordinates[0].map((c) => c.toReversed()),
+        ],
+      },
+    }));
+  return [polygons];
+}
 
 // TODO: add error handling and appropriate responses
 async function getBoundaries(request: Request): Promise<any> {
@@ -52,12 +92,8 @@ async function getPolygons(
 
   const result = await getPolygonsById(poly_ids);
 
-  if (result.polygons.length > 0) {
-    // If at least some polygons exist, return with a 200 OK but indicate if any are missing in data
-    return h.response(result).code(200);
-  } else {
-    return h.response(result).code(404);
-  }
+  // If some or all polygons exist, return with a 200 OK but indicate if any are missing in the data
+  return h.response(result).code(200);
 }
 
 async function search(request: Request): Promise<any> {
@@ -75,7 +111,7 @@ async function search(request: Request): Promise<any> {
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
   path: "/boundaries",
-  handler: getBoundaries,
+  handler: getBoundariesDummy, // TODO: change this back to getBoundaries in the live app
   options: {
     auth: false,
   },

@@ -2,6 +2,7 @@ import path from "path";
 import { plot, Plot, Layout } from "nodeplotlib";
 import fs from "fs";
 import { AllStats, StatsForEachCouncil } from "./analyse";
+import { percentile } from "stats-lite";
 
 const analysedPath = path.resolve("./analysed");
 const histogramBarmode = "stack";
@@ -19,17 +20,20 @@ const plotPercentageIntersects = (
         opacity: barOpacity,
         xbins: {
           start: 0,
+          // start: percentile(stats, 0.01), // Trim bottom 0.01% outliers
           end: 100,
           size: 1,
         },
       });
+
       return data;
     },
     []
   );
 
   const layout: Layout = {
-    title: "Percentage intersects histogram",
+    title:
+      "Percentage intersects histogram (not including exact offset matches)",
     xaxis: { title: "%" },
     yaxis: { title: "Count" },
     barmode: histogramBarmode,
@@ -48,7 +52,7 @@ const plotOffsetMeans = (offsetMeans: StatsForEachCouncil) => {
         opacity: barOpacity,
         xbins: {
           start: 0,
-          end: 1e-4,
+          end: 4e-5,
           size: 1e-7,
         },
       });
@@ -101,8 +105,8 @@ const json = fs.readFileSync(
   path.resolve(`${analysedPath}/analysis.json`),
   "utf8"
 );
-const stats: AllStats = JSON.parse(json);
+const allStats: AllStats = JSON.parse(json).allStats;
 console.log("Plotting histograms...");
-plotPercentageIntersects(stats.percentageIntersects);
-plotOffsetMeans(stats.offsetMeans);
-plotOffsetStds(stats.offsetStds);
+plotPercentageIntersects(allStats.percentageIntersects);
+plotOffsetMeans(allStats.offsetMeans);
+plotOffsetStds(allStats.offsetStds);
