@@ -6,10 +6,11 @@ import stats from "stats-lite";
 const precisionDecimalPlaces = 10;
 const offsetMeanThreshold = 6e-5; // up to ~8 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
-const percentageIntersectThreshold = 99.5;
+const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
+const zeroAreaThreshold = 2; // Polygons less than 2 m2 are ignored as artifacts when calculating segment/merge
 
 export enum Match {
-  /** Same vertices (to above precision decimal places) */
+  /** Old and new polys have same vertices (to above precision decimal places) */
   Exact,
   /** Same vertices but a different presentation order */
   // TODO: maybe remove this if it never happens after a few months of running the script
@@ -18,7 +19,15 @@ export enum Match {
   ExactOffset,
   /** Different vertices but with an overlap that meets the percentage intersect threshold */
   HighOverlap,
-  /** Different vertices and doesn't meet the overlap threshold */
+  /** Old boundary was segmented into multiple new boundaries, which we have identified */
+  Segmented,
+  /** Old boundary segmented but we can't find (all of) the other segments */
+  SegmentedIncomplete,
+  /** Old boundary merged with another old boundary (which we have identified) */
+  // Merged,
+  /** Old boundary expanded, but we can't find an exact match of multipled merged boundaries */
+  // MergedIncomplete,
+  /** Didn't meet any of the above matching criteria */
   Fail,
 }
 
@@ -68,25 +77,56 @@ const areExactMatch = (
   return true;
 };
 
-const calculatePercentageIntersect = (
+const haveSameVertices = (
   poly1coords: number[][],
   poly2coords: number[][]
-): number => {
-  // TODO: use https://github.com/xaviergonz/js-angusj-clipper instead of turf to improve speed?
-  // Add analytics to find where bottlenecks are
+): boolean => {
+  for (const vertex of new Set([...poly1coords, ...poly2coords])) {
+    // Loop through each unique vertex and check both polygons have the same number of this vertex
+    if (
+      // Remove last coords of polygon, since they are a repeat of the first in a GeoJSON polygon
+      poly1coords
+        .slice(0, -1)
+        .filter((coords) => areEqualCoords(coords, vertex)).length !==
+      poly2coords
+        .slice(0, -1)
+        .filter((coords) => areEqualCoords(coords, vertex)).length
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const calculateIntersect = (
+  poly1coords: number[][],
+  poly2coords: number[][]
+): { percentageIntersect: number; poly1larger: boolean } => {
+  // TODO: Add analytics to find where bottlenecks are in analysis script
+  // use https://github.com/xaviergonz/js-angusj-clipper instead of turf to improve speed?
   const poly1 = turf.polygon([poly1coords]);
   const poly2 = turf.polygon([poly2coords]);
+
+  const areaPoly1 = turf.area(poly1);
+  const areaPoly2 = turf.area(poly2);
+  const poly1larger = areaPoly1 > areaPoly2;
+
   const intersection = turf.intersect(poly1, poly2);
 
   if (intersection) {
     const areaIntersection = turf.area(intersection);
-    const areaPoly1 = turf.area(poly1);
-    const areaPoly2 = turf.area(poly2);
 
     // Take fraction of the largest polygon, thinking about the case of 1 polygon containing another
-    return (areaIntersection * 100) / Math.max(areaPoly1, areaPoly2);
+    return {
+      percentageIntersect:
+        (areaIntersection * 100) / Math.max(areaPoly1, areaPoly2),
+      poly1larger,
+    };
   } else {
-    return 0;
+    return {
+      percentageIntersect: 0,
+      poly1larger,
+    };
   }
 };
 
@@ -140,69 +180,252 @@ const compareOffset = (
 };
 
 /**
+ * Use this instead of turf.booleanContains to allow some tolerance e.g. if subPoly has edges that
+ * go slightly outside of the containing polygon
+ */
+const polygonContains = (
+  poly: turf.Feature<turf.Polygon>,
+  subPoly: turf.Feature<turf.Polygon>
+): boolean => {
+  const intersect = turf.intersect(poly, subPoly);
+  if (!intersect) return false;
+
+  const percentageIntersect = (turf.area(intersect) * 100) / turf.area(subPoly);
+  return percentageIntersect > percentageIntersectThreshold;
+};
+
+/**
  * Compare 2 sets of polygon coordinates to determine whether they are describing the same boundary.
  *
+ * @param inspireId the INSPIRE ID for the new (and old) polygon
  * @param suggestedLatLongOffset an offset to try, if we are unable to calculate one for this case
  *        e.g. the offset of a nearby polygon in the INSPIRE dataset
- * @returns the type of match, offset statistics, and percentage interesect (after any offsetting)
+ * @param nearbyPolygons that we search over when analysing cases of boundary segmentation/merger
+ * @returns the type of match, percentage interesect (after any offsetting), offset statistics, and
+ *        the IDs of other polygons relating to the match (e.g. if a segment/merge)
  */
 export const comparePolygons = (
-  poly1coords: number[][],
-  poly2coords: number[][],
-  suggestedLatLongOffset: number[] = [0, 0]
+  inspireId: number,
+  oldCoords: number[][], // TODO: remove this param and look this up within this method
+  newCoords: number[][],
+  suggestedLatLongOffset: number[] = [0, 0],
+  nearbyPolygons: turf.Feature<turf.Polygon>[] = []
 ): {
   match: Match;
-  offsetStats?: OffsetStats;
   percentageIntersect: number;
+  offsetStats?: OffsetStats;
+  otherPolygonIds?: number[];
 } => {
-  if (areExactMatch(poly1coords, poly2coords)) {
+  if (areExactMatch(oldCoords, newCoords)) {
     return { match: Match.Exact, percentageIntersect: 100 };
   }
 
-  for (const vertex of new Set([...poly1coords, ...poly2coords])) {
-    if (
-      // Remove last coords of each, since they are the same as first in a polygon GeoJSON
-      poly1coords
-        .slice(0, -1)
-        .filter((coords) => areEqualCoords(coords, vertex)).length !==
-      poly2coords
-        .slice(0, -1)
-        .filter((coords) => areEqualCoords(coords, vertex)).length
-    ) {
-      // The polygons contain a different set of vertices, so now let's now check if the polygon is
-      // just offset in 1 direction
-      const offsetStats = compareOffset(poly1coords, poly2coords);
+  if (haveSameVertices(oldCoords, newCoords)) {
+    return { match: Match.SameVertices, percentageIntersect: 100 };
+  }
 
-      if (offsetStats.offsetMatch) {
-        return {
-          match: Match.ExactOffset,
-          offsetStats,
-          percentageIntersect: 100, // No point calculating if offset test passed
-        };
-      } else if (!offsetStats.sameNumberVertices) {
-        // We couldn't calculate an offset, but try offsetting by the suggested offset
-        poly1coords = poly1coords.map((coords) => [
-          coords[0] + suggestedLatLongOffset[0],
-          coords[1] + suggestedLatLongOffset[1],
-        ]);
+  // Let's now check if one polygon is just offset from the other, but with exact same shape & size
+  const offsetStats = compareOffset(oldCoords, newCoords);
+
+  if (offsetStats.offsetMatch) {
+    return {
+      match: Match.ExactOffset,
+      offsetStats,
+      percentageIntersect: 100, // No point calculating if offset test passed
+    };
+  }
+
+  // They're not an exact offset match, but let's try offsetting by the suggested offset and find
+  // their percentage intersect
+  oldCoords = oldCoords.map((coords) => [
+    coords[0] + suggestedLatLongOffset[0],
+    coords[1] + suggestedLatLongOffset[1],
+  ]);
+  const { percentageIntersect, poly1larger: oldPolyLarger } =
+    calculateIntersect(oldCoords, newCoords);
+
+  // TODO: should there be an absolute threshold too? (e.g. for very, very big polygons)
+  if (percentageIntersect > percentageIntersectThreshold) {
+    return {
+      match: Match.HighOverlap,
+      percentageIntersect,
+      offsetStats,
+    };
+  }
+
+  if (oldPolyLarger) {
+    const oldPoly = turf.polygon([oldCoords]);
+    const newPoly = turf.polygon([newCoords]);
+
+    if (polygonContains(oldPoly, newPoly)) {
+      // Old poly contains new poly - let's now check if it has been segmented and try to find the
+      // other segments
+      console.log("aaaaa", inspireId);
+
+      const segmentIds: number[] = [inspireId];
+
+      // The boundary within the segmented polygon which has not yet been matched to a new INSPIRE ID
+      let remainder = turf.difference(oldPoly, newPoly);
+      let segmentNotFound = false;
+
+      while (remainder && turf.area(remainder) > zeroAreaThreshold) {
+        // Remainder might be a multipolygon so consider each separate polygon
+        turf.flattenEach(remainder, (remainderPolygon) => {
+          const remainderPolygonArea = turf.area(remainderPolygon);
+          if (remainderPolygonArea < zeroAreaThreshold) {
+            // If area is smaller than threshold, ignore this polygon (probably just an artifact)
+            // Remove it from the remainder that we are yet to analyse
+            remainder = turf.difference(remainder, remainderPolygon);
+            return;
+          }
+          console.log("bbbbbb remainder polygon area", remainderPolygonArea);
+
+          // console.log(
+          //   "area of remainder polygon:",
+          //   turf.area(remainderPolygon)
+          // );
+
+          // Search through the nearby polygons to see if one lies within this remainder Shrink
+          // remainder by a buffer to avoid picking a point right on the edge Set the buffer to 1/10
+          // of sqrt(area) (but at least 50cm), to filter out very long, thin boundaries that are
+          // probably artifacts - the buffer method will return undefined if the boundary shrinks to
+          // zero, so we can just discard it
+          const bufferMeters = Math.max(
+            0.5,
+            Math.sqrt(remainderPolygonArea) / 10
+          );
+          const shrunkRemainder = turf.buffer(
+            remainderPolygon,
+            -bufferMeters / 1000,
+            {
+              units: "kilometers",
+            }
+          );
+          if (!shrunkRemainder) {
+            console.log("shrunk to zero");
+            remainder = turf.difference(remainder, remainderPolygon);
+            return;
+          }
+          const pointsInRemainder = turf.explode(shrunkRemainder); // a point for every vertex
+
+          // Perform spacial join and tag with INSPIRE ID if these points are within any other polygon
+          const taggedPoint = turf.tag(
+            pointsInRemainder,
+            turf.featureCollection(nearbyPolygons),
+            "INSPIREID",
+            "matchedInspireId"
+          );
+
+          // Take first match (if any)
+          const matchedInspireId = taggedPoint.features.find(
+            (feature) => feature.properties.matchedInspireId
+          )?.properties?.matchedInspireId;
+          console.log("ddddd matched", inspireId, matchedInspireId);
+
+          if (matchedInspireId) {
+            // There was a match.
+            segmentIds.push(matchedInspireId);
+
+            // Check whether this polygon is a segment fully within the old polygon
+            const matchedPoly = nearbyPolygons.find(
+              (feature) => feature.properties.INSPIREID === matchedInspireId
+            );
+            if (polygonContains(oldPoly, matchedPoly)) {
+              remainder = turf.difference(remainder, matchedPoly);
+              console.log(
+                "eeeee remainder area",
+                remainder ? turf.area(remainder) : 0
+              );
+              return;
+            } else {
+              console.log(
+                "matched polygon is not fully contained within the old poly"
+              );
+              // TODO: handle case where boundary between two adjacent properties moves
+            }
+          } else {
+            console.log(
+              "Part of the old boundary is no longer registered as an INSPIRE polygon"
+            );
+            // console.log(
+            //   "unmatched",
+            //   taggedPoint.features[0].geometry.coordinates,
+            //   ", remainder polygon coords:"
+            // );
+            // console.dir(shrunkRemainder.geometry.coordinates, {
+            //   maxArrayLength: null,
+            // });
+          }
+
+          // We couldn't find a match in the remainder, or something more complicated has happened
+          // e.g. neighbouring properties have both segmented and then merged along different
+          // boundaries.
+          segmentNotFound = true;
+        });
+
+        if (segmentNotFound) {
+          console.log(
+            inspireId,
+            "partially segmented into",
+            segmentIds,
+            newCoords[0][1],
+            ",",
+            newCoords[0][0],
+            "% intersect:",
+            percentageIntersect
+          );
+
+          return {
+            match: Match.SegmentedIncomplete,
+            percentageIntersect,
+            offsetStats,
+            otherPolygonIds: segmentIds, // just return what we have so far
+          };
+        }
       }
 
-      const percentageIntersect = calculatePercentageIntersect(
-        poly1coords,
-        poly2coords
+      console.log(
+        inspireId,
+        "fully segmented into",
+        segmentIds,
+        newCoords[0][1],
+        ",",
+        newCoords[0][0],
+        "% intersect:",
+        percentageIntersect
       );
 
       return {
-        match:
-          percentageIntersect > percentageIntersectThreshold
-            ? Match.HighOverlap
-            : Match.Fail,
+        match: Match.Segmented,
         percentageIntersect,
         offsetStats,
+        otherPolygonIds: segmentIds,
       };
+    } else {
+      console.log(
+        "polygon not contained in larger old poly",
+        inspireId,
+        "new",
+        newCoords[0][1],
+        ",",
+        newCoords[0][0],
+        "old",
+        oldCoords[0][1],
+        ",",
+        oldCoords[0][0],
+        "% intersect:",
+        percentageIntersect
+      );
     }
+  } else {
+    // TODO:
+    // - check if polygons have merged to create this new polygon
+    //     - analyse in a similar way to above
   }
 
-  // Set of vertices are the same
-  return { match: Match.SameVertices, percentageIntersect: 100 };
+  return {
+    match: Match.Fail,
+    percentageIntersect,
+    offsetStats,
+  };
 };

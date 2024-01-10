@@ -17,7 +17,7 @@ async function getBoundariesDummy(request: Request): Promise<any> {
   // Get dummy info from a specific council
   const data = JSON.parse(
     fs.readFileSync(
-      path.resolve(`./generated/Birmingham_City_Council.json`),
+      path.resolve(`./generated/Adur_District_Council.json`),
       "utf8"
     )
   );
@@ -26,18 +26,28 @@ async function getBoundariesDummy(request: Request): Promise<any> {
     data.features.slice(-1)[0].geometry.coordinates[0]
   );
 
-  const id_we_want = 23408026;
+  // CHANGE THESE:
+  const id_we_want = 35365786;
+  const numSurroundingPolys = 2000;
+
   let index = data.features.findIndex(
     (feature) => feature.properties.INSPIREID === id_we_want
   );
   if (index === -1) {
-    console.log("ID doesn't exist, so just show first 500");
-    index = 250;
+    console.log("ID doesn't exist, so just show first", numSurroundingPolys);
+    index = Math.round(numSurroundingPolys / 2) - 1;
   }
+  const firstNearbyPolygonIndex = Math.max(
+    0,
+    index - Math.round(numSurroundingPolys / 2)
+  );
 
   // Transform into what LX expects
   const polygons = data.features
-    .slice(index - 250, index + 250)
+    .slice(
+      firstNearbyPolygonIndex,
+      firstNearbyPolygonIndex + numSurroundingPolys + 1
+    )
     .map((feature) => ({
       poly_id: feature.properties.INSPIREID,
       geom: {

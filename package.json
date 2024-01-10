@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "serve": "pm2 start dist/app.js",
-    "dev:serve": "nodemon -e js -w dist src/app.ts",
+    "dev:serve": "nodemon src/app.ts",
     "generate": "node dist/generate.js",
     "analyse": "node dist/analysis/analyse.js",
     "analyseSingle": "node dist/analysis/analyseSingle.js",

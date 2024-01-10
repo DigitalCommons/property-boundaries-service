@@ -153,7 +153,7 @@ export async function getLandOwnership(title_no: string) {
 
 /** Get polygons with the given IDs, and a list of IDs that didn't exist  */
 export const getPolygonsById = async (poly_ids: number[]) => {
-  const uniquePolyIds = new Set(poly_ids);
+  const uniquePolyIds = new Set<number>(poly_ids);
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")})
@@ -195,6 +195,19 @@ export const getPolygonsByArea = async (searchArea: string) => {
   });
 
   return polygonsAndOwnerships;
+};
+
+export const getPolygonsByPoint = async (searchPoint: string) => {
+  const query = `SELECT *
+    FROM ${process.env.DB_NAME}.land_ownership_polygons
+    WHERE ST_Contains(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
+
+  const polygons = await sequelize.query(query, {
+    replacements: [searchPoint],
+    type: QueryTypes.SELECT,
+  });
+
+  return polygons;
 };
 
 export async function getPolygonsByProprietorName(name: string) {

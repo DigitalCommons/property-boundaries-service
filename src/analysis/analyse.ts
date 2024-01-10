@@ -6,7 +6,8 @@ import { Match, getExistingPolygons, comparePolygons } from "./methods";
 const generatePath = path.resolve("./generated");
 const analysedPath = path.resolve("./analysed");
 
-const maxRows = 10000; // max number of polygons we will analyse in each JSON
+const maxRows = 15000; // max number of polygons we will analyse in each JSON
+const maxCouncils = 1; // max number of council JSON files we will analyse
 
 export type StatsForEachCouncil = {
   [council: string]: number[];
@@ -22,6 +23,8 @@ const allStats: AllStats = {
   sameVerticesIds: {},
   exactOffsetIds: {},
   highOverlapIds: {},
+  segmentedIds: {},
+  segmentedIncompleteIds: {},
   failedMatchIds: {},
   newInspireIds: {},
   percentageIntersects: {},
@@ -66,6 +69,8 @@ const analysePolygonsInJSON = async (filename: string) => {
   const sameVerticesIds: number[] = [];
   const exactOffsetIds: number[] = [];
   const highOverlapIds: number[] = [];
+  const segmentedIds: number[] = [];
+  const segmentedIncompleteIds: number[] = [];
   const failedMatchIds: number[] = [];
   const newInspireIds: number[] = [];
   const percentageIntersects: number[] = [];
@@ -88,16 +93,29 @@ const analysePolygonsInJSON = async (filename: string) => {
 
     if (existingPolygon) {
       const oldCoords = existingPolygon.geom.coordinates[0];
-      // Our DB is in lat-long format and INSPIRE is in long-lat format, so reverse new ones
-      for (const vertex of newCoords) {
+      // Our DB is in lat-long format and INSPIRE (GeoJSON) is in long-lat format.
+      // Reverse old ones since turf uses long-lat
+      for (const vertex of oldCoords) {
         vertex.reverse();
       }
 
-      const { match, percentageIntersect, offsetStats } = comparePolygons(
-        oldCoords,
-        newCoords,
-        previousLatLongOffset
+      const firstNearbyPolygonIndex = Math.max(
+        0,
+        data.features.length - 5500 + index
       );
+      const { match, percentageIntersect, offsetStats, otherPolygonIds } =
+        comparePolygons(
+          inspireId,
+          oldCoords,
+          newCoords,
+          previousLatLongOffset,
+          data.features
+            // .slice(
+            //   firstNearbyPolygonIndex,
+            //   firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
+            // )
+            .filter((feature) => feature.properties.INSPIREID !== inspireId)
+        );
 
       percentageIntersects.push(percentageIntersect);
       if (offsetStats?.sameNumberVertices) {
@@ -126,6 +144,16 @@ const analysePolygonsInJSON = async (filename: string) => {
         case Match.HighOverlap:
           highOverlapIds.push(inspireId);
           break;
+        case Match.Segmented:
+          segmentedIds.push(inspireId);
+          // TODO: also push the other segment IDs so we don't have to analyse them too
+          break;
+        case Match.SegmentedIncomplete:
+          segmentedIncompleteIds.push(inspireId);
+          // case Match.Merged:
+          // case Match.MergedIncomplete:
+          // TODO
+          break;
         case Match.Fail:
           failedMatchIds.push(inspireId);
           failedMatchesInfo.push({
@@ -137,14 +165,6 @@ const analysePolygonsInJSON = async (filename: string) => {
           });
 
           // TODO:
-          // - check if old polygon has split into 2 or more smaller polygons
-          //     - maybe by searching for polygons that intersect with a bounding box around this polygon,
-          //       or... construct a box that falls within the missing portion & repeat
-          //     - then, what do we want to do with this?
-
-          // - check if polygons have merged to create this new polygon
-          //     - analyse in a similar way to above
-
           // - check if polygon is in the same rough area
           //     - if not, try to geocode matching title?
           break;
@@ -160,7 +180,8 @@ const analysePolygonsInJSON = async (filename: string) => {
     }
 
     if ((index + 1) % 1000 === 0) {
-      console.log(`Polygon ${index + 1}/${maxRows}, ${councilName}`);
+      // TODO: readd this
+      // console.log(`Polygon ${index + 1}/${maxRows}, ${councilName}`);
     }
   }
 
@@ -168,6 +189,8 @@ const analysePolygonsInJSON = async (filename: string) => {
   allStats.sameVerticesIds[councilName] = sameVerticesIds;
   allStats.exactOffsetIds[councilName] = exactOffsetIds;
   allStats.highOverlapIds[councilName] = highOverlapIds;
+  allStats.segmentedIds[councilName] = segmentedIds;
+  allStats.segmentedIncompleteIds[councilName] = segmentedIncompleteIds;
   allStats.failedMatchIds[councilName] = failedMatchIds;
   allStats.newInspireIds[councilName] = newInspireIds;
   allStats.percentageIntersects[councilName] = percentageIntersects;
@@ -184,7 +207,10 @@ const analyseAllJSONs = async (filenames: string[]) => {
 };
 
 // Script:
-const files = fs.readdirSync(generatePath).filter((f) => f.includes(".json"));
+const files = fs
+  .readdirSync(generatePath)
+  .filter((f) => f.includes(".json"))
+  .slice(0, maxCouncils);
 
 analyseAllJSONs(files).then((_void) => {
   console.log("Sanity check:");
@@ -195,18 +221,23 @@ analyseAllJSONs(files).then((_void) => {
   );
   const newInspireIdsCount = Object.values(allStats.newInspireIds).flat()
     .length;
+  const segmentedIncompleteCount = Object.values(
+    allStats.segmentedIncompleteIds
+  ).flat().length;
   const failedMatchCount = Object.values(allStats.failedMatchIds).flat().length;
   const finalDataPolygonCount =
     Object.values(allStats.exactMatchIds).flat().length +
     Object.values(allStats.sameVerticesIds).flat().length +
     Object.values(allStats.exactOffsetIds).flat().length +
     Object.values(allStats.highOverlapIds).flat().length +
+    Object.values(allStats.segmentedIds).flat().length +
+    Object.values(allStats.segmentedIncompleteIds).flat().length +
     failedMatchCount +
     newInspireIdsCount;
   console.log(
     `Total polygons in final data: ${finalDataPolygonCount} (${Math.round(
       (newInspireIdsCount * 100) / finalDataPolygonCount
-    )}% new IDs, ${failedMatchCount} failed matches)`
+    )}% new IDs, ${segmentedIncompleteCount} segmented incomplete, ${failedMatchCount} failed matches)`
   );
 
   console.log("Storing all stats in analysis.json");

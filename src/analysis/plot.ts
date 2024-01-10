@@ -1,5 +1,5 @@
 import path from "path";
-import { plot, Plot, Layout } from "nodeplotlib";
+import { plot, Layout } from "nodeplotlib";
 import fs from "fs";
 import { AllStats, StatsForEachCouncil } from "./analyse";
 import { percentile } from "stats-lite";
@@ -12,7 +12,7 @@ const plotPercentageIntersects = (
   percentageIntersects: StatsForEachCouncil
 ) => {
   const data = Object.entries(percentageIntersects).reduce(
-    (data: Plot[], [council, stats]) => {
+    (data, [council, stats]) => {
       data.push({
         x: stats,
         name: council,
@@ -21,7 +21,7 @@ const plotPercentageIntersects = (
         xbins: {
           start: 0,
           // start: percentile(stats, 0.01), // Trim bottom 0.01% outliers
-          end: 100,
+          end: 99.5,
           size: 1,
         },
       });
@@ -43,23 +43,20 @@ const plotPercentageIntersects = (
 };
 
 const plotOffsetMeans = (offsetMeans: StatsForEachCouncil) => {
-  const data = Object.entries(offsetMeans).reduce(
-    (data: Plot[], [council, stats]) => {
-      data.push({
-        x: stats,
-        name: council,
-        type: "histogram",
-        opacity: barOpacity,
-        xbins: {
-          start: 0,
-          end: 4e-5,
-          size: 1e-7,
-        },
-      });
-      return data;
-    },
-    []
-  );
+  const data = Object.entries(offsetMeans).reduce((data, [council, stats]) => {
+    data.push({
+      x: stats,
+      name: council,
+      type: "histogram",
+      opacity: barOpacity,
+      xbins: {
+        start: 0,
+        end: 4e-5,
+        size: 1e-7,
+      },
+    });
+    return data;
+  }, []);
 
   const layout: Layout = {
     title: "Offset means histogram",
@@ -72,23 +69,20 @@ const plotOffsetMeans = (offsetMeans: StatsForEachCouncil) => {
 };
 
 const plotOffsetStds = (offsetStds: StatsForEachCouncil) => {
-  const data = Object.entries(offsetStds).reduce(
-    (data: Plot[], [council, stats]) => {
-      data.push({
-        x: stats,
-        name: council,
-        type: "histogram",
-        opacity: barOpacity,
-        xbins: {
-          start: 0,
-          end: 2e-8,
-          size: 2e-10,
-        },
-      });
-      return data;
-    },
-    []
-  );
+  const data = Object.entries(offsetStds).reduce((data, [council, stats]) => {
+    data.push({
+      x: stats,
+      name: council,
+      type: "histogram",
+      opacity: barOpacity,
+      xbins: {
+        start: 0,
+        end: 2e-8,
+        size: 2e-10,
+      },
+    });
+    return data;
+  }, []);
 
   const layout: Layout = {
     title: "Offset standard deviations histogram",

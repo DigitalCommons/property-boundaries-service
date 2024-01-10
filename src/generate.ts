@@ -3,7 +3,7 @@ import axios from "axios";
 import { chromium } from "playwright";
 import path from "path";
 import fs from "fs";
-import { readdir, lstat, writeFile } from "fs/promises";
+import { readdir, lstat, writeFile, rm } from "fs/promises";
 import extract from "extract-zip";
 import csvParser from "csv-parser";
 import ogr2ogr from "ogr2ogr";
@@ -11,7 +11,7 @@ import moment from "moment-timezone";
 // import { createLandOwnership } from "./queries/query";
 
 // Just download data from first 10 councils for now
-const maxCouncils = 15;
+const maxCouncils = 10;
 
 const downloadPath = path.resolve("./downloads");
 const generatePath = path.resolve("./generated");
@@ -103,9 +103,13 @@ async function downloadInspire() {
 async function unzip() {
   await Promise.all(
     newDownloads.map(async (file) => {
+      const unzipDir = path.resolve(
+        `${downloadPath}/${file}`.replace(".zip", "")
+      );
+      await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
       console.log("Unzip:", file);
       await extract(path.resolve(`${downloadPath}/${file}`), {
-        dir: path.resolve(`${downloadPath}/${file}`.replace(".zip", "")),
+        dir: unzipDir,
       });
     })
   );

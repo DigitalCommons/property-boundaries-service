@@ -31,7 +31,6 @@ const analysePolygonInJSON = async (
       vertex.reverse();
     }
 
-    // TODO: Combine this into single API call for many polygons, to reduce network load
     const existingPolygon = (await getExistingPolygons([id]))[0];
 
     if (existingPolygon) {
@@ -44,6 +43,7 @@ const analysePolygonInJSON = async (
       console.log("Coordinates diff:", diff);
 
       const { match, percentageIntersect, offsetStats } = comparePolygons(
+        id,
         oldCoords,
         newCoords
       );
