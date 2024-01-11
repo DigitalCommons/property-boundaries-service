@@ -155,10 +155,10 @@ export async function getLandOwnership(title_no: string) {
  * Get polygons that:
  * - match with the ID(s) (if given)
  * AND
- * - intersect with the search area (if given as a geometry in WKT format)
+ * - intersect with the search area (if given)
  *
  * @param poly_ids an array of INSPIRE IDs
- * @param searchArea a Polygon in WKT format (used by MySql)
+ * @param searchArea a GeoJSON Polygon geometry
  * @returns an array of polygons that match the criteria
  */
 export const getPolygonsByIdAndSearchArea = async (
@@ -174,7 +174,7 @@ export const getPolygonsByIdAndSearchArea = async (
 
     const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?));`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -183,7 +183,7 @@ export const getPolygonsByIdAndSearchArea = async (
   }
 
   const searchAreaCondition = searchArea
-    ? `AND WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326)) `
+    ? `AND WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?)) `
     : "";
   const uniquePolyIds = new Set<number>(poly_ids);
 
@@ -207,7 +207,7 @@ export const getPolygonsByIdAndSearchArea = async (
 /**
  * Find property polygons that intersect within the give search area.
  *
- * @param searchArea a Polygon in WKT format (used by MySql)
+ * @param searchArea a Polygon in WKT format
  * @returns an array of polygons, with ownership info for each polygon if it exists
  */
 export const getPolygonsByArea = async (searchArea: string) => {

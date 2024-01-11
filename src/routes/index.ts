@@ -106,7 +106,7 @@ type GetPolygonsRequest = Request & {
  * Get polygons that:
  * - match with the ID(s) (if given)
  * AND
- * - intersect with the search area (if given as a geometry in WKT format)
+ * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
 async function getPolygons(
   request: GetPolygonsRequest,
