@@ -7,7 +7,7 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getPolygonsById,
+  getPolygonsByIdAndSearchArea,
 } from "../queries/query";
 import path from "path";
 import fs from "fs";
@@ -60,49 +60,80 @@ async function getBoundariesDummy(request: Request): Promise<any> {
   return [polygons];
 }
 
-// TODO: add error handling and appropriate responses
-async function getBoundaries(request: Request): Promise<any> {
+type GetPolygonsInBoxRequest = Request & {
+  query: {
+    sw_lng: number;
+    sw_lat: number;
+    ne_lng: number;
+    ne_lat: number;
+    secret: string;
+  };
+};
+
+// TODO:
+// - combine with search route?
+async function getPolygonsInBox(
+  request: GetPolygonsInBoxRequest,
+  h: ResponseToolkit
+): Promise<ResponseObject> {
   const { sw_lng, sw_lat, ne_lng, ne_lat, secret } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
-    return "missing or incorrect secret";
+    return h.response("missing or incorrect secret").code(403);
   }
 
-  if (!sw_lng || !sw_lat || !ne_lng || !ne_lat) return "bounds are not valid";
+  if (!sw_lng || !sw_lat || !ne_lng || !ne_lat) {
+    return h.response("bounds are not valid").code(400);
+  }
 
   const searchArea = `POLYGON ((${sw_lng} ${sw_lat}, ${ne_lng} ${sw_lat}, ${ne_lng} ${ne_lat}, ${sw_lng} ${ne_lat}, ${sw_lng} ${sw_lat}))`;
 
   const polygons = await getPolygonsByArea(searchArea);
 
   // TODO: remove this double-nested array and fix on backend API too
-  return [polygons];
+  return h.response([polygons]).code(200);
 }
 
-type GetPolygonRequest = Request & {
-  query: { poly_id: number | number[]; secret: string };
+type GetPolygonsRequest = Request & {
+  query: {
+    poly_id?: number | number[];
+    searchArea?: string;
+    secret: string;
+  };
 };
 
+/**
+ * Get polygons that:
+ * - match with the ID(s) (if given)
+ * AND
+ * - intersect with the search area (if given as a geometry in WKT format)
+ */
 async function getPolygons(
-  request: GetPolygonRequest,
-  h: ResponseToolkit,
-  d: any
+  request: GetPolygonsRequest,
+  h: ResponseToolkit
 ): Promise<ResponseObject> {
-  const { poly_id, secret } = request.query;
-
-  // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
-  const poly_ids = typeof poly_id === "object" ? poly_id : [poly_id];
-
-  if (poly_ids.length === 0) {
-    return h.response("missing poly_id parameter").code(400);
-  }
+  const { poly_id, searchArea, secret } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const result = await getPolygonsById(poly_ids);
+  // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
+  const poly_ids =
+    typeof poly_id === "undefined"
+      ? []
+      : typeof poly_id === "object"
+        ? poly_id
+        : [poly_id];
 
-  // If some or all polygons exist, return with a 200 OK but indicate if any are missing in the data
+  if (poly_ids.length === 0 && !searchArea) {
+    return h
+      .response("poly_id and/or searchArea parameter must be given")
+      .code(400);
+  }
+
+  const result = await getPolygonsByIdAndSearchArea(poly_ids, searchArea);
+
   return h.response(result).code(200);
 }
 
@@ -127,19 +158,20 @@ const getBoundariesRoute: ServerRoute = {
   },
 };
 
-const getPolygonsRoute: ServerRoute = {
+const searchRoute: ServerRoute = {
   method: "GET",
-  path: "/polygons",
-  handler: getPolygons,
+  path: "/search",
+  handler: search,
   options: {
     auth: false,
   },
 };
 
-const searchRoute: ServerRoute = {
+/** Only used in development of analyse script */
+const getPolygonsRoute: ServerRoute = {
   method: "GET",
-  path: "/search",
-  handler: search,
+  path: "/polygonsDevSearch",
+  handler: getPolygons,
   options: {
     auth: false,
   },

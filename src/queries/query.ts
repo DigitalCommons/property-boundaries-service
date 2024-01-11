@@ -151,37 +151,65 @@ export async function getLandOwnership(title_no: string) {
   return landOwnership;
 }
 
-/** Get polygons with the given IDs, and a list of IDs that didn't exist  */
-export const getPolygonsById = async (poly_ids: number[]) => {
+/**
+ * Get polygons that:
+ * - match with the ID(s) (if given)
+ * AND
+ * - intersect with the search area (if given as a geometry in WKT format)
+ *
+ * @param poly_ids an array of INSPIRE IDs
+ * @param searchArea a Polygon in WKT format (used by MySql)
+ * @returns an array of polygons that match the criteria
+ */
+export const getPolygonsByIdAndSearchArea = async (
+  poly_ids: number[],
+  searchArea?: string
+) => {
+  if (poly_ids.length === 0) {
+    // Just search by area
+    if (!searchArea) {
+      console.error("This shouldn't happen, some criteria must be given");
+      return [];
+    }
+
+    const query = `SELECT *
+    FROM ${process.env.DB_NAME}.land_ownership_polygons
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
+
+    return await sequelize.query(query, {
+      replacements: [searchArea],
+      type: QueryTypes.SELECT,
+    });
+  }
+
+  const searchAreaCondition = searchArea
+    ? `AND WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326)) `
+    : "";
   const uniquePolyIds = new Set<number>(poly_ids);
+
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
     WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")})
+    ${searchAreaCondition}
     LIMIT ${uniquePolyIds.size};`;
 
-  const polygons: any[] = await sequelize.query(query, {
-    replacements: Array.from(uniquePolyIds),
+  const replacements: (string | number)[] = Array.from(uniquePolyIds);
+  if (searchArea) {
+    replacements.push(searchArea);
+  }
+
+  return await sequelize.query(query, {
+    replacements,
     type: QueryTypes.SELECT,
   });
-
-  if (polygons.length === uniquePolyIds.size) {
-    return {
-      polygons,
-      missing: [],
-    };
-  } else {
-    // TODO: fix this, for some reason it isn't working and is listing ones that aren't missing
-    polygons.forEach((polygon) => {
-      uniquePolyIds.delete(polygon.poly_id);
-    });
-
-    return {
-      polygons,
-      missing: Array.from(uniquePolyIds),
-    };
-  }
 };
 
+/**
+ * Find property polygons that intersect within the give search area.
+ *
+ * @param searchArea a Polygon in WKT format (used by MySql)
+ * @returns an array of polygons, with ownership info for each polygon if it exists
+ */
 export const getPolygonsByArea = async (searchArea: string) => {
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
@@ -195,19 +223,6 @@ export const getPolygonsByArea = async (searchArea: string) => {
   });
 
   return polygonsAndOwnerships;
-};
-
-export const getPolygonsByPoint = async (searchPoint: string) => {
-  const query = `SELECT *
-    FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE ST_Contains(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
-
-  const polygons = await sequelize.query(query, {
-    replacements: [searchPoint],
-    type: QueryTypes.SELECT,
-  });
-
-  return polygons;
 };
 
 export async function getPolygonsByProprietorName(name: string) {
