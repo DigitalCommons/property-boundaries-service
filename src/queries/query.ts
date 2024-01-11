@@ -162,10 +162,10 @@ export async function getLandOwnership(title_no: string) {
  * @returns an array of polygons that match the criteria
  */
 export const getPolygonsByIdAndSearchArea = async (
-  poly_ids: number[],
+  poly_ids?: number[],
   searchArea?: string
 ) => {
-  if (poly_ids.length === 0) {
+  if (!poly_ids || poly_ids.length === 0) {
     // Just search by area
     if (!searchArea) {
       console.error("This shouldn't happen, some criteria must be given");
