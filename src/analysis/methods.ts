@@ -36,20 +36,16 @@ export const getExistingPolygons = async (poly_ids: number[]) => {
   try {
     // Use POST request so that the length of the list of poly_ids is not limited
     const response = await axios.post(
-      `${process.env.BOUNDARY_SERVICE_URL}/polygons`,
+      `${process.env.BOUNDARY_SERVICE_URL}/polygonsDevSearch`,
       {
         poly_ids,
         secret: process.env.BOUNDARY_SERVICE_SECRET,
       }
     );
-    return response.data.polygons;
+    return response.data;
   } catch (err) {
     console.error(`Error fetching polygons ${poly_ids}`, err.response?.data);
-    if (err.response && err.response.status === 404) {
-      return [];
-    } else {
-      return null;
-    }
+    return null;
   }
 };
 
@@ -253,6 +249,11 @@ export const comparePolygons = (
     };
   }
 
+  // TODO: check for boundary changes with adjacent polygons
+  // - buffer old polygon by 1m
+  // - explode
+
+  // TODO: move this to separate segmented function
   if (oldPolyLarger) {
     const oldPoly = turf.polygon([oldCoords]);
     const newPoly = turf.polygon([newCoords]);
@@ -302,7 +303,7 @@ export const comparePolygons = (
             }
           );
           if (!shrunkRemainder) {
-            console.log("shrunk to zero");
+            // console.log("shrunk to zero");
             remainder = turf.difference(remainder, remainderPolygon);
             return;
           }
@@ -332,10 +333,10 @@ export const comparePolygons = (
             );
             if (polygonContains(oldPoly, matchedPoly)) {
               remainder = turf.difference(remainder, matchedPoly);
-              console.log(
-                "eeeee remainder area",
-                remainder ? turf.area(remainder) : 0
-              );
+              // console.log(
+              //   "eeeee remainder area",
+              //   remainder ? turf.area(remainder) : 0
+              // );
               return;
             } else {
               console.log(

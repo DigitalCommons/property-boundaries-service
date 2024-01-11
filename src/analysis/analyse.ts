@@ -2,6 +2,7 @@ import path from "path";
 import { readFile } from "fs/promises";
 import fs from "fs";
 import { Match, getExistingPolygons, comparePolygons } from "./methods";
+import { FeatureCollection, Polygon } from "@turf/turf";
 
 const generatePath = path.resolve("./generated");
 const analysedPath = path.resolve("./analysed");
@@ -48,7 +49,7 @@ const allFailedMatchesInfo: {
 } = {};
 
 const analysePolygonsInJSON = async (filename: string) => {
-  const data = JSON.parse(
+  const data: FeatureCollection<Polygon> = JSON.parse(
     await readFile(path.resolve(`${generatePath}/${filename}`), "utf8")
   );
   const councilName = path.parse(filename).name;
@@ -101,7 +102,7 @@ const analysePolygonsInJSON = async (filename: string) => {
 
       const firstNearbyPolygonIndex = Math.max(
         0,
-        data.features.length - 5500 + index
+        data.features.length - maxRows + index - 500
       );
       const { match, percentageIntersect, offsetStats, otherPolygonIds } =
         comparePolygons(
@@ -110,10 +111,10 @@ const analysePolygonsInJSON = async (filename: string) => {
           newCoords,
           previousLatLongOffset,
           data.features
-            // .slice(
-            //   firstNearbyPolygonIndex,
-            //   firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
-            // )
+            .slice(
+              firstNearbyPolygonIndex,
+              firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
+            )
             .filter((feature) => feature.properties.INSPIREID !== inspireId)
         );
 
