@@ -202,7 +202,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
       .fill("?")
       .join(",")})
     ${searchAreaCondition}
-    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold";
+    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold"
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);
