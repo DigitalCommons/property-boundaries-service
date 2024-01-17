@@ -177,7 +177,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
     LEFT JOIN ${process.env.DB_NAME}.land_ownerships
     ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
     WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?))
-    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold";`;
+    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = 'Freehold';`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -202,7 +202,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
       .fill("?")
       .join(",")})
     ${searchAreaCondition}
-    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold"
+    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = 'Freehold'
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);
