@@ -20,17 +20,24 @@ export type AllStats = {
 
 // Stats which we will be calculating
 const allStats: AllStats = {
+  percentageIntersects: {},
+  offsetMeans: {},
+  offsetStds: {},
+};
+
+const allIds: AllStats = {
   exactMatchIds: {},
   sameVerticesIds: {},
   exactOffsetIds: {},
   highOverlapIds: {},
+  boundariesShiftedIds: {},
+  mergedIds: {},
+  mergedIncompleteIds: {},
   segmentedIds: {},
   segmentedIncompleteIds: {},
+  mergedAndSegmentedIds: {},
   failedMatchIds: {},
   newInspireIds: {},
-  percentageIntersects: {},
-  offsetMeans: {},
-  offsetStds: {},
 };
 
 type FailedMatchInfo = {
@@ -41,11 +48,26 @@ type FailedMatchInfo = {
   latStd?: number;
   longStd?: number;
   percentageIntersect: number;
-  oldCoords: number[][];
-  newCoords: number[][];
+  oldLatLong: number[];
+  newLatLong: number[];
+  oldMergedIds?: number[];
+  newSegmentIds?: number[];
 };
 const allFailedMatchesInfo: {
   [council: string]: FailedMatchInfo[];
+} = {};
+
+type MergeAndSegmentInfo = {
+  inspireId: number;
+  type: string;
+  oldMergedIds?: number[];
+  newSegmentIds?: number[];
+  latLong: number[];
+  percentageIntersect: number;
+};
+
+const allMergeAndSegmentInfo: {
+  [council: string]: MergeAndSegmentInfo[];
 } = {};
 
 const analysePolygonsInJSON = async (filename: string) => {
@@ -70,13 +92,18 @@ const analysePolygonsInJSON = async (filename: string) => {
   const sameVerticesIds: number[] = [];
   const exactOffsetIds: number[] = [];
   const highOverlapIds: number[] = [];
+  const boundariesShiftedIds: number[] = [];
+  const mergedIds: number[] = [];
+  const mergedIncompleteIds: number[] = [];
   const segmentedIds: number[] = [];
   const segmentedIncompleteIds: number[] = [];
+  const mergedAndSegmentedIds: number[] = [];
   const failedMatchIds: number[] = [];
   const newInspireIds: number[] = [];
   const percentageIntersects: number[] = [];
   const offsetMeans: number[] = [];
   const offsetStds: number[] = [];
+  const mergeAndSegmentInfo: MergeAndSegmentInfo[] = [];
   const failedMatchesInfo: FailedMatchInfo[] = [];
 
   // Keep track of the offset for the previous successful polygon match. Nearby polygons in the
@@ -104,19 +131,24 @@ const analysePolygonsInJSON = async (filename: string) => {
         0,
         data.features.length - maxRows + index - 500
       );
-      const { match, percentageIntersect, offsetStats, otherPolygonIds } =
-        comparePolygons(
-          inspireId,
-          oldCoords,
-          newCoords,
-          previousLatLongOffset,
-          data.features
-            .slice(
-              firstNearbyPolygonIndex,
-              firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
-            )
-            .filter((feature) => feature.properties.INSPIREID !== inspireId)
-        );
+      const {
+        match,
+        percentageIntersect,
+        offsetStats,
+        oldMergedIds,
+        newSegmentIds,
+      } = await comparePolygons(
+        inspireId,
+        oldCoords,
+        newCoords,
+        previousLatLongOffset,
+        data.features
+          .slice(
+            firstNearbyPolygonIndex,
+            firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
+          )
+          .filter((feature) => feature.properties.INSPIREID !== inspireId)
+      );
 
       percentageIntersects.push(percentageIntersect);
       if (offsetStats?.sameNumberVertices) {
@@ -145,15 +177,24 @@ const analysePolygonsInJSON = async (filename: string) => {
         case Match.HighOverlap:
           highOverlapIds.push(inspireId);
           break;
+        case Match.BoundariesShifted:
+          boundariesShiftedIds.push(inspireId);
+          break;
+        case Match.Merged:
+          mergedIds.push(inspireId);
+          break;
+        case Match.MergedIncomplete:
+          mergedIncompleteIds.push(inspireId);
+          break;
         case Match.Segmented:
           segmentedIds.push(inspireId);
           // TODO: also push the other segment IDs so we don't have to analyse them too
           break;
         case Match.SegmentedIncomplete:
           segmentedIncompleteIds.push(inspireId);
-          // case Match.Merged:
-          // case Match.MergedIncomplete:
-          // TODO
+          break;
+        case Match.MergedAndSegmented:
+          mergedAndSegmentedIds.push(inspireId);
           break;
         case Match.Fail:
           failedMatchIds.push(inspireId);
@@ -161,10 +202,11 @@ const analysePolygonsInJSON = async (filename: string) => {
             inspireId,
             ...offsetStats,
             percentageIntersect,
-            oldCoords,
-            newCoords,
+            oldLatLong: oldCoords[0].reverse(),
+            newLatLong: newCoords[0].reverse(),
+            oldMergedIds,
+            newSegmentIds,
           });
-
           // TODO:
           // - check if polygon is in the same rough area
           //     - if not, try to geocode matching title?
@@ -176,27 +218,48 @@ const analysePolygonsInJSON = async (filename: string) => {
           );
           break;
       }
+
+      switch (match) {
+        case Match.Merged:
+        case Match.MergedIncomplete:
+        case Match.Segmented:
+        case Match.SegmentedIncomplete:
+        case Match.MergedAndSegmented:
+          mergeAndSegmentInfo.push({
+            inspireId,
+            type: Match[match],
+            oldMergedIds,
+            newSegmentIds,
+            latLong: newCoords[0].reverse(),
+            percentageIntersect,
+          });
+          break;
+      }
     } else {
       newInspireIds.push(inspireId);
     }
 
     if ((index + 1) % 1000 === 0) {
-      // TODO: readd this
-      // console.log(`Polygon ${index + 1}/${maxRows}, ${councilName}`);
+      console.log(`Polygon ${index + 1}/${maxRows}, ${councilName}`);
     }
   }
 
-  allStats.exactMatchIds[councilName] = exactMatchIds;
-  allStats.sameVerticesIds[councilName] = sameVerticesIds;
-  allStats.exactOffsetIds[councilName] = exactOffsetIds;
-  allStats.highOverlapIds[councilName] = highOverlapIds;
-  allStats.segmentedIds[councilName] = segmentedIds;
-  allStats.segmentedIncompleteIds[councilName] = segmentedIncompleteIds;
-  allStats.failedMatchIds[councilName] = failedMatchIds;
-  allStats.newInspireIds[councilName] = newInspireIds;
+  allIds.exactMatchIds[councilName] = exactMatchIds;
+  allIds.sameVerticesIds[councilName] = sameVerticesIds;
+  allIds.exactOffsetIds[councilName] = exactOffsetIds;
+  allIds.highOverlapIds[councilName] = highOverlapIds;
+  allIds.boundariesShiftedIds[councilName] = boundariesShiftedIds;
+  allIds.mergedIds[councilName] = mergedIds;
+  allIds.mergedIncompleteIds[councilName] = mergedIncompleteIds;
+  allIds.segmentedIds[councilName] = segmentedIds;
+  allIds.segmentedIncompleteIds[councilName] = segmentedIncompleteIds;
+  allIds.mergedAndSegmentedIds[councilName] = mergedAndSegmentedIds;
+  allIds.failedMatchIds[councilName] = failedMatchIds;
+  allIds.newInspireIds[councilName] = newInspireIds;
   allStats.percentageIntersects[councilName] = percentageIntersects;
   allStats.offsetMeans[councilName] = offsetMeans;
   allStats.offsetStds[councilName] = offsetStds;
+  allMergeAndSegmentInfo[councilName] = mergeAndSegmentInfo;
   allFailedMatchesInfo[councilName] = failedMatchesInfo;
 };
 
@@ -214,39 +277,37 @@ const files = fs
   .slice(0, maxCouncils);
 
 analyseAllJSONs(files).then((_void) => {
-  console.log("Sanity check:");
+  console.log("\nSanity check:");
   console.log(
     `Total polygons analysed: ${maxRows} for ${files.length} councils = ${
       maxRows * files.length
     }`
   );
-  const newInspireIdsCount = Object.values(allStats.newInspireIds).flat()
-    .length;
-  const segmentedIncompleteCount = Object.values(
-    allStats.segmentedIncompleteIds
-  ).flat().length;
-  const failedMatchCount = Object.values(allStats.failedMatchIds).flat().length;
-  const finalDataPolygonCount =
-    Object.values(allStats.exactMatchIds).flat().length +
-    Object.values(allStats.sameVerticesIds).flat().length +
-    Object.values(allStats.exactOffsetIds).flat().length +
-    Object.values(allStats.highOverlapIds).flat().length +
-    Object.values(allStats.segmentedIds).flat().length +
-    Object.values(allStats.segmentedIncompleteIds).flat().length +
-    failedMatchCount +
-    newInspireIdsCount;
-  console.log(
-    `Total polygons in final data: ${finalDataPolygonCount} (${Math.round(
-      (newInspireIdsCount * 100) / finalDataPolygonCount
-    )}% new IDs, ${segmentedIncompleteCount} segmented incomplete, ${failedMatchCount} failed matches)`
-  );
+  const finalDataPolygonCount = Object.values(allIds)
+    .flatMap((ids) => Object.values(ids))
+    .flat().length;
+  const finalDataCounts = {};
+  for (const [matchType, idsForEachCouncil] of Object.entries(allIds)) {
+    const count = Object.values(idsForEachCouncil).flat().length;
+    finalDataCounts[matchType] = {
+      count,
+      "%": Math.round((10000 * count) / finalDataPolygonCount) / 100, // round to 2 d.p.
+    };
+  }
+  console.log("Total polygons in final data:", finalDataPolygonCount);
+  console.table(finalDataCounts);
 
   console.log("Storing all stats in analysis.json");
   try {
     fs.mkdirSync(analysedPath, { recursive: true });
     fs.writeFileSync(
       `${analysedPath}/analysis.json`,
-      JSON.stringify({ allStats, allFailedMatchesInfo })
+      JSON.stringify({
+        allIds,
+        allStats,
+        allMergeAndSegmentInfo,
+        allFailedMatchesInfo,
+      })
     );
   } catch (err) {
     console.error("Error writing analysis.json", err);

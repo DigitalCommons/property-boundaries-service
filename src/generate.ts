@@ -8,7 +8,7 @@ import extract from "extract-zip";
 import csvParser from "csv-parser";
 import ogr2ogr from "ogr2ogr";
 import moment from "moment-timezone";
-// import { createLandOwnership } from "./queries/query";
+import { createLandOwnership } from "./queries/query";
 
 // Just download data from first 10 councils for now
 const maxCouncils = 10;
@@ -219,22 +219,22 @@ async function downloadOwnerships() {
   }
 
   // Add ownership data to the DB
-  fs.createReadStream(exampleCSVPathUK)
-    .pipe(csvParser())
-    .on("data", (ownership) => {
-      ownership.proprietor_uk_based = true;
-      // createLandOwnership(ownership);
-      //determine update type
-      //either add or delete or update in database
-    });
-  fs.createReadStream(exampleCSVPathOverseas)
-    .pipe(csvParser())
-    .on("data", (ownership) => {
-      ownership.proprietor_uk_based = false;
-      // createLandOwnership(ownership);
-      //determine update type
-      //either add or delete or update in database
-    });
+  // fs.createReadStream(exampleCSVPathUK)
+  //   .pipe(csvParser())
+  //   .on("data", (ownership) => {
+  //     ownership.proprietor_uk_based = true;
+  //     createLandOwnership(ownership);
+  //     //determine update type
+  //     //either add or delete or update in database
+  //   });
+  // fs.createReadStream(exampleCSVPathOverseas)
+  //   .pipe(csvParser())
+  //   .on("data", (ownership) => {
+  //     ownership.proprietor_uk_based = false;
+  //     createLandOwnership(ownership);
+  //     //determine update type
+  //     //either add or delete or update in database
+  //   });
 }
 
 // Before deleting we should also:
@@ -247,4 +247,4 @@ async function downloadOwnerships() {
 
 downloadInspire().then(unzip).then(transformGML);
 
-// downloadOwnerships();
+downloadOwnerships();

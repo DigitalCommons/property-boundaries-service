@@ -42,7 +42,7 @@ const analysePolygonInJSON = async (
       ]);
       console.log("Coordinates diff:", diff);
 
-      const { match, percentageIntersect, offsetStats } = comparePolygons(
+      const { match, percentageIntersect, offsetStats } = await comparePolygons(
         id,
         oldCoords,
         newCoords

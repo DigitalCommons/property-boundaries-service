@@ -19,26 +19,40 @@ export enum Match {
   ExactOffset,
   /** Different vertices but with an overlap that meets the percentage intersect threshold */
   HighOverlap,
-  /** Old boundary was segmented into multiple new boundaries, which we have identified */
+  /** Polygon is in same place but its boundaries have sligtly shifted with adjacent polys */
+  BoundariesShifted,
+  /** Old polygon merged with other old polygons(s), which we have identified */
+  Merged,
+  /** Old polygon expanded, but we can't match some of the new boundary to an old polygon */
+  MergedIncomplete,
+  /** Old polygon was segmented into multiple new polygons, which we have identified */
   Segmented,
-  /** Old boundary segmented but we can't find (all of) the other segments */
+  /** Old polygon segmented but we can't find (all of) the other segments */
   SegmentedIncomplete,
-  /** Old boundary merged with another old boundary (which we have identified) */
-  // Merged,
-  /** Old boundary expanded, but we can't find an exact match of multipled merged boundaries */
-  // MergedIncomplete,
+  /** There was a combination of old boundaries merging and some segmentation into new boundaries */
+  MergedAndSegmented,
   /** Didn't meet any of the above matching criteria */
   Fail,
 }
 
-/** Query the live boundary service for polygons with the given poly_ids and return JSON */
-export const getExistingPolygons = async (poly_ids: number[]) => {
+/**
+ * Query the live boundary service for polygons that
+ * - have the given poly_ids
+ * AND/OR
+ * - intersect with the given search area polygon
+ * @return array of GeoJSON polygon features
+ */
+export const getExistingPolygons = async (
+  poly_ids?: number[],
+  searchArea?: turf.Polygon | turf.MultiPolygon
+) => {
   try {
     // Use POST request so that the length of the list of poly_ids is not limited
     const response = await axios.post(
       `${process.env.BOUNDARY_SERVICE_URL}/polygonsDevSearch`,
       {
         poly_ids,
+        searchArea: JSON.stringify(searchArea),
         secret: process.env.BOUNDARY_SERVICE_SECRET,
       }
     );
@@ -200,18 +214,19 @@ const polygonContains = (
  * @returns the type of match, percentage interesect (after any offsetting), offset statistics, and
  *        the IDs of other polygons relating to the match (e.g. if a segment/merge)
  */
-export const comparePolygons = (
+export const comparePolygons = async (
   inspireId: number,
   oldCoords: number[][], // TODO: remove this param and look this up within this method
   newCoords: number[][],
   suggestedLatLongOffset: number[] = [0, 0],
   nearbyPolygons: turf.Feature<turf.Polygon>[] = []
-): {
+): Promise<{
   match: Match;
   percentageIntersect: number;
   offsetStats?: OffsetStats;
-  otherPolygonIds?: number[];
-} => {
+  newSegmentIds?: number[];
+  oldMergedIds?: number[];
+}> => {
   if (areExactMatch(oldCoords, newCoords)) {
     return { match: Match.Exact, percentageIntersect: 100 };
   }
@@ -249,184 +264,452 @@ export const comparePolygons = (
     };
   }
 
-  // TODO: check for boundary changes with adjacent polygons
-  // - buffer old polygon by 1m
-  // - explode
+  if (percentageIntersect == 0) {
+    console.log(
+      "polygon moved to a new location",
+      inspireId,
+      "new",
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "old",
+      oldCoords[0][1],
+      ",",
+      oldCoords[0][0]
+    );
 
-  // TODO: move this to separate segmented function
-  if (oldPolyLarger) {
-    const oldPoly = turf.polygon([oldCoords]);
-    const newPoly = turf.polygon([newCoords]);
+    // TODO: Geocode title?
+    return {
+      match: Match.Fail,
+      percentageIntersect,
+      offsetStats,
+    };
+  }
 
-    if (polygonContains(oldPoly, newPoly)) {
-      // Old poly contains new poly - let's now check if it has been segmented and try to find the
-      // other segments
-      console.log("aaaaa", inspireId);
+  // TODO: move all this to separate segment/merge function?
 
-      const segmentIds: number[] = [inspireId];
+  const oldPoly = turf.polygon([oldCoords]);
+  const newPoly = turf.polygon([newCoords]);
 
-      // The boundary within the segmented polygon which has not yet been matched to a new INSPIRE ID
-      let remainder = turf.difference(oldPoly, newPoly);
-      let segmentNotFound = false;
+  // Get polyons that are adjacent to this polygon in our old and new data
+  const oldPolyWithBuffer = turf.buffer(oldPoly, 0.005, {
+    units: "kilometers",
+  });
+  // search existing polygons that intersect with this buffered poly
+  const oldAdjacentPolys = await getExistingPolygons(
+    undefined,
+    oldPolyWithBuffer.geometry
+  );
+  const oldAdjacentPolyIds = new Set<number>(
+    oldAdjacentPolys
+      .map((polygon) => polygon.poly_id)
+      .filter((id) => id !== inspireId)
+  );
 
-      while (remainder && turf.area(remainder) > zeroAreaThreshold) {
+  const newPolyWithBuffer = turf.buffer(newPoly, 0.005, {
+    units: "kilometers",
+  });
+  const bufferVertices = turf.explode(newPolyWithBuffer);
+  // Perform spacial join and tag with INSPIRE ID if these vertices are within any other polygon
+  const taggedVertices = turf.tag(
+    bufferVertices,
+    turf.featureCollection(nearbyPolygons),
+    "INSPIREID",
+    "matchedInspireId"
+  );
+  const newAdjacentPolyIds = new Set<number>(
+    taggedVertices.features
+      .map((feature) => feature.properties.matchedInspireId)
+      .filter((id) => id && id !== inspireId)
+  );
+
+  // TODO: could we remove this step and get the same result?
+  if (
+    oldAdjacentPolyIds.size === newAdjacentPolyIds.size &&
+    [...oldAdjacentPolyIds].every((id) => newAdjacentPolyIds.has(id))
+  ) {
+    // All the adjacent polygons are still the same, so boundaries have just shifted
+    console.log(
+      inspireId,
+      "boundaries shifted",
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.BoundariesShifted,
+      percentageIntersect,
+      offsetStats,
+    };
+  }
+
+  // Let's now take a look at:
+  // - boundaryGained, i.e. the new area (if any) that is in the new poly but not in the old poly
+  //   If there were old polygons within this area which are no longer present, a boundary merge has
+  //   occured so we will add the old INSPIRE ID to oldMergedIds
+  // - boundaryLost, i.e. the old area (if any) that was in the old poly but no longer in the new one
+  //   If there are new polygons within this area, a boundary segmentation has occured so we will
+  //   add the new INSPIRE ID to newSegmentIds
+  const boundaryGained = turf.difference(newPoly, oldPoly);
+  const boundaryLost = turf.difference(oldPoly, newPoly);
+
+  const oldMergedIds: Set<number> = new Set();
+  const newSegmentIds: Set<number> = new Set();
+
+  // First let's analyse boundaryGained to find merged polygons
+  let incompleteMerge = false;
+  let remainder = boundaryGained;
+
+  if (boundaryGained) {
+    await Promise.all(
+      turf.flatten(boundaryGained).features.map(
         // Remainder might be a multipolygon so consider each separate polygon
-        turf.flattenEach(remainder, (remainderPolygon) => {
-          const remainderPolygonArea = turf.area(remainderPolygon);
-          if (remainderPolygonArea < zeroAreaThreshold) {
+        async (polygonGained) => {
+          const polygonGainedArea = turf.area(polygonGained);
+          if (polygonGainedArea < zeroAreaThreshold) {
             // If area is smaller than threshold, ignore this polygon (probably just an artifact)
-            // Remove it from the remainder that we are yet to analyse
-            remainder = turf.difference(remainder, remainderPolygon);
+            remainder = turf.difference(remainder, polygonGained);
             return;
           }
-          console.log("bbbbbb remainder polygon area", remainderPolygonArea);
 
-          // console.log(
-          //   "area of remainder polygon:",
-          //   turf.area(remainderPolygon)
-          // );
-
-          // Search through the nearby polygons to see if one lies within this remainder Shrink
-          // remainder by a buffer to avoid picking a point right on the edge Set the buffer to 1/10
-          // of sqrt(area) (but at least 50cm), to filter out very long, thin boundaries that are
-          // probably artifacts - the buffer method will return undefined if the boundary shrinks to
-          // zero, so we can just discard it
-          const bufferMeters = Math.max(
-            0.5,
-            Math.sqrt(remainderPolygonArea) / 10
-          );
-          const shrunkRemainder = turf.buffer(
-            remainderPolygon,
+          // Search through the old polygons to see which ones were within this remainder but don't exist
+          // anymore. Shrink by a buffer to account for precision differences, so that we don't include
+          // neighbouring polygons by mistake. Set the buffer to 1/10 of sqrt(area) (but at least 1m), to
+          // filter out very long, thin boundaries that are probably artifacts from when we calculated the
+          // difference - the buffer method will return undefined if the boundary shrinks to zero, so we
+          // can just discard it
+          const bufferMeters = Math.max(1, Math.sqrt(polygonGainedArea) / 10);
+          const shrunkPolygonGained = turf.buffer(
+            polygonGained,
             -bufferMeters / 1000,
             {
               units: "kilometers",
             }
           );
-          if (!shrunkRemainder) {
-            // console.log("shrunk to zero");
-            remainder = turf.difference(remainder, remainderPolygon);
+          if (!shrunkPolygonGained) {
+            // The remainder has shrunk to zero, so assume it was just an artifact
             return;
           }
-          const pointsInRemainder = turf.explode(shrunkRemainder); // a point for every vertex
 
-          // Perform spacial join and tag with INSPIRE ID if these points are within any other polygon
-          const taggedPoint = turf.tag(
-            pointsInRemainder,
-            turf.featureCollection(nearbyPolygons),
-            "INSPIREID",
-            "matchedInspireId"
-          );
+          // Match against old polygons in the existing database
+          const matchedPolys = (
+            await getExistingPolygons(undefined, shrunkPolygonGained.geometry)
+          ).filter((poly) => poly.poly_id !== inspireId);
 
-          // Take first match (if any)
-          const matchedInspireId = taggedPoint.features.find(
-            (feature) => feature.properties.matchedInspireId
-          )?.properties?.matchedInspireId;
-          console.log("ddddd matched", inspireId, matchedInspireId);
-
-          if (matchedInspireId) {
-            // There was a match.
-            segmentIds.push(matchedInspireId);
-
-            // Check whether this polygon is a segment fully within the old polygon
-            const matchedPoly = nearbyPolygons.find(
-              (feature) => feature.properties.INSPIREID === matchedInspireId
+          for (const matchedPoly of matchedPolys) {
+            const matchedPolyFeature = turf.polygon(
+              matchedPoly.geom.coordinates
             );
-            if (polygonContains(oldPoly, matchedPoly)) {
-              remainder = turf.difference(remainder, matchedPoly);
-              // console.log(
-              //   "eeeee remainder area",
-              //   remainder ? turf.area(remainder) : 0
-              // );
+            remainder = turf.difference(remainder, matchedPolyFeature);
+
+            // If this old polygon is now adjacent to the new polygon, the boundaries must have
+            // shifted a bit and it wasn't part of the merge
+            if (newAdjacentPolyIds.has(matchedPoly.poly_id)) {
               return;
-            } else {
-              console.log(
-                "matched polygon is not fully contained within the old poly"
-              );
-              // TODO: handle case where boundary between two adjacent properties moves
             }
-          } else {
-            console.log(
-              "Part of the old boundary is no longer registered as an INSPIRE polygon"
+
+            // If this old polygon doens't exist anymore, class this as a merged polygon. And if it
+            // was not completely contained within the new polygon's boundaries, something more
+            // complicated has occured so retun as a failed match
+            const polyNoLongerExists = !nearbyPolygons.find(
+              (newPoly) => newPoly.properties.INSPIREID === matchedPoly.poly_id
             );
-            // console.log(
-            //   "unmatched",
-            //   taggedPoint.features[0].geometry.coordinates,
-            //   ", remainder polygon coords:"
-            // );
-            // console.dir(shrunkRemainder.geometry.coordinates, {
-            //   maxArrayLength: null,
-            // });
+            if (polyNoLongerExists) {
+              oldMergedIds.add(matchedPoly.poly_id);
+              if (polygonContains(newPoly, matchedPolyFeature)) {
+                console.log("merge match with", matchedPoly.poly_id);
+                return;
+              } else {
+                console.log(
+                  inspireId,
+                  `Old poly ${matchedPoly.poly_id} is not completely contained within the new poly`,
+                  newCoords[0][1],
+                  ",",
+                  newCoords[0][0],
+                  "% intersect:",
+                  percentageIntersect
+                );
+              }
+            } else {
+              // This old poly still exists and isn't adjacent, so something more strange has happened
+              // e.g. the old poly has been relocated
+              console.log(
+                inspireId,
+                "merged poly has moved",
+                matchedPoly.poly_id,
+                newCoords[0][1],
+                ",",
+                newCoords[0][0],
+                "% intersect:",
+                percentageIntersect
+              );
+            }
+            return {
+              match: Match.Fail,
+              percentageIntersect,
+              offsetStats,
+              oldMergedIds: Array.from(oldMergedIds),
+              newSegmentIds: Array.from(newSegmentIds),
+            };
           }
+        }
+      )
+    );
 
-          // We couldn't find a match in the remainder, or something more complicated has happened
-          // e.g. neighbouring properties have both segmented and then merged along different
-          // boundaries.
-          segmentNotFound = true;
-        });
+    if (remainder && turf.area(remainder) > zeroAreaThreshold) {
+      // We didn't manage to match the whole boundary gained to old polygons
+      incompleteMerge = true;
+    }
+  }
 
-        if (segmentNotFound) {
+  // Next let's analyse boundaryLost by recursively filling in the remaining boundary, until we have
+  // looked at the whole area, and the remainder is down to zero
+  remainder = boundaryLost;
+  let incompleteSegmentation = false;
+  let failedMatch = false;
+
+  while (remainder && turf.area(remainder) > zeroAreaThreshold) {
+    // Remainder might be a multipolygon so consider each separate polygon
+    turf.flattenEach(remainder, (remainderPolygon) => {
+      const remainderPolygonArea = turf.area(remainderPolygon);
+      if (remainderPolygonArea < zeroAreaThreshold) {
+        // If area is smaller than threshold, ignore this polygon (probably just an artifact)
+        // Remove it from the remainder that we are yet to analyse
+        remainder = turf.difference(remainder, remainderPolygon);
+        return;
+      }
+
+      // Search through the nearby polygons to see if one lies within this remainder. Shrink
+      // remainder by a buffer then pick these vertices as search points. Set the buffer to 1/10 of
+      // sqrt(area) (but at least 50cm), to filter out very long, thin boundaries that are probably
+      // artifacts - the buffer method will return undefined if the boundary shrinks to zero, so we
+      // can just discard it.
+      const bufferMeters = Math.max(0.5, Math.sqrt(remainderPolygonArea) / 10);
+      const shrunkRemainder = turf.buffer(
+        remainderPolygon,
+        -bufferMeters / 1000,
+        {
+          units: "kilometers",
+        }
+      );
+      if (!shrunkRemainder) {
+        // console.log("shrunk to zero");
+        remainder = turf.difference(remainder, remainderPolygon);
+        return;
+      }
+      const pointsInRemainder = turf.explode(shrunkRemainder); // a point for every vertex
+
+      // Perform spacial join and tag with INSPIRE ID if these points are within any other polygon
+      const taggedPoints = turf.tag(
+        pointsInRemainder,
+        turf.featureCollection(nearbyPolygons),
+        "INSPIREID",
+        "matchedInspireId"
+      );
+
+      // Take first match (if any)
+      const matchedInspireId = taggedPoints.features.find(
+        (feature) => feature.properties.matchedInspireId
+      )?.properties?.matchedInspireId;
+
+      if (matchedInspireId) {
+        // There was a match
+        const matchedPoly = nearbyPolygons.find(
+          (feature) => feature.properties.INSPIREID === matchedInspireId
+        );
+
+        if (oldAdjacentPolyIds.has(matchedInspireId)) {
+          // If the match already an adjacent poly, we can assume boundary has just shifted
+          remainder = turf.difference(remainder, matchedPoly);
+          return;
+        }
+
+        // Otherwise, this is a new segment
+        newSegmentIds.add(matchedInspireId);
+
+        // Check whether this segment is fully within the old polygon
+        if (polygonContains(oldPoly, matchedPoly)) {
+          remainder = turf.difference(remainder, matchedPoly);
+          return;
+        } else {
+          // Something complicated has happened e.g. neighbouring properties have both segmented and
+          // then merged along different boundaries
           console.log(
             inspireId,
-            "partially segmented into",
-            segmentIds,
+            "matched polygon is not fully contained within the old poly",
+            matchedPoly.properties.INSPIREID,
             newCoords[0][1],
             ",",
             newCoords[0][0],
             "% intersect:",
             percentageIntersect
           );
-
-          return {
-            match: Match.SegmentedIncomplete,
-            percentageIntersect,
-            offsetStats,
-            otherPolygonIds: segmentIds, // just return what we have so far
-          };
+          failedMatch = true;
         }
+      } else {
+        console.log(
+          "Part of the old boundary is no longer registered as an INSPIRE polygon"
+        );
+        incompleteSegmentation = true;
       }
+    });
 
-      console.log(
-        inspireId,
-        "fully segmented into",
-        segmentIds,
-        newCoords[0][1],
-        ",",
-        newCoords[0][0],
-        "% intersect:",
-        percentageIntersect
-      );
-
+    if (failedMatch) {
       return {
-        match: Match.Segmented,
+        match: Match.Fail,
         percentageIntersect,
         offsetStats,
-        otherPolygonIds: segmentIds,
+        oldMergedIds: Array.from(oldMergedIds),
+        newSegmentIds: Array.from(newSegmentIds),
       };
-    } else {
-      console.log(
-        "polygon not contained in larger old poly",
-        inspireId,
-        "new",
-        newCoords[0][1],
-        ",",
-        newCoords[0][0],
-        "old",
-        oldCoords[0][1],
-        ",",
-        oldCoords[0][0],
-        "% intersect:",
-        percentageIntersect
-      );
     }
-  } else {
-    // TODO:
-    // - check if polygons have merged to create this new polygon
-    //     - analyse in a similar way to above
+    if (incompleteSegmentation) {
+      break;
+    }
   }
 
+  if (
+    (incompleteMerge && incompleteSegmentation) ||
+    (incompleteMerge && newSegmentIds.size) ||
+    (oldMergedIds.size && incompleteSegmentation) ||
+    (oldMergedIds.size && newSegmentIds.size)
+  ) {
+    console.log(
+      inspireId,
+      "merge and segment",
+      Array.from(oldMergedIds),
+      Array.from(newSegmentIds),
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.MergedAndSegmented,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds: Array.from(oldMergedIds),
+      newSegmentIds: Array.from(newSegmentIds),
+    };
+  }
+
+  if (incompleteMerge) {
+    console.log(
+      inspireId,
+      "incompletely merged with",
+      Array.from(oldMergedIds),
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.MergedIncomplete,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds: Array.from(oldMergedIds),
+      newSegmentIds: Array.from(newSegmentIds),
+    };
+  }
+
+  if (incompleteSegmentation) {
+    console.log(
+      inspireId,
+      "incompletely segmented into",
+      Array.from(newSegmentIds),
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.SegmentedIncomplete,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds: Array.from(oldMergedIds),
+      newSegmentIds: Array.from(newSegmentIds),
+    };
+  }
+
+  if (oldMergedIds.size === 0 && newSegmentIds.size === 0) {
+    // This is just a boundary shift that we didn't detect earlier e.g. if boundary shifted with one
+    // neighbour, and another neighbouring boundary changed ID
+    console.log(
+      inspireId,
+      "boundaries shifted (discovered later)",
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.BoundariesShifted,
+      percentageIntersect,
+      offsetStats,
+    };
+  }
+
+  if (oldMergedIds.size) {
+    console.log(
+      inspireId,
+      "completely merged with",
+      Array.from(oldMergedIds),
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+    return {
+      match: Match.Merged,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds: Array.from(oldMergedIds),
+      newSegmentIds: Array.from(newSegmentIds),
+    };
+  }
+
+  if (newSegmentIds.size) {
+    console.log(
+      inspireId,
+      "fully segmented into",
+      Array.from(newSegmentIds),
+      newCoords[0][1],
+      ",",
+      newCoords[0][0],
+      "% intersect:",
+      percentageIntersect
+    );
+
+    return {
+      match: Match.Segmented,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds: Array.from(oldMergedIds),
+      newSegmentIds: Array.from(newSegmentIds),
+    };
+  }
+
+  console.error(
+    "We shouldn't hit this",
+    inspireId,
+    oldMergedIds,
+    newSegmentIds,
+    newCoords[0][1],
+    ",",
+    newCoords[0][0]
+  );
   return {
     match: Match.Fail,
     percentageIntersect,
     offsetStats,
+    oldMergedIds: Array.from(oldMergedIds),
+    newSegmentIds: Array.from(newSegmentIds),
   };
 };
