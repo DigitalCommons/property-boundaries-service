@@ -152,7 +152,7 @@ export async function getLandOwnership(title_no: string) {
 }
 
 /**
- * Get polygons that:
+ * Get freehold polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given)
@@ -161,7 +161,7 @@ export async function getLandOwnership(title_no: string) {
  * @param searchArea a GeoJSON Polygon geometry
  * @returns an array of polygons that match the criteria
  */
-export const getPolygonsByIdAndSearchArea = async (
+export const getFreeholdPolygonsByIdAndSearchArea = async (
   poly_ids?: number[],
   searchArea?: string
 ) => {
@@ -174,7 +174,10 @@ export const getPolygonsByIdAndSearchArea = async (
 
     const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?));`;
+    LEFT JOIN ${process.env.DB_NAME}.land_ownerships
+    ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
+    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?))
+    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold";`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -189,8 +192,17 @@ export const getPolygonsByIdAndSearchArea = async (
 
   const query = `SELECT *
     FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")})
+    LEFT JOIN ${process.env.DB_NAME}.land_ownerships
+    ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${
+      process.env.DB_NAME
+    }.land_ownerships.title_no
+    WHERE ${process.env.DB_NAME}.land_ownership_polygons.poly_id IN (${Array(
+      uniquePolyIds.size
+    )
+      .fill("?")
+      .join(",")})
     ${searchAreaCondition}
+    AND WHERE ${process.env.DB_NAME}.land_ownerships.tenure = "Freehold";
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);

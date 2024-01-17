@@ -7,7 +7,7 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getPolygonsByIdAndSearchArea,
+  getFreeholdPolygonsByIdAndSearchArea,
 } from "../queries/query";
 
 type GetPolygonsInBoxRequest = Request & {
@@ -53,12 +53,12 @@ type GetPolygonsRequest = Request & {
 };
 
 /**
- * Get polygons that:
+ * Get freehold (i.e. INSPIRE) polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
-async function getPolygons(
+async function getFreeholdPolygons(
   request: GetPolygonsRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> {
@@ -72,7 +72,10 @@ async function getPolygons(
     return h.response("poly_ids and/or searchArea must be given").code(400);
   }
 
-  const result = await getPolygonsByIdAndSearchArea(poly_ids, searchArea);
+  const result = await getFreeholdPolygonsByIdAndSearchArea(
+    poly_ids,
+    searchArea
+  );
 
   return h.response(result).code(200);
 }
@@ -114,7 +117,7 @@ const searchRoute: ServerRoute = {
 const getPolygonsRoute: ServerRoute = {
   method: "POST",
   path: "/polygonsDevSearch",
-  handler: getPolygons,
+  handler: getFreeholdPolygons,
   options: {
     auth: false,
   },
