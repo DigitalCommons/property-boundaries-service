@@ -36,7 +36,7 @@ export enum Match {
 }
 
 /**
- * Query the live boundary service for polygons that
+ * Query the live boundary service for freehold (i.e. INSPIRE) polygons that
  * - have the given poly_ids
  * AND/OR
  * - intersect with the given search area polygon
