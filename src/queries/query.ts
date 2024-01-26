@@ -178,7 +178,7 @@ export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-    AND tenure != 'Leasehold';`;
+    AND ( tenure = 'Freehold' OR tenure IS NULL );`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -197,7 +197,7 @@ export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE poly_id IN (${Array(uniquePolyIds.size).fill("?").join(",")})
     ${searchAreaCondition}
-    AND tenure != 'Leasehold'
+    AND ( tenure = 'Freehold' OR tenure IS NULL )
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);
