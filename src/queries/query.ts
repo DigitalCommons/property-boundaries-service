@@ -152,7 +152,7 @@ export async function getLandOwnership(title_no: string) {
 }
 
 /**
- * Get freehold polygons that:
+ * Get non-leasehold polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given)
@@ -162,7 +162,7 @@ export async function getLandOwnership(title_no: string) {
  * @returns an array of polygons that match the criteria
  */
 
-export const getFreeholdPolygonsByIdAndSearchArea = async (
+export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
   poly_ids?: number[],
   searchArea?: string
 ) => {
@@ -178,7 +178,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-    AND tenure = 'Freehold';`;
+    AND tenure != 'Leasehold';`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -187,7 +187,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
   }
 
   const searchAreaCondition = searchArea
-    ? `AND WHERE ST_Intersects(land_ownership_polygons.geom, ST_GeomFromGeoJSON(?)) `
+    ? `AND ST_Intersects(land_ownership_polygons.geom, ST_GeomFromGeoJSON(?)) `
     : "";
   const uniquePolyIds = new Set<number>(poly_ids);
 
@@ -197,7 +197,7 @@ export const getFreeholdPolygonsByIdAndSearchArea = async (
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE poly_id IN (${Array(uniquePolyIds.size).fill("?").join(",")})
     ${searchAreaCondition}
-    AND tenure = 'Freehold'
+    AND tenure != 'Leasehold'
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);

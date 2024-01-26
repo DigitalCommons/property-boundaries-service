@@ -7,7 +7,7 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getFreeholdPolygonsByIdAndSearchArea,
+  getNonLeaseholdPolygonsByIdAndSearchArea,
 } from "../queries/query";
 import path from "path";
 import fs from "fs";
@@ -103,12 +103,12 @@ type GetPolygonsRequest = Request & {
 };
 
 /**
- * Get freehold (i.e. INSPIRE) polygons that:
+ * Get non-leasehold polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
-async function getFreeholdPolygons(
+async function getNonLeaseholdPolygons(
   request: GetPolygonsRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> {
@@ -122,7 +122,7 @@ async function getFreeholdPolygons(
     return h.response("poly_ids and/or searchArea must be given").code(400);
   }
 
-  const result = await getFreeholdPolygonsByIdAndSearchArea(
+  const result = await getNonLeaseholdPolygonsByIdAndSearchArea(
     poly_ids,
     searchArea
   );
@@ -163,11 +163,13 @@ const searchRoute: ServerRoute = {
 /**
  * Only used in development of analyse script
  * Use POST so that it can receive a large list of poly_ids in one request.
+ * We look for non-leasehold properties since all INSPIRE polygons are freeholds so we want to
+ * filter out these (and keep properties that don't have matched titles since these may be freehold)
  */
 const getPolygonsRoute: ServerRoute = {
   method: "POST",
   path: "/polygonsDevSearch",
-  handler: getFreeholdPolygons,
+  handler: getNonLeaseholdPolygons,
   options: {
     auth: false,
   },
