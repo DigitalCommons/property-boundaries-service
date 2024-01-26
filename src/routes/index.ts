@@ -7,7 +7,7 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getPolygonsByIdAndSearchArea,
+  getFreeholdPolygonsByIdAndSearchArea,
 } from "../queries/query";
 import path from "path";
 import fs from "fs";
@@ -71,7 +71,7 @@ type GetPolygonsInBoxRequest = Request & {
 };
 
 // TODO:
-// - combine with search route?
+// - combine with search route so we can filter by a box and ownership at the same time?
 async function getPolygonsInBox(
   request: GetPolygonsInBoxRequest,
   h: ResponseToolkit
@@ -95,44 +95,37 @@ async function getPolygonsInBox(
 }
 
 type GetPolygonsRequest = Request & {
-  query: {
-    poly_id?: number | number[];
+  payload: {
+    poly_ids?: number[];
     searchArea?: string;
     secret: string;
   };
 };
 
 /**
- * Get polygons that:
+ * Get freehold (i.e. INSPIRE) polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
-async function getPolygons(
+async function getFreeholdPolygons(
   request: GetPolygonsRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> {
-  const { poly_id, searchArea, secret } = request.query;
+  const { poly_ids, searchArea, secret } = request.payload;
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  // poly_id is a number if 1 id provided, or an array of numbers if multiple provided
-  const poly_ids =
-    typeof poly_id === "undefined"
-      ? []
-      : typeof poly_id === "object"
-        ? poly_id
-        : [poly_id];
-
-  if (poly_ids.length === 0 && !searchArea) {
-    return h
-      .response("poly_id and/or searchArea parameter must be given")
-      .code(400);
+  if ((!poly_ids || poly_ids.length === 0) && !searchArea) {
+    return h.response("poly_ids and/or searchArea must be given").code(400);
   }
 
-  const result = await getPolygonsByIdAndSearchArea(poly_ids, searchArea);
+  const result = await getFreeholdPolygonsByIdAndSearchArea(
+    poly_ids,
+    searchArea
+  );
 
   return h.response(result).code(200);
 }
@@ -152,7 +145,7 @@ async function search(request: Request): Promise<any> {
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
   path: "/boundaries",
-  handler: getBoundariesDummy, // TODO: change this back to getBoundaries in the live app
+  handler: getBoundariesDummy, // TODO: change this back to getPolygonsInBox in the live app
   options: {
     auth: false,
   },
@@ -167,11 +160,14 @@ const searchRoute: ServerRoute = {
   },
 };
 
-/** Only used in development of analyse script */
+/**
+ * Only used in development of analyse script
+ * Use POST so that it can receive a large list of poly_ids in one request.
+ */
 const getPolygonsRoute: ServerRoute = {
-  method: "GET",
+  method: "POST",
   path: "/polygonsDevSearch",
-  handler: getPolygons,
+  handler: getFreeholdPolygons,
   options: {
     auth: false,
   },

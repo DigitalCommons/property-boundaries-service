@@ -152,7 +152,7 @@ export async function getLandOwnership(title_no: string) {
 }
 
 /**
- * Get polygons that:
+ * Get freehold polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given)
@@ -161,11 +161,12 @@ export async function getLandOwnership(title_no: string) {
  * @param searchArea a GeoJSON Polygon geometry
  * @returns an array of polygons that match the criteria
  */
-export const getPolygonsByIdAndSearchArea = async (
-  poly_ids: number[],
+
+export const getFreeholdPolygonsByIdAndSearchArea = async (
+  poly_ids?: number[],
   searchArea?: string
 ) => {
-  if (poly_ids.length === 0) {
+  if (!poly_ids || poly_ids.length === 0) {
     // Just search by area
     if (!searchArea) {
       console.error("This shouldn't happen, some criteria must be given");
@@ -173,8 +174,11 @@ export const getPolygonsByIdAndSearchArea = async (
     }
 
     const query = `SELECT *
-    FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?));`;
+    FROM land_ownership_polygons
+    LEFT JOIN land_ownerships
+    ON land_ownership_polygons.title_no = land_ownerships.title_no
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
+    AND tenure = 'Freehold';`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -183,14 +187,17 @@ export const getPolygonsByIdAndSearchArea = async (
   }
 
   const searchAreaCondition = searchArea
-    ? `AND WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromGeoJSON(?)) `
+    ? `AND WHERE ST_Intersects(land_ownership_polygons.geom, ST_GeomFromGeoJSON(?)) `
     : "";
   const uniquePolyIds = new Set<number>(poly_ids);
 
   const query = `SELECT *
-    FROM ${process.env.DB_NAME}.land_ownership_polygons
-    WHERE poly_id in (${Array(uniquePolyIds.size).fill("?").join(",")})
+    FROM land_ownership_polygons
+    LEFT JOIN land_ownerships
+    ON land_ownership_polygons.title_no = land_ownerships.title_no
+    WHERE poly_id IN (${Array(uniquePolyIds.size).fill("?").join(",")})
     ${searchAreaCondition}
+    AND tenure = 'Freehold'
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);
@@ -212,10 +219,10 @@ export const getPolygonsByIdAndSearchArea = async (
  */
 export const getPolygonsByArea = async (searchArea: string) => {
   const query = `SELECT *
-    FROM ${process.env.DB_NAME}.land_ownership_polygons
-    LEFT JOIN ${process.env.DB_NAME}.land_ownerships
-    ON ${process.env.DB_NAME}.land_ownership_polygons.title_no = ${process.env.DB_NAME}.land_ownerships.title_no
-    WHERE ST_Intersects(${process.env.DB_NAME}.land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
+    FROM land_ownership_polygons
+    LEFT JOIN land_ownerships
+    ON land_ownership_polygons.title_no = land_ownerships.title_no
+    WHERE ST_Intersects(land_ownership_polygons.geom, ST_GeomFromText(?,4326));`;
 
   const polygonsAndOwnerships = await sequelize.query(query, {
     replacements: [searchArea],
