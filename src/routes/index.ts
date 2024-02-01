@@ -17,7 +17,7 @@ async function getBoundariesDummy(request: Request): Promise<any> {
   // Get dummy info from a specific council
   const data = JSON.parse(
     fs.readFileSync(
-      path.resolve(`./generated/Adur_District_Council.json`),
+      path.resolve(`./geojson/Adur_District_Council.json`),
       "utf8"
     )
   );
@@ -145,7 +145,7 @@ async function search(request: Request): Promise<any> {
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
   path: "/boundaries",
-  handler: getBoundariesDummy, // TODO: change this back to getPolygonsInBox in the live app
+  handler: getPolygonsInBox, // TODO: change this back to getPolygonsInBox in the live app
   options: {
     auth: false,
   },

@@ -5,26 +5,30 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "serve": "pm2 start dist/app.js",
+    "serve": "pm2 start dist/app.js --node-args='--max-old-space-size=8192'",
     "dev:serve": "nodemon src/app.ts",
-    "generate": "node dist/generate.js",
-    "analyse": "node dist/analysis/analyse.js",
-    "analyseSingle": "node dist/analysis/analyseSingle.js",
-    "plot": "node dist/analysis/plot.js",
+    "download": "node dist/download.js",
+    "analyse": "node dist/pipeline/inspire/analyse-all.js",
+    "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
+    "plot": "node dist/pipeline/plot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/lodash.chunk": "^4.2.9",
     "@types/node": "^20.4.9",
     "@types/stats-lite": "^2.2.2",
+    "@types/unzip-stream": "^0.3.4",
+    "@types/uuid": "^9.0.8",
     "nodeplotlib": "^1.1.2",
     "prettier": "3.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "@esm2cjs/p-queue": "^7.3.0",
     "@hapi/hapi": "^21.3.2",
     "@playwright/browser-chromium": "^1.40.1",
     "@turf/turf": "^6.5.0",
@@ -33,12 +37,16 @@
     "dotenv": "^16.3.1",
     "extract-zip": "^2.0.1",
     "joi": "^17.9.2",
+    "lodash.chunk": "^4.2.0",
     "moment-timezone": "^0.5.43",
     "mysql2": "^3.6.1",
+    "nanoid": "3.3.5",
+    "node-geocoder": "^4.2.0",
     "ogr2ogr": "^4.0.1",
     "path": "^0.12.7",
     "playwright": "^1.40.1",
     "sequelize": "^6.32.1",
-    "stats-lite": "^2.2.0"
+    "stats-lite": "^2.2.0",
+    "unzip-stream": "^0.3.1"
   }
 }

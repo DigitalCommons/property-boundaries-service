@@ -6,7 +6,7 @@ import { Match, getExistingPolygons, comparePolygons } from "./methods";
 // Analyse a single polygon with the following INSPIRE ID (or just take any if undefined)
 const ID = undefined;
 let council: string | undefined;
-const generatePath = path.resolve("./generated");
+const geoJsonPath = path.resolve("./geojson");
 
 const analysePolygonInJSON = async (
   geoJsonPath,
@@ -88,14 +88,14 @@ const analysePolygonInJSON = async (
 };
 
 // Script:
-const files = readdirSync(generatePath);
+const files = readdirSync(geoJsonPath);
 let filePath;
 if (council && files.includes(`${council}.json`)) {
-  filePath = path.resolve(`${generatePath}/${council}.json`);
+  filePath = path.resolve(`${geoJsonPath}/${council}.json`);
 } else {
   // Get first JSON file
   filePath = path.resolve(
-    `${generatePath}/${files.find((file) => file.includes(".json"))}`
+    `${geoJsonPath}/${files.find((file) => file.includes(".json"))}`
   );
 }
 analysePolygonInJSON(filePath, ID);

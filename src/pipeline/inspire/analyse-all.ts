@@ -4,11 +4,11 @@ import fs from "fs";
 import { Match, getExistingPolygons, comparePolygons } from "./methods";
 import { FeatureCollection, Polygon } from "@turf/turf";
 
-const generatePath = path.resolve("./generated");
-const analysedPath = path.resolve("./analysed");
+const geojsonPath = path.resolve("./geojson");
+const analysisPath = path.resolve("./analysis");
 
 const maxRows = 15000; // max number of polygons we will analyse in each JSON
-const maxCouncils = 1; // max number of council JSON files we will analyse
+const maxCouncils = 5; // max number of council JSON files we will analyse
 
 export type StatsForEachCouncil = {
   [council: string]: number[];
@@ -72,7 +72,7 @@ const allMergeAndSegmentInfo: {
 
 const analysePolygonsInJSON = async (filename: string) => {
   const data: FeatureCollection<Polygon> = JSON.parse(
-    await readFile(path.resolve(`${generatePath}/${filename}`), "utf8")
+    await readFile(path.resolve(`${geojsonPath}/${filename}`), "utf8")
   );
   const councilName = path.parse(filename).name;
   console.log(`Number of polygons in ${councilName}:`, data.features.length);
@@ -127,6 +127,9 @@ const analysePolygonsInJSON = async (filename: string) => {
         vertex.reverse();
       }
 
+      // Get address of matching title (if exists)
+      const titleAddress = existingPolygon.property_address || undefined;
+
       const firstNearbyPolygonIndex = Math.max(
         0,
         data.features.length - maxRows + index - 500
@@ -147,7 +150,8 @@ const analysePolygonsInJSON = async (filename: string) => {
             firstNearbyPolygonIndex,
             firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
           )
-          .filter((feature) => feature.properties.INSPIREID !== inspireId)
+          .filter((feature) => feature.properties.INSPIREID !== inspireId),
+        titleAddress
       );
 
       percentageIntersects.push(percentageIntersect);
@@ -272,7 +276,7 @@ const analyseAllJSONs = async (filenames: string[]) => {
 
 // Script:
 const files = fs
-  .readdirSync(generatePath)
+  .readdirSync(geojsonPath)
   .filter((f) => f.includes(".json"))
   .slice(0, maxCouncils);
 
@@ -299,15 +303,16 @@ analyseAllJSONs(files).then((_void) => {
 
   console.log("Storing all stats in analysis.json");
   try {
-    fs.mkdirSync(analysedPath, { recursive: true });
+    fs.mkdirSync(analysisPath, { recursive: true });
+    fs.writeFileSync(`${analysisPath}/allIds.json`, JSON.stringify(allIds));
+    fs.writeFileSync(`${analysisPath}/allStats.json`, JSON.stringify(allStats));
     fs.writeFileSync(
-      `${analysedPath}/analysis.json`,
-      JSON.stringify({
-        allIds,
-        allStats,
-        allMergeAndSegmentInfo,
-        allFailedMatchesInfo,
-      })
+      `${analysisPath}/allMergeAndSegmentInfo.json`,
+      JSON.stringify(allMergeAndSegmentInfo)
+    );
+    fs.writeFileSync(
+      `${analysisPath}/allFailedMatchesInfo.json`,
+      JSON.stringify(allFailedMatchesInfo)
     );
   } catch (err) {
     console.error("Error writing analysis.json", err);

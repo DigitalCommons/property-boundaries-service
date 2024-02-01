@@ -1,7 +1,7 @@
 node_modules
 dist
 downloads
-generated
-analysed
+geojson
+analysis
 .env
 .DS_Store

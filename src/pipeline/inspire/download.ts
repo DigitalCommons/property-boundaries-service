@@ -1,20 +1,17 @@
 import "dotenv/config";
-import axios from "axios";
 import { chromium } from "playwright";
 import path from "path";
 import fs from "fs";
 import { readdir, lstat, writeFile, rm } from "fs/promises";
 import extract from "extract-zip";
-import csvParser from "csv-parser";
 import ogr2ogr from "ogr2ogr";
 import moment from "moment-timezone";
-import { createLandOwnership } from "./queries/query";
 
 // Just download data from first 10 councils for now
 const maxCouncils = 10;
 
 const downloadPath = path.resolve("./downloads");
-const generatePath = path.resolve("./generated");
+const geojsonPath = path.resolve("./geojson");
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -84,10 +81,10 @@ async function downloadInspire() {
       throwIfNoEntry: false,
     })?.birthtimeMs;
 
-    // If existing file was generated after the latest publish, skip this download
+    // If existing file was downloaded after the latest publish, skip this download
     if (creationTimeMs && creationTimeMs > latestInspirePublishTimeMs) {
       console.log(
-        `Skip ${newDownloadFile} since we have already generated data for this council`
+        `Skip ${newDownloadFile} since we have already downloaded data for this council`
       );
     } else {
       console.log(`Downloading ${newDownloadFile}`);
@@ -118,7 +115,7 @@ async function unzip() {
 /** Transform gml files into GeoJSON for each council in parallel */
 async function transformGML() {
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
-  fs.mkdirSync(generatePath, { recursive: true });
+  fs.mkdirSync(geojsonPath, { recursive: true });
 
   await Promise.all(
     councils.map(async (council) => {
@@ -138,7 +135,7 @@ async function transformGML() {
 
           try {
             await writeFile(
-              `${generatePath}/${council}.json`,
+              `${geojsonPath}/${council}.json`,
               JSON.stringify(data)
             );
             console.log(`Written ${council}.json successfully`);
@@ -151,100 +148,12 @@ async function transformGML() {
   );
 }
 
-/** Download the Land Reg UK Companies and Land Reg Overseas Companies data. */
-async function downloadOwnerships() {
-  const datasetsUKResponse = await axios.get(
-    "https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod",
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    }
-  );
-
-  const datasetsOverseasResponse = await axios.get(
-    "https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod",
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    }
-  );
-
-  const filenameUK =
-    datasetsUKResponse.data.result.public_resources[0].file_name;
-  const filenameOverseas =
-    datasetsOverseasResponse.data.result.public_resources[0].file_name;
-
-  const ownershipsUKResponse = await axios.get(
-    `https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/${filenameUK}`,
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    }
-  );
-  const ownershipsOverseasResponse = await axios.get(
-    `https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/${filenameOverseas}`,
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    }
-  );
-
-  const exampleUKResponse = await axios.get(
-    ownershipsUKResponse.data.result.download_url
-  );
-  const exampleOverseasResponse = await axios.get(
-    ownershipsOverseasResponse.data.result.download_url
-  );
-
-  const exampleCSVPathUK = path.resolve(`${downloadPath}/exampleUK.csv`);
-  const exampleCSVPathOverseas = path.resolve(
-    `${downloadPath}/exampleOverseas.csv`
-  );
-
-  // TODO: skip this and pipe directly into DB
-  try {
-    fs.writeFileSync(exampleCSVPathUK, exampleUKResponse.data);
-  } catch (err) {
-    console.error(err);
-  }
-
-  try {
-    fs.writeFileSync(exampleCSVPathOverseas, exampleOverseasResponse.data);
-  } catch (err) {
-    console.error(err);
-  }
-
-  // Add ownership data to the DB
-  // fs.createReadStream(exampleCSVPathUK)
-  //   .pipe(csvParser())
-  //   .on("data", (ownership) => {
-  //     ownership.proprietor_uk_based = true;
-  //     createLandOwnership(ownership);
-  //     //determine update type
-  //     //either add or delete or update in database
-  //   });
-  // fs.createReadStream(exampleCSVPathOverseas)
-  //   .pipe(csvParser())
-  //   .on("data", (ownership) => {
-  //     ownership.proprietor_uk_based = false;
-  //     createLandOwnership(ownership);
-  //     //determine update type
-  //     //either add or delete or update in database
-  //   });
-}
-
-// Before deleting we should also:
+// TODO: Before deleting we should also:
 // - Test that the new data looks okay (e.g. add at least a basic sanity check that the new data isn't corrupted or empty)
 // - Automatically save a backup of the previous month's data so that we can easily revert in an emergency
 
 // delete all the files already there
 // fs.rmSync(downloadPath, { recursive: true, force: true });
-// fs.rmSync(generatePath, { recursive: true, force: true });
+// fs.rmSync(geojsonPath, { recursive: true, force: true });
 
 downloadInspire().then(unzip).then(transformGML);
-
-downloadOwnerships();

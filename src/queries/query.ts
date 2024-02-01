@@ -1,4 +1,5 @@
-import { Sequelize, DataTypes, QueryTypes } from "sequelize";
+import { Sequelize, DataTypes, QueryTypes, Model, Op } from "sequelize";
+import { nanoid } from "nanoid";
 
 export const sequelize = new Sequelize(
   process.env.DB_NAME!,
@@ -33,11 +34,11 @@ export const PolygonModel = sequelize.define(
     },
     createdAt: {
       defaultValue: null,
-      type: DataTypes.DATE,
+      type: DataTypes.DATEONLY,
     },
     updatedAt: {
       defaultValue: null,
-      type: DataTypes.DATE,
+      type: DataTypes.DATEONLY,
     },
   },
   {
@@ -48,13 +49,14 @@ export const PolygonModel = sequelize.define(
 export const LandOwnershipModel = sequelize.define(
   "LandOwnership",
   {
-    idland_ownerships: {
+    id: {
       allowNull: false,
       autoIncrement: true,
       primaryKey: true,
       type: DataTypes.INTEGER,
     },
     title_no: {
+      unique: true,
       allowNull: false,
       type: DataTypes.STRING,
     },
@@ -93,17 +95,36 @@ export const LandOwnershipModel = sequelize.define(
     date_proprietor_added: DataTypes.STRING,
     additional_proprietor_indicator: DataTypes.STRING,
     proprietor_uk_based: DataTypes.BOOLEAN,
-    createdAt: {
-      defaultValue: null,
-      type: DataTypes.DATE,
-    },
-    updatedAt: {
-      defaultValue: null,
-      type: DataTypes.DATE,
-    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
   },
   {
     tableName: "land_ownerships",
+  }
+);
+
+export const PipelineRunModel = sequelize.define(
+  "PipelineRun",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    unique_key: {
+      allowNull: false,
+      unique: true,
+      type: DataTypes.STRING,
+    },
+    latest_ownership_data: DataTypes.DATEONLY,
+    latest_inspire_data: DataTypes.DATEONLY,
+    startedAt: DataTypes.DATE,
+  },
+  {
+    tableName: "pipeline_runs",
+    createdAt: "startedAt",
+    updatedAt: false,
   }
 );
 
@@ -116,29 +137,132 @@ LandOwnershipModel.belongsTo(PolygonModel, {
   targetKey: "title_no",
 });
 
-export async function createLandOwnership(ownership) {
-  await LandOwnershipModel.create({
+export const createOrUpdateLandOwnership = async (
+  ownership,
+  overseas: boolean,
+  logging = false
+) => {
+  await bulkCreateOrUpdateLandOwnerships([ownership], overseas, logging);
+};
+
+/**
+ * Create each land ownership record if the title number doesn't already exist. If the title number
+ * already exists, update the existing record with the new values.
+ *
+ * @param ownerships array of ownership objects with the same keys as provided by the gov,
+ * documented here: https://use-land-property-data.service.gov.uk/datasets/ccod/tech-spec (note that
+ * some bad records don't match this spec though)
+ */
+export const bulkCreateOrUpdateLandOwnerships = async (
+  ownerships: any[],
+  overseas: boolean,
+  logging = false
+) => {
+  const parsedOwnerships = ownerships.map((ownership) => ({
     title_no: ownership["Title Number"],
     tenure: ownership.Tenure,
-    property_address: ownership["Property Address"],
-    district: ownership.District,
-    county: ownership.County,
-    region: ownership.Region,
-    postcode: ownership.Postcode,
-    multiple_address_indicator: ownership["Multiple Address Indicator"],
-    price_paid: ownership["Price Paid"],
-    proprietor_name_1: ownership["Proprietor Name (1)"],
-    company_registration_no_1: ownership["Company Registration No. (1)"],
-    proprietor_category_1: ownership["Proprietorship Category (1)"],
-    proprietor_1_address_1: ownership["Proprietor (1) Address (1)"],
-    proprietor_1_address_2: ownership["Proprietor (1) Address (2)"],
-    proprietor_1_address_3: ownership["Proprietor (1) Address (3)"],
-    date_proprietor_added: ownership["Date Proprietor Added"],
+    property_address: ownership["Property Address"] || null,
+    district: ownership.District || null,
+    county: ownership.County || null,
+    region: ownership.Region || null,
+    postcode: ownership.Postcode || null,
+    multiple_address_indicator: ownership["Multiple Address Indicator"] || null,
+    price_paid: ownership["Price Paid"] || null,
+    proprietor_name_1: ownership["Proprietor Name (1)"] || null,
+    company_registration_no_1:
+      ownership["Company Registration No. (1)"] || null,
+    proprietor_category_1: ownership["Proprietorship Category (1)"] || null,
+    proprietor_1_address_1: ownership["Proprietor (1) Address (1)"] || null,
+    proprietor_1_address_2: ownership["Proprietor (1) Address (2)"] || null,
+    proprietor_1_address_3: ownership["Proprietor (1) Address (3)"] || null,
+    proprietor_name_2: ownership["Proprietor Name (2)"] || null,
+    company_registration_no_2:
+      ownership["Company Registration No. (2)"] || null,
+    proprietor_category_2: ownership["Proprietorship Category (2)"] || null,
+    proprietor_2_address_1: ownership["Proprietor (2) Address (1)"] || null,
+    proprietor_2_address_2: ownership["Proprietor (2) Address (2)"] || null,
+    proprietor_2_address_3: ownership["Proprietor (2) Address (3)"] || null,
+    proprietor_name_3: ownership["Proprietor Name (3)"] || null,
+    company_registration_no_3:
+      ownership["Company Registration No. (3)"] || null,
+    proprietor_category_3: ownership["Proprietorship Category (3)"] || null,
+    proprietor_3_address_1: ownership["Proprietor (3) Address (1)"] || null,
+    proprietor_3_address_2: ownership["Proprietor (3) Address (2)"] || null,
+    proprietor_3_address_3: ownership["Proprietor (3) Address (3)"] || null,
+    proprietor_name_4: ownership["Proprietor Name (4)"] || null,
+    company_registration_no_4:
+      ownership["Company Registration No. (4)"] || null,
+    proprietor_category_4: ownership["Proprietorship Category (4)"] || null,
+    proprietor_4_address_1: ownership["Proprietor (4) Address (1)"] || null,
+    proprietor_4_address_2: ownership["Proprietor (4) Address (2)"] || null,
+    proprietor_4_address_3: ownership["Proprietor (4) Address (3)"] || null,
+    date_proprietor_added:
+      // convert DD-MM-YYYY to YYYY-MM-DD
+      ownership["Date Proprietor Added"]?.split("-").reverse().join("-") ||
+      null,
     additional_proprietor_indicator:
-      ownership["Additional Proprietor Indicator"],
-    proprietor_uk_based: ownership.proprietor_uk_based,
+      ownership["Additional Proprietor Indicator"] || null,
+    proprietor_uk_based: !overseas,
+  }));
+
+  await LandOwnershipModel.bulkCreate(parsedOwnerships, {
+    logging: logging ? console.log : false,
+    benchmark: true,
+    updateOnDuplicate: [
+      "tenure",
+      "property_address",
+      "district",
+      "county",
+      "region",
+      "postcode",
+      "multiple_address_indicator",
+      "price_paid",
+      "proprietor_name_1",
+      "company_registration_no_1",
+      "proprietor_category_1",
+      "proprietor_1_address_1",
+      "proprietor_1_address_2",
+      "proprietor_1_address_3",
+      "proprietor_name_2",
+      "company_registration_no_2",
+      "proprietor_category_2",
+      "proprietor_2_address_1",
+      "proprietor_2_address_2",
+      "proprietor_2_address_3",
+      "proprietor_name_3",
+      "company_registration_no_3",
+      "proprietor_category_3",
+      "proprietor_3_address_1",
+      "proprietor_3_address_2",
+      "proprietor_3_address_3",
+      "proprietor_name_4",
+      "company_registration_no_4",
+      "proprietor_category_4",
+      "proprietor_4_address_1",
+      "proprietor_4_address_2",
+      "proprietor_4_address_3",
+      "date_proprietor_added",
+      "additional_proprietor_indicator",
+      "proprietor_uk_based",
+    ],
   });
-}
+};
+
+export const bulkDeleteLandOwnerships = async (
+  titleNumbers: string[],
+  logging = false
+) => {
+  await LandOwnershipModel.destroy({
+    logging: logging ? console.log : false,
+    where: {
+      title_no: titleNumbers,
+    },
+  });
+};
+
+export const deleteAllLandOwnerships = async () => {
+  await LandOwnershipModel.truncate();
+};
 
 export async function getLandOwnership(title_no: string) {
   const landOwnership = await LandOwnershipModel.findOne({
@@ -232,7 +356,7 @@ export const getPolygonsByArea = async (searchArea: string) => {
   return polygonsAndOwnerships;
 };
 
-export async function getPolygonsByProprietorName(name: string) {
+export const getPolygonsByProprietorName = async (name: string) => {
   const polygonsAndOwnerships = await LandOwnershipModel.findAll({
     where: {
       proprietor_name_1: name,
@@ -253,4 +377,44 @@ export async function getPolygonsByProprietorName(name: string) {
 
     return poly;
   });
-}
+};
+
+/** Create an entry in the pipeline_runs table and return the UUID */
+export const startPipelineRun = async (): Promise<string> => {
+  const unique_key = nanoid(10);
+  await PipelineRunModel.create({
+    unique_key,
+  });
+  return unique_key;
+};
+
+/**
+ * Set latest ownership data date for a pipeline run.
+ * @param unique_key the unique_key for the pipeline run
+ * @param date in YYYY-MM-DD format
+ */
+export const setPipelineLatestOwnershipData = async (
+  unique_key: string,
+  date: string
+) => {
+  await PipelineRunModel.update(
+    { latest_ownership_data: date },
+    {
+      where: {
+        unique_key,
+      },
+    }
+  );
+};
+
+/**
+ * Return the date of the latest ownership data that was processed by the latest pipeline run, or
+ * null if no pipeline has completed yet.
+ */
+export const getLatestOwnershipDataDate = async () => {
+  const latestRun: any = await PipelineRunModel.findOne({
+    where: { latest_ownership_data: { [Op.ne]: null } },
+    order: [["startedAt", "DESC"]],
+  });
+  return latestRun ? new Date(latestRun.latest_ownership_data) : null;
+};

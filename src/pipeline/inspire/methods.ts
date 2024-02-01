@@ -2,6 +2,7 @@ import "dotenv/config";
 import axios from "axios";
 import * as turf from "@turf/turf";
 import stats from "stats-lite";
+import NodeGeocoder from "node-geocoder";
 
 const precisionDecimalPlaces = 10;
 const offsetMeanThreshold = 6e-5; // up to ~8 meters offset. TODO: do we need this threshold if std is so low anyway?
@@ -35,6 +36,14 @@ export enum Match {
   Fail,
 }
 
+const options = {
+  provider: "mapbox",
+  apiKey: process.env.MAPBOX_GEOCODER_TOKEN,
+  formatter: null,
+};
+
+const geocoder = NodeGeocoder(options);
+
 /**
  * Query the live boundary service for freehold (i.e. INSPIRE) polygons that
  * - have the given poly_ids
@@ -49,11 +58,11 @@ export const getExistingPolygons = async (
   try {
     // Use POST request so that the length of the list of poly_ids is not limited
     const response = await axios.post(
-      `${process.env.BOUNDARY_SERVICE_URL}/polygonsDevSearch`,
+      `${process.env.LIVE_BOUNDARY_SERVICE_URL}/polygonsDevSearch`,
       {
         poly_ids,
         searchArea: JSON.stringify(searchArea),
-        secret: process.env.BOUNDARY_SERVICE_SECRET,
+        secret: process.env.LIVE_BOUNDARY_SERVICE_SECRET,
       }
     );
     return response.data;
@@ -207,10 +216,13 @@ const polygonContains = (
 /**
  * Compare 2 sets of polygon coordinates to determine whether they are describing the same boundary.
  *
+ * TODO: split some of this function into smaller functions. It's too long and hard to understand.
+ *
  * @param inspireId the INSPIRE ID for the new (and old) polygon
  * @param suggestedLatLongOffset an offset to try, if we are unable to calculate one for this case
  *        e.g. the offset of a nearby polygon in the INSPIRE dataset
  * @param nearbyPolygons that we search over when analysing cases of boundary segmentation/merger
+ * @param titleAddress address of matching title (if it exists)
  * @returns the type of match, percentage interesect (after any offsetting), offset statistics, and
  *        the IDs of other polygons relating to the match (e.g. if a segment/merge)
  */
@@ -219,7 +231,8 @@ export const comparePolygons = async (
   oldCoords: number[][], // TODO: remove this param and look this up within this method
   newCoords: number[][],
   suggestedLatLongOffset: number[] = [0, 0],
-  nearbyPolygons: turf.Feature<turf.Polygon>[] = []
+  nearbyPolygons: turf.Feature<turf.Polygon>[] = [],
+  titleAddress: string | undefined = undefined
 ): Promise<{
   match: Match;
   percentageIntersect: number;
@@ -278,7 +291,23 @@ export const comparePolygons = async (
       oldCoords[0][0]
     );
 
-    // TODO: Geocode title?
+    if (titleAddress) {
+      // Try geocoding the matching title address
+      const result = await geocoder.geocode(titleAddress);
+      if (result?.longitude && result?.latitude) {
+        const point = turf.point([result.longitude, result.latitude]);
+        const newPoly = turf.polygon([newCoords]);
+
+        // If new polygon lies within 50m of the geocoded location, accept it as a moved boundary
+        if (
+          turf.distance(point, turf.center(newPoly), { units: "kilometers" }) <
+          0.05
+        ) {
+          console.log("wooooooooooooooooooo");
+        }
+      }
+    }
+
     return {
       match: Match.Fail,
       percentageIntersect,
