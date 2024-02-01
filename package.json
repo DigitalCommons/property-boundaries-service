@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "serve": "pm2 start dist/app.js --node-args='--max-old-space-size=8192'",
     "dev:serve": "nodemon src/app.ts",
     "download": "node dist/download.js",
@@ -46,6 +46,7 @@
     "path": "^0.12.7",
     "playwright": "^1.40.1",
     "sequelize": "^6.32.1",
+    "sequelize-cli": "^6.6.2",
     "stats-lite": "^2.2.0",
     "unzip-stream": "^0.3.1"
   }

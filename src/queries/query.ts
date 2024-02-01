@@ -1,4 +1,4 @@
-import { Sequelize, DataTypes, QueryTypes, Model, Op } from "sequelize";
+import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
 import { nanoid } from "nanoid";
 
 export const sequelize = new Sequelize(

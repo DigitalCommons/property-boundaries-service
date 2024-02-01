@@ -1,4 +1,3 @@
-import "dotenv/config";
 import axios from "axios";
 import chunk from "lodash.chunk";
 import {

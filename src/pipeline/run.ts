@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { startPipelineRun } from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
 
@@ -18,3 +19,5 @@ export const runPipeline = async () => {
 
   // run our matching algorithm on the new data
 };
+
+runPipeline();
