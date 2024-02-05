@@ -1,5 +1,9 @@
 import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
+import { Polygon } from "@turf/turf";
 import { nanoid } from "nanoid";
+
+// TODO: move this instance creation and model definitions into a separate 'models' file. Just have
+// callable queries in this file
 
 export const sequelize = new Sequelize(
   process.env.DB_NAME!,
@@ -21,11 +25,12 @@ export const PolygonModel = sequelize.define(
       type: DataTypes.INTEGER,
     },
     poly_id: {
+      unique: true,
       allowNull: false,
       type: DataTypes.INTEGER,
     },
     title_no: {
-      allowNull: false,
+      defaultValue: null,
       type: DataTypes.STRING,
     },
     geom: {
@@ -136,6 +141,22 @@ LandOwnershipModel.belongsTo(PolygonModel, {
   foreignKey: "title_no",
   targetKey: "title_no",
 });
+
+export const createOrUpdatePolygonGeom = async (
+  poly_id: number,
+  geom: Polygon,
+  logging = false
+) => {
+  await PolygonModel.upsert(
+    {
+      poly_id,
+      geom,
+    },
+    {
+      logging: logging ? console.log : false,
+    }
+  );
+};
 
 export const createOrUpdateLandOwnership = async (
   ownership,
@@ -276,20 +297,27 @@ export async function getLandOwnership(title_no: string) {
 }
 
 /**
- * Get non-leasehold polygons that:
+ * Get polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given)
  *
  * @param poly_ids an array of INSPIRE IDs
  * @param searchArea a GeoJSON Polygon geometry
+ * @param includeLeasholds whether to include polygons for leasholds (default true)
  * @returns an array of polygons that match the criteria
  */
 
-export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
+export const getPolygonsByIdInSearchArea = async (
   poly_ids?: number[],
-  searchArea?: string
+  searchArea?: string,
+  includeLeasholds = true
 ) => {
+  const noLeaseholdsCondition =
+    includeLeasholds === false
+      ? `AND ( tenure = 'Freehold' OR tenure IS NULL )`
+      : "";
+
   if (!poly_ids || poly_ids.length === 0) {
     // Just search by area
     if (!searchArea) {
@@ -301,8 +329,8 @@ export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
     FROM land_ownership_polygons
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
-    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-    AND ( tenure = 'Freehold' OR tenure IS NULL );`;
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?)) 
+    ${noLeaseholdsCondition};`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -321,7 +349,7 @@ export const getNonLeaseholdPolygonsByIdAndSearchArea = async (
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE poly_id IN (${Array(uniquePolyIds.size).fill("?").join(",")})
     ${searchAreaCondition}
-    AND ( tenure = 'Freehold' OR tenure IS NULL )
+    ${noLeaseholdsCondition}
     LIMIT ${uniquePolyIds.size};`;
 
   const replacements: (string | number)[] = Array.from(uniquePolyIds);
@@ -399,6 +427,25 @@ export const setPipelineLatestOwnershipData = async (
 ) => {
   await PipelineRunModel.update(
     { latest_ownership_data: date },
+    {
+      where: {
+        unique_key,
+      },
+    }
+  );
+};
+
+/**
+ * Set latest INSPIRE polygon data date for a pipeline run.
+ * @param unique_key the unique_key for the pipeline run
+ * @param date in YYYY-MM-DD format
+ */
+export const setPipelineLatestInspireData = async (
+  unique_key: string,
+  date: string
+) => {
+  await PipelineRunModel.update(
+    { latest_inspire_data: date },
     {
       where: {
         unique_key,

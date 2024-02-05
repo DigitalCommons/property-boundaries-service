@@ -1,7 +1,7 @@
 import path from "path";
 import { plot, Layout } from "nodeplotlib";
 import fs from "fs";
-import { AllStats, StatsForEachCouncil } from "./analyse-all";
+import { StatsCollection, StatsForEachCouncil } from "./analyse-all";
 // import { percentile } from "stats-lite";
 
 const analysisPath = path.resolve("./analysis");
@@ -96,10 +96,10 @@ const plotOffsetStds = (offsetStds: StatsForEachCouncil) => {
 
 // Script:
 const json = fs.readFileSync(
-  path.resolve(`${analysisPath}/allStats.json`),
+  path.resolve(`${analysisPath}/stats.json`),
   "utf8"
 );
-const allStats: AllStats = JSON.parse(json);
+const allStats: StatsCollection = JSON.parse(json);
 console.log("Plotting histograms...");
 plotPercentageIntersects(allStats.percentageIntersects);
 plotOffsetMeans(allStats.offsetMeans);

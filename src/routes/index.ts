@@ -7,10 +7,11 @@ import {
 import {
   getPolygonsByArea,
   getPolygonsByProprietorName,
-  getNonLeaseholdPolygonsByIdAndSearchArea,
+  getPolygonsByIdInSearchArea,
 } from "../queries/query";
 import path from "path";
 import fs from "fs";
+import { triggerPipelineRun } from "../pipeline/run";
 
 /** Handler for testing our newly generated INSPIRE JSONs */
 async function getBoundariesDummy(request: Request): Promise<any> {
@@ -98,21 +99,22 @@ type GetPolygonsRequest = Request & {
   payload: {
     poly_ids?: number[];
     searchArea?: string;
+    includeLeaseholds?: boolean;
     secret: string;
   };
 };
 
 /**
- * Get non-leasehold polygons that:
+ * Get polygons that:
  * - match with the ID(s) (if given)
  * AND
  * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
-async function getNonLeaseholdPolygons(
+async function getPolygonsByIdInArea(
   request: GetPolygonsRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> {
-  const { poly_ids, searchArea, secret } = request.payload;
+  const { poly_ids, searchArea, includeLeaseholds, secret } = request.payload;
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
@@ -122,9 +124,10 @@ async function getNonLeaseholdPolygons(
     return h.response("poly_ids and/or searchArea must be given").code(400);
   }
 
-  const result = await getNonLeaseholdPolygonsByIdAndSearchArea(
+  const result = await getPolygonsByIdInSearchArea(
     poly_ids,
-    searchArea
+    searchArea,
+    includeLeaseholds
   );
 
   return h.response(result).code(200);
@@ -141,6 +144,29 @@ async function search(request: Request): Promise<any> {
 
   return polygons;
 }
+
+type RunPipelineRequest = Request & {
+  query: {
+    secret: string;
+  };
+};
+
+const runPipeline = async (
+  request: RunPipelineRequest,
+  h: ResponseToolkit
+): Promise<ResponseObject> => {
+  const { secret } = request.query;
+
+  if (!secret || secret !== process.env.SECRET) {
+    return h.response("missing or incorrect secret").code(403);
+  }
+
+  const uniqueKey = await triggerPipelineRun();
+  if (!uniqueKey) {
+    return h.response("Pipeline already running");
+  }
+  return h.response(`Pipeline ${uniqueKey} has started`);
+};
 
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
@@ -163,18 +189,30 @@ const searchRoute: ServerRoute = {
 /**
  * Only used in development of analyse script
  * Use POST so that it can receive a large list of poly_ids in one request.
- * We look for non-leasehold properties since all INSPIRE polygons are freeholds so we want to
- * filter out these (and keep properties that don't have matched titles since these may be freehold)
  */
 const getPolygonsRoute: ServerRoute = {
   method: "POST",
-  path: "/polygonsDevSearch",
-  handler: getNonLeaseholdPolygons,
+  path: "/polygons",
+  handler: getPolygonsByIdInArea,
   options: {
     auth: false,
   },
 };
 
-const routes = [getBoundariesRoute, getPolygonsRoute, searchRoute];
+const runPipelineRoute: ServerRoute = {
+  method: "GET",
+  path: "/run-pipeline",
+  handler: runPipeline,
+  options: {
+    auth: false,
+  },
+};
+
+const routes = [
+  getBoundariesRoute,
+  getPolygonsRoute,
+  searchRoute,
+  runPipelineRoute,
+];
 
 export default routes;

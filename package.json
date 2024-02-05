@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "serve": "pm2 start dist/app.js --node-args='--max-old-space-size=8192'",
+    "serve": "pm2 start dist/app.js --node-args='--max-old-space-size=5120'",
     "dev:serve": "nodemon src/app.ts",
+    "pipeline": "node dist/pipeline.run.js 2>> logs/error.log 1>> logs/output.log",
     "download": "node dist/download.js",
     "analyse": "node dist/pipeline/inspire/analyse-all.js",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
@@ -30,6 +31,7 @@
   "dependencies": {
     "@esm2cjs/p-queue": "^7.3.0",
     "@hapi/hapi": "^21.3.2",
+    "@mapbox/geojsonhint": "^3.3.0",
     "@playwright/browser-chromium": "^1.40.1",
     "@turf/turf": "^6.5.0",
     "axios": "^1.4.0",
@@ -42,6 +44,7 @@
     "mysql2": "^3.6.1",
     "nanoid": "3.3.5",
     "node-geocoder": "^4.2.0",
+    "nodestringtable": "^1.0.2",
     "ogr2ogr": "^4.0.1",
     "path": "^0.12.7",
     "playwright": "^1.40.1",

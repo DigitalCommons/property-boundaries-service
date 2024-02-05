@@ -12,8 +12,8 @@ module.exports = {
         updatedAt date DEFAULT NULL,
         PRIMARY KEY (id),
         SPATIAL KEY geom (geom),
-        KEY title_no (title_no),
-        KEY poly_id (poly_id)
+        UNIQUE KEY poly_id (poly_id),
+        KEY title_no (title_no)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
   },

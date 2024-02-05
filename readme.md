@@ -23,13 +23,22 @@ This service manages a database and an API to serve data from the land registry'
 - `npm run download` to download the INSPIRE data for each council, transform it to GeoJSON, and store the JSON files in the `/geojson` folder.
 - `npm run analyse` to run the analysis script.
 - `npm run plot` to plot the results of the analysis script.
-- `npm serve` or `npm dev:serve` to start the server responding to api requests.
+- `npm run serve` or `npm run dev:serve` to start the server responding to api requests.
 
 ## Useful dev commands
 
 - `npx sequelize-cli db:migrate:undo:all` to reset database migrations
 
+## Ownerships + INSPIRE updates pipeline
+
+All of the pipeline-related code is in the `src/pipeline` directory. The pipeline can be triggered by a `run-pipeline` GET request.
+The resulting data for a pipeline can be found in the `analysis` folder in the project's root folder, in a directory whose name includes the
+pipeline's time and unique key.
+
 ## TODO
+
+- Use a logging library (e.g. Winston) to log the results of pipelines into a dedicated file for
+  each pipeline run. This will give us more control than piping to files using shell commands.
 
 - Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
   polygons, then add unit tests for this spec
