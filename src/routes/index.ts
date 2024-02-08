@@ -71,8 +71,7 @@ type GetPolygonsInBoxRequest = Request & {
   };
 };
 
-// TODO:
-// - combine with search route so we can filter by a box and ownership at the same time?
+// TODO: combine with search route so we can filter by a box and ownership at the same time?
 async function getPolygonsInBox(
   request: GetPolygonsInBoxRequest,
   h: ResponseToolkit
@@ -162,10 +161,11 @@ const runPipeline = async (
   }
 
   const uniqueKey = await triggerPipelineRun();
-  if (!uniqueKey) {
-    return h.response("Pipeline already running");
-  }
-  return h.response(`Pipeline ${uniqueKey} has started`);
+  const msg = uniqueKey
+    ? `Pipeline ${uniqueKey} has started`
+    : "Pipeline already running";
+  console.log(msg);
+  return h.response(msg);
 };
 
 const getBoundariesRoute: ServerRoute = {
@@ -187,7 +187,6 @@ const searchRoute: ServerRoute = {
 };
 
 /**
- * Only used in development of analyse script
  * Use POST so that it can receive a large list of poly_ids in one request.
  */
 const getPolygonsRoute: ServerRoute = {

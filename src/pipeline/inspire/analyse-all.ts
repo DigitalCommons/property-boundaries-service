@@ -1,17 +1,24 @@
 import path from "path";
-import { readFile } from "fs/promises";
 import fs from "fs";
 import { Match, getExistingPolygons, comparePolygons } from "./methods";
-import { FeatureCollection, Polygon } from "@turf/turf";
 import {
-  createOrUpdatePolygonGeom,
+  PendingPolygon,
+  acceptPendingPolygon,
+  getNextPendingPolygon,
+  insertAllAcceptedPendingPolygons,
   setPipelineLatestInspireData,
 } from "../../queries/query";
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
+import getLogger from "../logger";
+import { Logger } from "pino";
 
-const geojsonPath = path.resolve("./geojson");
+let logger: Logger;
 const analysisFolder = path.resolve("./analysis");
+
+export type IdCollection = {
+  [idType: string]: Set<number>;
+};
 
 export type StatsForEachCouncil = {
   [council: string]: number[];
@@ -21,8 +28,14 @@ export type StatsCollection = {
   [statType: string]: StatsForEachCouncil;
 };
 
+// Stats which we will be calculating
+let allStats: StatsCollection;
+
+let allIds: IdCollection;
+
 type MergeAndSegmentInstance = {
   inspireId: number;
+  council: string;
   type: string;
   oldMergedIds?: number[];
   newSegmentIds?: number[];
@@ -30,8 +43,11 @@ type MergeAndSegmentInstance = {
   percentageIntersect: number;
 };
 
+let allMergeAndSegmentInstances: MergeAndSegmentInstance[];
+
 type FailedMatchInfo = {
   inspireId: number;
+  council: string;
   sameNumberVertices: boolean;
   latMean?: number;
   longMean?: number;
@@ -44,17 +60,14 @@ type FailedMatchInfo = {
   newSegmentIds?: number[];
 };
 
-// Stats which we will be calculating
-let allStats: StatsCollection;
+let allFailedMatchesInfo: FailedMatchInfo[];
 
-let allIds: StatsCollection;
-
-let allMergeAndSegmentInstances: {
-  [council: string]: MergeAndSegmentInstance[];
-};
-
-let allFailedMatchesInfo: {
-  [council: string]: FailedMatchInfo[];
+// Keep track of the offset for the previous successful polygon match, for each council. Nearby
+// polygons in the dataset (which is the order they were inserted into the pending polygons table)
+// tend to be in close geographical proximity so we can use this offset as a suggestion for cases
+// where we are unable to calcualte the offset
+let previousLatLongOffsets: {
+  [council: string]: number[];
 };
 
 /** Reset all the objects we are using to track polygon matches */
@@ -66,291 +79,227 @@ const resetAnalysis = () => {
   };
 
   allIds = {
-    exactMatchIds: {},
-    sameVerticesIds: {},
-    exactOffsetIds: {},
-    highOverlapIds: {},
-    boundariesShiftedIds: {},
-    mergedIds: {},
-    mergedIncompleteIds: {},
-    segmentedIds: {},
-    segmentedIncompleteIds: {},
-    mergedAndSegmentedIds: {},
-    newSegmentIds: {},
-    movedIds: {},
-    failedMatchIds: {},
-    newInspireIds: {},
+    exactMatchIds: new Set(),
+    sameVerticesIds: new Set(),
+    exactOffsetIds: new Set(),
+    highOverlapIds: new Set(),
+    boundariesShiftedIds: new Set(),
+    mergedIds: new Set(),
+    mergedIncompleteIds: new Set(),
+    segmentedIds: new Set(),
+    segmentedIncompleteIds: new Set(),
+    mergedAndSegmentedIds: new Set(),
+    newSegmentIds: new Set(),
+    movedIds: new Set(),
+    failedMatchIds: new Set(),
+    newInspireIds: new Set(),
   };
 
-  allMergeAndSegmentInstances = {};
-  allFailedMatchesInfo = {};
+  allMergeAndSegmentInstances = [];
+  allFailedMatchesInfo = [];
+  previousLatLongOffsets = {};
 };
 
-/**
- * @returns number of polygons that were analysed in the input data
- */
-const analysePolygonsInJSON = async (
-  filename: string,
-  maxPolygons: number,
-  updateDb: boolean
-): Promise<number> => {
-  const data: FeatureCollection<Polygon> = JSON.parse(
-    await readFile(path.resolve(`${geojsonPath}/${filename}`), "utf8")
-  );
-  const councilName = path.parse(filename).name;
-  console.log(`Number of polygons in ${councilName}:`, data.features.length);
-  const sampleData = data.features.slice(0, maxPolygons);
-  const sampleDataSize = sampleData.length;
-  console.log(`Analyse first ${sampleDataSize} polygons`);
+const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
+  const { poly_id: inspireId, geom, council } = polygon;
 
-  const existingPolygons = await getExistingPolygons(
-    sampleData.map((feature) => feature.properties.INSPIREID)
-  );
-
-  if (!existingPolygons) {
-    console.error("Couldn't fetch polygons");
-    return;
+  if (!allStats.percentageIntersects[council]) {
+    allStats.percentageIntersects[council] = [];
+  }
+  if (!allStats.offsetMeans[council]) {
+    allStats.offsetMeans[council] = [];
+  }
+  if (!allStats.offsetStds[council]) {
+    allStats.offsetStds[council] = [];
   }
 
-  const exactMatchIds: number[] = [];
-  const sameVerticesIds: number[] = [];
-  const exactOffsetIds: number[] = [];
-  const highOverlapIds: number[] = [];
-  const boundariesShiftedIds: number[] = [];
-  const mergedIds: number[] = [];
-  const mergedIncompleteIds: number[] = [];
-  const segmentedIds: number[] = [];
-  const segmentedIncompleteIds: number[] = [];
-  // we might add IDs of other polygons to allNewSegmentIds in a single iteration, so prevent duplication
-  const allNewSegmentIds: Set<number> = new Set();
-  const mergedAndSegmentedIds: number[] = [];
-  const movedIds: number[] = [];
-  const failedMatchIds: number[] = [];
-  const newInspireIds: Set<number> = new Set();
-  const percentageIntersects: number[] = [];
-  const offsetMeans: number[] = [];
-  const offsetStds: number[] = [];
-  const mergeAndSegmentInstances: MergeAndSegmentInstance[] = [];
-  const failedMatchesInfo: FailedMatchInfo[] = [];
+  const existingPolygon: any = (await getExistingPolygons([inspireId]))[0];
 
-  // Keep track of the offset for the previous successful polygon match. Nearby polygons in the
-  // dataset tend to be in close geographical proximity so we can use this offset as a suggestion
-  // for cases where we are unable to calcualte the offset
-  let previousLatLongOffset: number[] = null;
+  if (existingPolygon) {
+    const newCoords: number[][] = geom.coordinates[0];
+    const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
+    // // Our DB is in lat-long format and INSPIRE (GeoJSON) is in long-lat format.
+    // // Reverse old ones since turf uses long-lat
+    // for (const vertex of oldCoords) {
+    //   vertex.reverse();
+    // }
 
-  // Iterate over polygons
-  for (const [index, newFeature] of sampleData.entries()) {
-    if ((index + 1) % 1000 === 0) {
-      console.log(`Polygon ${index + 1}/${sampleDataSize}, ${councilName}`);
-    }
+    // Get address of matching title (if exists)
+    const titleAddress = existingPolygon.property_address || undefined;
 
-    const inspireId = newFeature.properties.INSPIREID;
-    const existingPolygon = existingPolygons.find(
-      (polygon) => polygon.poly_id === inspireId
+    const {
+      match,
+      percentageIntersect,
+      offsetStats,
+      oldMergedIds,
+      newSegmentIds,
+    } = await comparePolygons(
+      logger,
+      inspireId,
+      oldCoords,
+      newCoords,
+      previousLatLongOffsets[council] || [0, 0],
+      titleAddress
     );
 
-    if (existingPolygon) {
-      const newCoords: number[][] = newFeature.geometry.coordinates[0];
-      const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
-      // Our DB is in lat-long format and INSPIRE (GeoJSON) is in long-lat format.
-      // Reverse old ones since turf uses long-lat
-      for (const vertex of oldCoords) {
-        vertex.reverse();
-      }
-
-      // Get address of matching title (if exists)
-      const titleAddress = existingPolygon.property_address || undefined;
-
-      const firstNearbyPolygonIndex = Math.max(
-        0,
-        data.features.length - sampleDataSize + index - 500
+    allStats.percentageIntersects[council].push(percentageIntersect);
+    if (offsetStats?.sameNumberVertices) {
+      // If offset could be calculated
+      allStats.offsetMeans[council].push(
+        Math.max(
+          // Choose max of either long or lat i.e. the worst case
+          Math.abs(offsetStats.latMean),
+          Math.abs(offsetStats.longMean)
+        )
       );
-      const {
-        match,
-        percentageIntersect,
-        offsetStats,
-        oldMergedIds,
-        newSegmentIds,
-      } = await comparePolygons(
-        inspireId,
-        oldCoords,
-        newCoords,
-        previousLatLongOffset,
-        data.features
-          .slice(
-            firstNearbyPolygonIndex,
-            firstNearbyPolygonIndex + 1000 // include 1000 nearby polygons
-          )
-          .filter((feature) => feature.properties.INSPIREID !== inspireId),
-        titleAddress
+      allStats.offsetStds[council].push(
+        Math.max(offsetStats.latStd, offsetStats.longStd)
       );
-
-      percentageIntersects.push(percentageIntersect);
-      if (offsetStats?.sameNumberVertices) {
-        // If offset could be calculated
-        offsetMeans.push(
-          Math.max(
-            // Choose max of either long or lat i.e. the worst case
-            Math.abs(offsetStats.latMean),
-            Math.abs(offsetStats.longMean)
-          )
-        );
-        offsetStds.push(Math.max(offsetStats.latStd, offsetStats.longStd));
-      }
-
-      switch (match) {
-        case Match.Exact:
-          exactMatchIds.push(inspireId);
-          break;
-        case Match.SameVertices:
-          sameVerticesIds.push(inspireId);
-          break;
-        case Match.ExactOffset:
-          exactOffsetIds.push(inspireId);
-          previousLatLongOffset = [offsetStats.latMean, offsetStats.longMean];
-          break;
-        case Match.HighOverlap:
-          highOverlapIds.push(inspireId);
-          break;
-        case Match.BoundariesShifted:
-          boundariesShiftedIds.push(inspireId);
-          break;
-        case Match.Merged:
-          mergedIds.push(inspireId);
-          break;
-        case Match.MergedIncomplete:
-          mergedIncompleteIds.push(inspireId);
-          break;
-        case Match.Segmented:
-          segmentedIds.push(inspireId);
-          break;
-        case Match.SegmentedIncomplete:
-          segmentedIncompleteIds.push(inspireId);
-          break;
-        case Match.MergedAndSegmented:
-          mergedAndSegmentedIds.push(inspireId);
-          break;
-        case Match.Moved:
-          movedIds.push(inspireId);
-          break;
-        case Match.Fail:
-          failedMatchIds.push(inspireId);
-          failedMatchesInfo.push({
-            inspireId,
-            ...offsetStats,
-            percentageIntersect,
-            oldLatLong: oldCoords[0].reverse(),
-            newLatLong: newCoords[0].reverse(),
-            oldMergedIds,
-            newSegmentIds,
-          });
-          // Move on to the next polygon and skip updating the database
-          continue;
-        default:
-          console.error(
-            "We shouldn't hit this, all cases should be handled. INSPIRE ID:",
-            inspireId
-          );
-          break;
-      }
-
-      switch (match) {
-        case Match.Merged:
-        case Match.MergedIncomplete:
-        case Match.Segmented:
-        case Match.SegmentedIncomplete:
-        case Match.MergedAndSegmented:
-          mergeAndSegmentInstances.push({
-            inspireId,
-            type: Match[match],
-            oldMergedIds,
-            newSegmentIds,
-            latLong: newCoords[0].reverse(),
-            percentageIntersect,
-          });
-          newSegmentIds.forEach((id) => {
-            allNewSegmentIds.add(id);
-            newInspireIds.delete(id); // in case we already added the ID to this set
-          });
-          break;
-      }
-    } else {
-      if (!allNewSegmentIds.has(inspireId)) {
-        newInspireIds.add(inspireId);
-      }
     }
 
-    // Update the database (we don't reach here if the match failed)
-    if (updateDb) {
-      await createOrUpdatePolygonGeom(inspireId, newFeature.geometry);
+    switch (match) {
+      case Match.Exact:
+        allIds.exactMatchIds.add(inspireId);
+        break;
+      case Match.SameVertices:
+        allIds.sameVerticesIds.add(inspireId);
+        break;
+      case Match.ExactOffset:
+        allIds.exactOffsetIds.add(inspireId);
+        previousLatLongOffsets[council] = [
+          offsetStats.latMean,
+          offsetStats.longMean,
+        ];
+        break;
+      case Match.HighOverlap:
+        allIds.highOverlapIds.add(inspireId);
+        break;
+      case Match.BoundariesShifted:
+        allIds.boundariesShiftedIds.add(inspireId);
+        break;
+      case Match.Merged:
+        allIds.mergedIds.add(inspireId);
+        break;
+      case Match.MergedIncomplete:
+        allIds.mergedIncompleteIds.add(inspireId);
+        break;
+      case Match.Segmented:
+        allIds.segmentedIds.add(inspireId);
+        break;
+      case Match.SegmentedIncomplete:
+        allIds.segmentedIncompleteIds.add(inspireId);
+        break;
+      case Match.MergedAndSegmented:
+        allIds.mergedAndSegmentedIds.add(inspireId);
+        break;
+      case Match.Moved:
+        allIds.movedIds.add(inspireId);
+        break;
+      case Match.Fail:
+        allIds.failedMatchIds.add(inspireId);
+        allFailedMatchesInfo.push({
+          inspireId: inspireId,
+          council,
+          ...offsetStats,
+          percentageIntersect,
+          oldLatLong: [oldCoords[0][1], oldCoords[0][0]],
+          newLatLong: [newCoords[0][1], newCoords[0][0]],
+          oldMergedIds,
+          newSegmentIds,
+        });
+        // Move on to the next polygon and skip updating the database
+        return;
+      default:
+        logger.error(
+          `We shouldn't hit this, all cases should be handled. INSPIRE ID: ${inspireId}`
+        );
+        break;
+    }
+
+    switch (match) {
+      case Match.Merged:
+      case Match.MergedIncomplete:
+      case Match.Segmented:
+      case Match.SegmentedIncomplete:
+      case Match.MergedAndSegmented:
+        allMergeAndSegmentInstances.push({
+          inspireId: inspireId,
+          council,
+          type: Match[match],
+          oldMergedIds,
+          newSegmentIds,
+          latLong: [newCoords[0][1], newCoords[0][0]],
+          percentageIntersect,
+        });
+        newSegmentIds.forEach((id) => {
+          allIds.newSegmentIds.add(id);
+          allIds.newInspireIds.delete(id); // in case we already added the ID to this set
+        });
+        break;
+    }
+  } else {
+    if (!allIds.newSegmentIds.has(inspireId)) {
+      allIds.newInspireIds.add(inspireId);
     }
   }
 
-  allIds.exactMatchIds[councilName] = exactMatchIds;
-  allIds.sameVerticesIds[councilName] = sameVerticesIds;
-  allIds.exactOffsetIds[councilName] = exactOffsetIds;
-  allIds.highOverlapIds[councilName] = highOverlapIds;
-  allIds.boundariesShiftedIds[councilName] = boundariesShiftedIds;
-  allIds.mergedIds[councilName] = mergedIds;
-  allIds.mergedIncompleteIds[councilName] = mergedIncompleteIds;
-  allIds.segmentedIds[councilName] = segmentedIds;
-  allIds.segmentedIncompleteIds[councilName] = segmentedIncompleteIds;
-  allIds.mergedAndSegmentedIds[councilName] = mergedAndSegmentedIds;
-  allIds.newSegmentIds[councilName] = Array.from(allNewSegmentIds);
-  allIds.movedIds[councilName] = movedIds;
-  allIds.failedMatchIds[councilName] = failedMatchIds;
-  allIds.newInspireIds[councilName] = Array.from(newInspireIds);
-  allStats.percentageIntersects[councilName] = percentageIntersects;
-  allStats.offsetMeans[councilName] = offsetMeans;
-  allStats.offsetStds[councilName] = offsetStds;
-  allMergeAndSegmentInstances[councilName] = mergeAndSegmentInstances;
-  allFailedMatchesInfo[councilName] = failedMatchesInfo;
-
-  return sampleDataSize;
+  // Update the database to mark pending polygon as accepted (we don't reach here if the match failed)
+  await acceptPendingPolygon(inspireId);
 };
 
 /**
- * Loop through the geojson folder and analyse each council's data (one at a time to prevent OOM
- * errors).
+ * Loop through all the pending polygons in the pending_inspire_polygons table, trying to find a
+ * match with our existing polygons. If the match is successful, mark the pending polygon as
+ * accepted. Then, if 'updateMainDbTable' is true, copy all of the accepted pending polygons into
+ * the main land_ownership_polygons table and overwrite existing geometry data.
  *
- * Print a summary of the results of the analysis to the console, and store the full results in the
- * following JSONs in the analysis folder, each of the files' data grouped by council:
+ * Log a summary of the results of the analysis and store the full results in the
+ * following JSONs in the analysis folder:
  *  - ids.json contains a list of IDs for each type of polygon match
- *  - stats.json contains statistics for each polygon match
+ *  - stats.json contains statistics for each polygon match, grouped by council
  *  - merges-and-segments.json contains info about merges and segmentations that were found
  *  - failed-matches.json contains info about all the polygon changes that we failed to match
  *
- * @param maxCouncils max number of council JSON files we will analyse, default to all
- * @param maxPolygons max number of polygons in each file we will analyse, default to all
+ * @param updateMainDbTable whether to overwrite existing data with pending polygons that we accept
+ * @param maxPolygons max number of pending polygons we will analyse, default to all
  * @returns a summary table that can be printed of the final data counts
  */
-export const analyseAllGeoJSONs = async (
+export const analyseAllPendingPolygons = async (
   pipelineUniqueKey: string,
-  updateDb: boolean,
-  maxCouncils: number = 1e4,
-  maxPolygons: number = 1e7
+  updateMainDbTable: boolean,
+  maxPolygons: number = 1e9
 ): Promise<string> => {
+  logger = getLogger(pipelineUniqueKey);
   resetAnalysis();
 
-  // Get list of GeoJSON files to analyse
-  const files = fs
-    .readdirSync(geojsonPath)
-    .filter((f) => f.includes(".json"))
-    .slice(0, maxCouncils);
-
+  if (maxPolygons !== 1e9) {
+    logger.info(`Analyse first ${maxPolygons} polygons`);
+  }
   let totalNumPolygonsAnalysed = 0;
-  // Analyse each GeoJSON file
-  for (const filename of files) {
-    const numPolygonsAnalysed = await analysePolygonsInJSON(
-      filename,
-      maxPolygons,
-      updateDb
-    );
-    totalNumPolygonsAnalysed += numPolygonsAnalysed;
+
+  // Analyse each row in pending_inspire_polygons
+  let polygon: PendingPolygon = await getNextPendingPolygon(1);
+
+  while (polygon && totalNumPolygonsAnalysed < maxPolygons) {
+    analysePolygon(polygon);
+    totalNumPolygonsAnalysed += 1;
+
+    if (totalNumPolygonsAnalysed % 5000 === 0) {
+      logger.info(
+        `Polygon ${totalNumPolygonsAnalysed}, Council: ${polygon.council}`
+      );
+    }
+    polygon = await getNextPendingPolygon(polygon.id + 1);
+  }
+
+  // Convert sets of IDs to arrays so they can be stored in JSON
+  const allIdsArrays = {};
+  for (const idType in allIds) {
+    allIdsArrays[idType] = Array.from(allIds[idType]);
   }
 
   // Store full results which we can analyse more thoroughly
-  console.log("Storing results in analysis folder");
+  logger.info("Storing results in analysis folder");
   const currentDateString = moment()
     .tz("Europe/London")
     .format("YYYY-MM-DD_HHMMSS");
@@ -358,7 +307,7 @@ export const analyseAllGeoJSONs = async (
 
   try {
     fs.mkdirSync(analysisPath, { recursive: true });
-    fs.writeFileSync(`${analysisPath}/ids.json`, JSON.stringify(allIds));
+    fs.writeFileSync(`${analysisPath}/ids.json`, JSON.stringify(allIdsArrays));
     fs.writeFileSync(`${analysisPath}/stats.json`, JSON.stringify(allStats));
     fs.writeFileSync(
       `${analysisPath}/merges-and-segments.json`,
@@ -369,28 +318,23 @@ export const analyseAllGeoJSONs = async (
       JSON.stringify(allFailedMatchesInfo)
     );
   } catch (err) {
-    console.error("Error writing analysis files", err);
+    logger.error(err, "Error writing analysis files");
     throw err;
   }
 
   // Sanity check that all data has been analysed and print summary of results
-  const finalDataPolygonCount = Object.values(allIds)
-    .flatMap((ids) => Object.values(ids))
-    .flat().length;
+  const finalDataPolygonCount = Object.values(allIdsArrays).flat().length;
 
   const finalDataCounts = {};
-  for (const [matchType, idsForEachCouncil] of Object.entries(allIds)) {
-    const count = Object.values(idsForEachCouncil).flat().length;
+  for (const [matchType, ids] of Object.entries(allIds)) {
+    const count = ids.size;
     finalDataCounts[matchType] = {
       count,
       "%": Math.round((10000 * count) / finalDataPolygonCount) / 100, // round to 2 d.p.
     };
   }
-  console.log("Total polygons in final data:", finalDataPolygonCount);
-
-  // Print summary table
-  const summaryTable = stringTable(finalDataCounts);
-  console.log(summaryTable);
+  logger.info(`Total polygons in final data: ${finalDataPolygonCount}`);
+  logger.info(finalDataCounts);
 
   if (finalDataPolygonCount !== totalNumPolygonsAnalysed) {
     throw new Error(
@@ -398,15 +342,18 @@ export const analyseAllGeoJSONs = async (
     );
   }
 
-  if (updateDb && maxCouncils === 1e4 && maxPolygons === 1e7) {
-    // Mark that the INSPIRE polygons in the DB have been updated, if all polygons were analysed
-    await setPipelineLatestInspireData(
-      pipelineUniqueKey,
-      currentDateString.split("_")[0]
-    );
+  if (updateMainDbTable) {
+    // Insert all accepted pending polygons into the main land_ownership_polygons table
+    await insertAllAcceptedPendingPolygons();
+
+    if (maxPolygons === 1e9) {
+      // All polygons were analysed so mark that the pipeline has updated all INSPIRE polygons
+      await setPipelineLatestInspireData(
+        pipelineUniqueKey,
+        currentDateString.split("_")[0]
+      );
+    }
   }
 
-  return summaryTable;
+  return stringTable(finalDataCounts);
 };
-
-// analyseAllGeoJSONs("test", false, 1, 100);

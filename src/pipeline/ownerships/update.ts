@@ -12,6 +12,8 @@ import {
   getLatestDatasets,
   pipeZippedCsvFromUrlIntoFun,
 } from "./helpers";
+import getLogger from "../logger";
+import { Logger } from "pino";
 
 /**
  * Ensure the land_ownerships DB table is up-to-date.
@@ -23,28 +25,28 @@ import {
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
 export const updateOwnerships = async (pipelineUniqueKey: string) => {
-  console.log(`Started pipeline run ${pipelineUniqueKey}`);
+  const logger = getLogger(pipelineUniqueKey);
 
   const latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
   if (latestOwnershipDataDate) {
-    console.log("Latest ownership data is from", latestOwnershipDataDate);
+    logger.info(`Latest ownership data is from ${latestOwnershipDataDate}`);
   } else {
     // If pipeline has not run before, we need to download the whole UK and overseas companies
     // datasets from Nov 2017 (the first set of data provided by the gov API in the current data
     // format)
-    console.log(
+    logger.info(
       "Download the first full set of ownership data published in Nov 2017"
     );
-    await downloadOwnershipsFullData(11, 2017, pipelineUniqueKey);
+    await downloadOwnershipsFullData(11, 2017, pipelineUniqueKey, logger);
   }
 
-  const ccodHistoricalDatasets = await getDatasetHistory(false);
-  const ocodHistoricalDatasets = await getDatasetHistory(true);
+  const ccodHistoricalDatasets = await getDatasetHistory(false, logger);
+  const ocodHistoricalDatasets = await getDatasetHistory(true, logger);
 
   // Add the latest datasets which are (annoyingly) not included in the history API's response
-  const latestCcodDatasets = await getLatestDatasets(false);
-  const latestOcodDatasets = await getLatestDatasets(true);
+  const latestCcodDatasets = await getLatestDatasets(false, logger);
+  const latestOcodDatasets = await getLatestDatasets(true, logger);
 
   const unsortedListOfDatasets = [
     ...ccodHistoricalDatasets,
@@ -64,7 +66,7 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
     // Sort chronologically (oldest first)
     .sort((a, b) => (a.unsorted_date > b.unsorted_date ? 1 : -1));
 
-  console.log(`There are ${filesToProcess.length} change files to process`);
+  logger.info(`There are ${filesToProcess.length} change files to process`);
 
   for (const [index, file] of filesToProcess.entries()) {
     const ownershipAdditions = [];
@@ -86,11 +88,9 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
           ownershipDeletions.push(ownership);
           break;
         default:
-          console.error(
-            "No change indicator... we don't expect this! Filename:",
-            file.filename,
-            " , bad data:",
-            ownership
+          logger.error(
+            { filename: file.filename, ownership },
+            "No change indicator... we don't expect this!"
           );
           badOwnerships.push(ownership);
       }
@@ -109,6 +109,7 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
       fileResponse.data.result.download_url,
       (ownershipsChunk) => addOwnershipToArray(ownershipsChunk[0]),
       1,
+      logger,
       false
     );
 
@@ -130,12 +131,14 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
       await bulkCreateOrUpdateLandOwnerships(chunk, file.type === "ocod");
     }
 
-    console.log(
-      "Finished processing",
-      file.filename,
-      ownershipAdditions.length,
-      ownershipDeletions.length,
-      badOwnerships.length
+    logger.info(
+      {
+        file: file.filename,
+        additions: ownershipAdditions.length,
+        deletions: ownershipDeletions.length,
+        badEntries: badOwnerships.length,
+      },
+      "Finished processing ownership change file"
     );
 
     // If there are no more files from the same date to process, update DB with this latest date
@@ -162,10 +165,11 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
 async function downloadOwnershipsFullData(
   month: number,
   year: number,
-  pipelineUniqueKey: string
+  pipelineUniqueKey: string,
+  logger: Logger
 ) {
   if (year < 2017 || (year === 2017 && month < 11)) {
-    console.error("Must specify a month since Nov 2017");
+    logger.error("Must specify a month since Nov 2017");
     return null;
   }
   const paddedMonth = String(month).padStart(2, "0");
@@ -185,9 +189,8 @@ async function downloadOwnershipsFullData(
   );
 
   if (datasetUKResponse.status !== 200) {
-    console.error(
-      `We failed to get UK data for ${paddedMonth}/${year} , status code:`,
-      datasetUKResponse.status
+    logger.error(
+      `We failed to get UK data for ${paddedMonth}/${year} , status code: ${datasetUKResponse.status}`
     );
     return;
   }
@@ -198,7 +201,8 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetUKResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, false),
-    20000
+    20000,
+    logger
   );
 
   const datasetOverseasResponse = await axios.get(
@@ -211,9 +215,8 @@ async function downloadOwnershipsFullData(
   );
 
   if (datasetOverseasResponse.status !== 200) {
-    console.error(
-      `We failed to get overseas data for ${paddedMonth}/${year} , status code:`,
-      datasetOverseasResponse.status
+    logger.error(
+      `We failed to get overseas data for ${paddedMonth}/${year} , status code: ${datasetOverseasResponse.status}`
     );
     return;
   }
@@ -221,10 +224,11 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetOverseasResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, true),
-    20000
+    20000,
+    logger
   );
 
-  console.log(
+  logger.info(
     `Finished downloading the whole UK and overseas companies data from ${paddedMonth}/${year}`
   );
   await setPipelineLatestOwnershipData(

@@ -1,6 +1,9 @@
 import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
-import { Polygon } from "@turf/turf";
-import { nanoid } from "nanoid";
+import { Feature, Polygon } from "@turf/turf";
+import { customAlphabet } from "nanoid";
+
+/** Used to generate pipeline unique keys */
+const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
 
 // TODO: move this instance creation and model definitions into a separate 'models' file. Just have
 // callable queries in this file
@@ -12,6 +15,7 @@ export const sequelize = new Sequelize(
   {
     host: "localhost",
     dialect: "mysql",
+    logging: false,
   }
 );
 
@@ -37,17 +41,46 @@ export const PolygonModel = sequelize.define(
       allowNull: false,
       type: DataTypes.GEOMETRY,
     },
-    createdAt: {
-      defaultValue: null,
-      type: DataTypes.DATEONLY,
-    },
-    updatedAt: {
-      defaultValue: null,
-      type: DataTypes.DATEONLY,
-    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
   },
   {
     tableName: "land_ownership_polygons",
+  }
+);
+
+export const PendingPolygonModel = sequelize.define(
+  "PendingPolygon",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    poly_id: {
+      unique: true,
+      allowNull: false,
+      type: DataTypes.INTEGER,
+    },
+    geom: {
+      allowNull: false,
+      type: DataTypes.GEOMETRY,
+    },
+    council: {
+      allowNull: false,
+      type: DataTypes.STRING,
+    },
+    accepted: {
+      allowNull: false,
+      defaultValue: false,
+      type: DataTypes.BOOLEAN,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+  },
+  {
+    tableName: "pending_inspire_polygons",
   }
 );
 
@@ -141,6 +174,54 @@ LandOwnershipModel.belongsTo(PolygonModel, {
   foreignKey: "title_no",
   targetKey: "title_no",
 });
+
+export const deleteAllPendingPolygons = async () => {
+  await PendingPolygonModel.truncate();
+};
+
+export const bulkCreatePendingPolygons = async (
+  polygonGeojsonFeatures: Feature<Polygon>[],
+  council: string,
+  logging = false
+) => {
+  const parsedPolygons = polygonGeojsonFeatures.map((feature) => ({
+    poly_id: feature.properties.INSPIREID,
+    geom: feature.geometry,
+    council,
+    accepted: false,
+  }));
+
+  await PendingPolygonModel.bulkCreate(parsedPolygons, {
+    logging: logging ? console.log : false,
+    benchmark: true,
+    updateOnDuplicate: ["geom", "council", "accepted"],
+  });
+};
+
+/** A subset of the fields in the model, which are used for analysis */
+export type PendingPolygon = {
+  id: number;
+  poly_id: number;
+  geom: Polygon;
+  council: string;
+};
+
+/** Return the next pending polygon with id at least equal to minId  */
+export const getNextPendingPolygon = async (
+  minId: number
+): Promise<PendingPolygon> => {
+  const polygon: any = await PendingPolygonModel.findOne({
+    where: { id: { [Op.gte]: minId } },
+    raw: true,
+  });
+
+  return {
+    id: polygon.id,
+    poly_id: polygon.poly_id,
+    geom: polygon.geom,
+    council: polygon.council,
+  };
+};
 
 export const createOrUpdatePolygonGeom = async (
   poly_id: number,
@@ -303,7 +384,7 @@ export async function getLandOwnership(title_no: string) {
  * - intersect with the search area (if given)
  *
  * @param poly_ids an array of INSPIRE IDs
- * @param searchArea a GeoJSON Polygon geometry
+ * @param searchArea a stringified GeoJSON Polygon geometry
  * @param includeLeasholds whether to include polygons for leasholds (default true)
  * @returns an array of polygons that match the criteria
  */
@@ -364,6 +445,61 @@ export const getPolygonsByIdInSearchArea = async (
 };
 
 /**
+ * Get pending polygons that intersect with the search area.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ * @returns an array of pending polygons that match the criteria
+ */
+export const getPendingPolygonsInSearchArea = async (searchArea: string) => {
+  const query = `SELECT *
+    FROM pending_inspire_polygons
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?));`;
+
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
+ * Check whether a pending polygon with the given poly_id exists.
+ */
+export const pendingPolygonExists = async (
+  poly_id: number
+): Promise<boolean> => {
+  const polygon = await PendingPolygonModel.findOne({ where: { poly_id } });
+  return polygon !== null;
+};
+
+/**
+ * Mark pending polygon as accepted.
+ */
+export const acceptPendingPolygon = async (poly_id: number) => {
+  await PendingPolygonModel.update(
+    { accepted: true },
+    {
+      where: {
+        poly_id,
+      },
+    }
+  );
+};
+
+/**
+ * Insert all accepted pending polygons into the main land_ownership_polygons table
+ */
+export const insertAllAcceptedPendingPolygons = async () => {
+  const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
+    SELECT p.poly_id, p.geom
+    FROM pending_inspire_polygons p WHERE accepted = true
+    ON DUPLICATE KEY UPDATE geom = p.geom;`;
+
+  return await sequelize.query(query, {
+    type: QueryTypes.INSERT,
+  });
+};
+
+/**
  * Find property polygons that intersect within the give search area.
  *
  * @param searchArea a Polygon in WKT format
@@ -407,9 +543,9 @@ export const getPolygonsByProprietorName = async (name: string) => {
   });
 };
 
-/** Create an entry in the pipeline_runs table and return the UUID */
+/** Create an entry in the pipeline_runs table and return its unique key */
 export const startPipelineRun = async (): Promise<string> => {
-  const unique_key = nanoid(10);
+  const unique_key = nanoid();
   await PipelineRunModel.create({
     unique_key,
   });

@@ -37,14 +37,19 @@ pipeline's time and unique key.
 
 ## TODO
 
+- Address the various 'TODO' comments around the codebase
+
+- Query local DB rather than making HTTP requests to a live server. This will greatly increase the speed of the INSPIRE updates. But we maybe need to make a new DB table for 'pending polygons' which replaces the polygons table (or inserts without deleting polygons that no longer exist?) after all the changes have been processed.
+
 - Use a logging library (e.g. Winston) to log the results of pipelines into a dedicated file for
   each pipeline run. This will give us more control than piping to files using shell commands.
 
 - Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
-  polygons, then add unit tests for this spec
+  polygons, then add unit tests to match this spec
 
   - Use Mocha for writing a specification and tests, like we have started to do on the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Testing#unit-tests)
   - Add these tests to a Github CI pipeline, like on LX backend
+  - We'll need to modularise some of the long functions in the pipeline a bit more (e.g. the `comparePolygons` function) to make unit testing easier
 
 - Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
   especially for low-level details, prefer Mocha specs over written

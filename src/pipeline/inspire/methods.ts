@@ -1,8 +1,13 @@
 import "dotenv/config";
-import axios from "axios";
 import * as turf from "@turf/turf";
 import stats from "stats-lite";
 import NodeGeocoder from "node-geocoder";
+import { Logger } from "pino";
+import {
+  getPendingPolygonsInSearchArea,
+  getPolygonsByIdInSearchArea,
+  pendingPolygonExists,
+} from "../../queries/query";
 
 const precisionDecimalPlaces = 10;
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
@@ -48,32 +53,18 @@ const options = {
 const geocoder = NodeGeocoder(options);
 
 /**
- * Query the live boundary service for freehold (i.e. INSPIRE) polygons that
- * - have the given poly_ids
- * AND/OR
+ * Query the existing land_ownership_polygon table for freehold or unknown tenure (i.e. potentially
+ * INSPIRE) polygons that:
+ * - have the given poly_ids AND/OR
  * - intersect with the given search area polygon
- * @return array of GeoJSON polygon features
+ * @return array of polygons
  */
 export const getExistingPolygons = async (
   poly_ids?: number[],
   searchArea?: turf.Polygon | turf.MultiPolygon
 ) => {
-  try {
-    // Use POST request so that the length of the list of poly_ids is not limited
-    const response = await axios.post(
-      `${process.env.LIVE_BOUNDARY_SERVICE_URL}/polygonsDevSearch`, // TODO: change this just before committing
-      {
-        poly_ids,
-        searchArea: JSON.stringify(searchArea),
-        includeLeasholds: false,
-        secret: process.env.LIVE_BOUNDARY_SERVICE_SECRET,
-      }
-    );
-    return response.data;
-  } catch (err) {
-    console.error(`Error fetching polygons ${poly_ids}`, err.response?.data);
-    return null;
-  }
+  const searchAreaString = searchArea ? JSON.stringify(searchArea) : undefined;
+  return await getPolygonsByIdInSearchArea(poly_ids, searchAreaString, false);
 };
 
 /**
@@ -217,17 +208,16 @@ const polygonContains = (
  * @param inspireId the INSPIRE ID for the new (and old) polygon
  * @param suggestedLatLongOffset an offset to try, if we are unable to calculate one for this case
  *        e.g. the offset of a nearby polygon in the INSPIRE dataset
- * @param nearbyPolygons that we search over when analysing cases of boundary segmentation/merger
  * @param titleAddress address of matching title (if it exists)
  * @returns the type of match, percentage interesect (after any offsetting), offset statistics, and
  *        the IDs of other polygons relating to the match (e.g. if a segment/merge)
  */
 export const comparePolygons = async (
+  logger: Logger,
   inspireId: number,
   oldCoords: number[][], // TODO: remove this param and look this up within this method?
   newCoords: number[][],
   suggestedLatLongOffset: number[] = [0, 0],
-  nearbyPolygons: turf.Feature<turf.Polygon>[] = [],
   titleAddress: string | undefined = undefined
 ): Promise<{
   match: Match;
@@ -273,21 +263,20 @@ export const comparePolygons = async (
   }
 
   if (percentageIntersect === 0) {
-    console.log(
-      "polygon moved to a new location",
-      inspireId,
-      "new",
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "old",
-      oldCoords[0][1],
-      ",",
-      oldCoords[0][0]
+    logger.info(
+      {
+        inspireId,
+        oldLat: oldCoords[0][1],
+        oldLong: oldCoords[0][0],
+        newLat: newCoords[0][1],
+        newLong: newCoords[0][0],
+        percentageIntersect,
+      },
+      "polygon moved to a new location"
     );
 
     if (titleAddress) {
-      console.log("Title address is", titleAddress);
+      logger.info(`Title address is ${titleAddress}`);
       // Try geocoding the matching title address
       const results = await geocoder.geocode(`${titleAddress}, UK`);
 
@@ -308,11 +297,8 @@ export const comparePolygons = async (
 
         // If new polygon lies within 50m of a geocoded location, accept it as a moved boundary
         if (metersFromAddress < 50) {
-          console.log(
-            inspireId,
-            "moved and its center is",
-            metersFromAddress,
-            "m from its associated title address, so accept match"
+          logger.info(
+            `inspireid moved and its center is ${metersFromAddress} m from its associated title address, so accept match`
           );
           return {
             match: Match.Moved,
@@ -320,11 +306,8 @@ export const comparePolygons = async (
             offsetStats,
           };
         } else {
-          console.log(
-            inspireId,
-            "moved and its center is",
-            metersFromAddress,
-            "m from its associated title address, so match failed"
+          logger.info(
+            `inspireid moved and its center is ${metersFromAddress} m from its associated title address, so match failed`
           );
         }
       }
@@ -352,25 +335,20 @@ export const comparePolygons = async (
   );
   const oldAdjacentPolyIds = new Set<number>(
     oldAdjacentPolys
-      .map((polygon) => polygon.poly_id)
+      .map((polygon: any) => polygon.poly_id)
       .filter((id) => id !== inspireId)
   );
 
   const newPolyWithBuffer = turf.buffer(newPoly, 0.005, {
     units: "kilometers",
   });
-  const bufferVertices = turf.explode(newPolyWithBuffer);
-  // Perform spacial join and tag with INSPIRE ID if these vertices are within any other polygon
-  const taggedVertices = turf.tag(
-    bufferVertices,
-    turf.featureCollection(nearbyPolygons),
-    "INSPIREID",
-    "matchedInspireId"
+  const newAdjacentPolys = await getPendingPolygonsInSearchArea(
+    JSON.stringify(newPolyWithBuffer)
   );
   const newAdjacentPolyIds = new Set<number>(
-    taggedVertices.features
-      .map((feature) => feature.properties.matchedInspireId)
-      .filter((id) => id && id !== inspireId)
+    newAdjacentPolys
+      .map((polygon: any) => polygon.poly_id)
+      .filter((id) => id !== inspireId)
   );
 
   // Let's now take a look at:
@@ -422,9 +400,9 @@ export const comparePolygons = async (
           }
 
           // Match against old polygons in the existing database
-          const matchedPolys = (
+          const matchedPolys: any = (
             await getExistingPolygons(undefined, shrunkPolygonGained.geometry)
-          ).filter((poly) => poly.poly_id !== inspireId);
+          ).filter((poly: any) => poly.poly_id !== inspireId);
 
           for (const matchedPoly of matchedPolys) {
             const matchedPolyFeature = turf.polygon(
@@ -441,37 +419,38 @@ export const comparePolygons = async (
             // If this old polygon doens't exist anymore, class this as a merged polygon. And if it
             // was not completely contained within the new polygon's boundaries, something more
             // complicated has occured so retun as a failed match
-            const polyNoLongerExists = !nearbyPolygons.find(
-              (newPoly) => newPoly.properties.INSPIREID === matchedPoly.poly_id
-            );
+            const polyNoLongerExists = !(await pendingPolygonExists(
+              matchedPoly.poly_id
+            ));
             if (polyNoLongerExists) {
               oldMergedIds.add(matchedPoly.poly_id);
               if (polygonContains(newPoly, matchedPolyFeature)) {
-                console.log("merge match with", matchedPoly.poly_id);
+                logger.info(`merge match with ${matchedPoly.poly_id}`);
                 return;
               } else {
-                console.log(
-                  inspireId,
-                  `Old poly ${matchedPoly.poly_id} is not completely contained within the new poly`,
-                  newCoords[0][1],
-                  ",",
-                  newCoords[0][0],
-                  "% intersect:",
-                  percentageIntersect
+                logger.info(
+                  {
+                    inspireId,
+                    matchedId: matchedPoly.poly_id,
+                    lat: newCoords[0][1],
+                    long: newCoords[0][0],
+                    percentageIntersect,
+                  },
+                  "Old matched poly is not completely contained within the new poly"
                 );
               }
             } else {
               // This old poly still exists and isn't adjacent, so something more strange has happened
               // e.g. the old poly has been relocated
-              console.log(
-                inspireId,
-                "merged poly has moved",
-                matchedPoly.poly_id,
-                newCoords[0][1],
-                ",",
-                newCoords[0][0],
-                "% intersect:",
-                percentageIntersect
+              logger.info(
+                {
+                  inspireId,
+                  matchedId: matchedPoly.poly_id,
+                  lat: newCoords[0][1],
+                  long: newCoords[0][0],
+                  percentageIntersect,
+                },
+                "merged poly has moved"
               );
             }
             return {
@@ -511,10 +490,9 @@ export const comparePolygons = async (
         }
 
         // Search through the nearby polygons to see if one lies within this remainder. Shrink
-        // remainder by a buffer then pick these vertices as search points. Set the buffer to 1/10 of
-        // sqrt(area) (but at least 50cm), to filter out very long, thin boundaries that are probably
-        // artifacts - the buffer method will return undefined if the boundary shrinks to zero, so we
-        // can just discard it.
+        // remainder by a buffer equal to 1/10 of sqrt(area), but at least 50cm, to filter out very
+        // long, thin boundaries that are probably artifacts - the buffer method will return
+        // undefined if the boundary shrinks to zero, so we can just discard it.
         const bufferMeters = Math.max(
           0.5,
           Math.sqrt(remainderPolygonArea) / 10
@@ -527,81 +505,67 @@ export const comparePolygons = async (
           }
         );
         if (!shrunkRemainder) {
-          // console.log("shrunk to zero");
           remainder = turf.difference(remainder, remainderPolygon);
           return;
         }
-        const pointsInRemainder = turf.explode(shrunkRemainder); // a point for every vertex
 
-        // Perform spacial join and tag with INSPIRE ID if these points are within any other polygon
-        const taggedPoints = turf.tag(
-          pointsInRemainder,
-          turf.featureCollection(nearbyPolygons),
-          "INSPIREID",
-          "matchedInspireId"
+        const matchedPolys: any[] = await getPendingPolygonsInSearchArea(
+          JSON.stringify(shrunkRemainder)
         );
 
-        // Take first match (if any)
-        const matchedInspireId = taggedPoints.features.find(
-          (feature) => feature.properties.matchedInspireId
-        )?.properties?.matchedInspireId;
+        if (matchedPolys.length > 0) {
+          // Take first match
+          const matchedPoly = matchedPolys[0];
 
-        if (matchedInspireId) {
-          // There was a match
-          const matchedPoly = nearbyPolygons.find(
-            (feature) => feature.properties.INSPIREID === matchedInspireId
-          );
-
-          if (oldAdjacentPolyIds.has(matchedInspireId)) {
+          if (oldAdjacentPolyIds.has(matchedPoly.poly_id)) {
             // If the match was already an adjacent poly, we can assume boundary has just shifted
-            remainder = turf.difference(remainder, matchedPoly);
+            remainder = turf.difference(remainder, matchedPoly.geom);
             return;
           }
 
           // If this poly is new, class this as a segmented polygon. And if it is not completely
           // contained within boundaryLost, something more complicated has occured so retun as a
           // failed match
-          const polyAlreadyExisted = (
-            await getExistingPolygons([matchedInspireId])
-          ).length;
+          const polyAlreadyExisted =
+            (await getExistingPolygons([matchedPoly.poly_id])).length > 0;
           if (!polyAlreadyExisted) {
-            newSegmentIds.add(matchedInspireId);
+            newSegmentIds.add(matchedPoly.poly_id);
 
             // Check whether this segment is fully within the old polygon
-            if (polygonContains(oldPoly, matchedPoly)) {
-              remainder = turf.difference(remainder, matchedPoly);
+            if (polygonContains(oldPoly, matchedPoly.geom)) {
+              remainder = turf.difference(remainder, matchedPoly.geom);
               return;
             } else {
               // Something complicated has happened e.g. neighbouring properties have both segmented and
               // then merged along different boundaries
-              console.log(
-                inspireId,
-                "matched polygon is not fully contained within the old poly",
-                matchedInspireId,
-                newCoords[0][1],
-                ",",
-                newCoords[0][0],
-                "% intersect:",
-                percentageIntersect
+              logger.info(
+                {
+                  inspireId,
+                  matchedInspireId: matchedPoly.poly_id,
+                  lat: newCoords[0][1],
+                  long: newCoords[0][0],
+                  percentageIntersect,
+                },
+                "matched polygon is not fully contained within the old poly"
               );
             }
           } else {
             // This poly is not new and wasn't adjacent, so something more strange has happened
             // e.g. an old poly has been relocated
-            console.log(
-              inspireId,
-              "new segment poly has moved",
-              matchedInspireId,
-              newCoords[0][1],
-              ",",
-              newCoords[0][0],
-              "% intersect:",
-              percentageIntersect
+            logger.info(
+              {
+                inspireId,
+                matchedInspireId: matchedPoly.poly_id,
+                lat: newCoords[0][1],
+                long: newCoords[0][0],
+                percentageIntersect,
+              },
+              "new segment poly has moved"
             );
           }
           failedMatch = true;
         } else {
-          console.log(
+          logger.info(
             "Part of the old boundary is no longer registered as an INSPIRE polygon"
           );
           incompleteSegmentation = true;
@@ -626,14 +590,14 @@ export const comparePolygons = async (
   if (oldMergedIds.size === 0 && newSegmentIds.size === 0) {
     // This is just a boundary shift i.e. the boundary changed shape without merging/segmenting, and
     // land was maybe taken from/given to a neighbouring property.
-    console.log(
-      inspireId,
-      "boundaries shifted",
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "boundaries shifted"
     );
     return {
       match: Match.BoundariesShifted,
@@ -648,16 +612,16 @@ export const comparePolygons = async (
     (oldMergedIds.size && incompleteSegmentation) ||
     (oldMergedIds.size && newSegmentIds.size)
   ) {
-    console.log(
-      inspireId,
-      "merge and segment",
-      Array.from(oldMergedIds),
-      Array.from(newSegmentIds),
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        oldMergedIds: Array.from(oldMergedIds),
+        newSegmentIds: Array.from(newSegmentIds),
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "merge and segment"
     );
     return {
       match: Match.MergedAndSegmented,
@@ -669,15 +633,15 @@ export const comparePolygons = async (
   }
 
   if (incompleteMerge) {
-    console.log(
-      inspireId,
-      "incompletely merged with",
-      Array.from(oldMergedIds),
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        oldMergedIds: Array.from(oldMergedIds),
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "incomplete merge"
     );
     return {
       match: Match.MergedIncomplete,
@@ -689,15 +653,15 @@ export const comparePolygons = async (
   }
 
   if (incompleteSegmentation) {
-    console.log(
-      inspireId,
-      "incompletely segmented into",
-      Array.from(newSegmentIds),
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        newSegmentIds: Array.from(newSegmentIds),
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "incomplete segmentation"
     );
     return {
       match: Match.SegmentedIncomplete,
@@ -709,15 +673,15 @@ export const comparePolygons = async (
   }
 
   if (oldMergedIds.size) {
-    console.log(
-      inspireId,
-      "completely merged with",
-      Array.from(oldMergedIds),
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        oldMergedIds: Array.from(oldMergedIds),
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "complete merge"
     );
     return {
       match: Match.Merged,
@@ -729,15 +693,15 @@ export const comparePolygons = async (
   }
 
   if (newSegmentIds.size) {
-    console.log(
-      inspireId,
-      "fully segmented into",
-      Array.from(newSegmentIds),
-      newCoords[0][1],
-      ",",
-      newCoords[0][0],
-      "% intersect:",
-      percentageIntersect
+    logger.info(
+      {
+        inspireId,
+        newSegmentIds: Array.from(newSegmentIds),
+        lat: newCoords[0][1],
+        long: newCoords[0][0],
+        percentageIntersect,
+      },
+      "complete segmentation"
     );
 
     return {
@@ -749,14 +713,15 @@ export const comparePolygons = async (
     };
   }
 
-  console.error(
-    "We shouldn't hit this",
-    inspireId,
-    oldMergedIds,
-    newSegmentIds,
-    newCoords[0][1],
-    ",",
-    newCoords[0][0]
+  logger.error(
+    {
+      inspireId,
+      oldMergedIds,
+      newSegmentIds,
+      lat: newCoords[0][1],
+      long: newCoords[0][0],
+    },
+    "We shouldn't hit this"
   );
   return {
     match: Match.Fail,

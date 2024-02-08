@@ -2,10 +2,11 @@ import "dotenv/config";
 import axios from "axios";
 import * as unzip from "unzip-stream";
 import csvParser, { CsvParser } from "csv-parser";
+import { Logger } from "pino";
 
 // These are all helper functions for the 2 main functions in ./update.ts
 
-export const getDatasetHistory = async (overseas: boolean) => {
+export const getDatasetHistory = async (overseas: boolean, logger: Logger) => {
   const type = overseas ? "ocod" : "ccod";
   const response = await axios.get(
     `${process.env.GOV_API_URL}/datasets/history/${type}`,
@@ -16,7 +17,7 @@ export const getDatasetHistory = async (overseas: boolean) => {
     }
   );
   if (response.status !== 200) {
-    console.error(
+    logger.error(
       `We failed to get ${type} dataset history, status code: ${response.status}`
     );
     return;
@@ -30,7 +31,7 @@ export const getDatasetHistory = async (overseas: boolean) => {
   }));
 };
 
-export const getLatestDatasets = async (overseas: boolean) => {
+export const getLatestDatasets = async (overseas: boolean, logger: Logger) => {
   const type = overseas ? "ocod" : "ccod";
   const response = await axios.get(
     `${process.env.GOV_API_URL}/datasets/${type}`,
@@ -41,7 +42,7 @@ export const getLatestDatasets = async (overseas: boolean) => {
     }
   );
   if (response.status !== 200) {
-    console.error(
+    logger.error(
       `We failed to get the latest ${type} dataset, status code: ${response.status}`
     );
     return;
@@ -65,6 +66,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
   downloadUrl: string,
   processChunkOfRowsFunc: (chunkOfRows: any[]) => Promise<void>,
   chunkSize: number,
+  logger: Logger,
   logProgress: boolean = true
 ) => {
   const response = await axios.get(downloadUrl, {
@@ -74,7 +76,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
   await new Promise((resolve, reject) => {
     response.data.pipe(unzip.Parse()).on("entry", (entry) => {
       var filePath = entry.path;
-      console.log("Reading", filePath);
+      logger.info(`Reading ${filePath}`);
 
       if (filePath.substr(filePath.lastIndexOf(".") + 1) === "csv") {
         const csvPipe: CsvParser = entry.pipe(csvParser());
@@ -90,7 +92,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
             sendingChunk = true;
             csvPipe.pause(); // pause the stream to avoid OOM error
             if (logProgress) {
-              console.log(
+              logger.info(
                 `Row ${rowCount} of ${filePath} , processing chunk of size ${chunkSize}`
               );
             }

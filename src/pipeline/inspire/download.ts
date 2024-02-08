@@ -5,8 +5,14 @@ import fs, { readFileSync } from "fs";
 import { readdir, lstat, writeFile, rm } from "fs/promises";
 import extract from "extract-zip";
 import ogr2ogr from "ogr2ogr";
-import moment from "moment-timezone";
 import geojsonhint from "@mapbox/geojsonhint";
+import getLogger from "../logger";
+import { Logger } from "pino";
+import {
+  bulkCreatePendingPolygons,
+  deleteAllPendingPolygons,
+} from "../../queries/query";
+import { FeatureCollection, Polygon } from "@turf/turf";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -16,9 +22,10 @@ const userAgents = [
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.11.0.0 Safari/537.36",
 ];
 
-const geojsonPath = path.resolve("./geojson");
 let downloadPath: string;
+let geojsonPath: string;
 let newDownloads: string[] = [];
+let logger: Logger;
 
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (numCouncils: number) => {
@@ -48,7 +55,7 @@ const downloadInspire = async (numCouncils: number) => {
     return inspireDownloadLinks;
   });
 
-  console.log(
+  logger.info(
     `We found INSPIRE download links for ${inspireDownloadLinks.length} councils`
   );
 
@@ -63,11 +70,11 @@ const downloadInspire = async (numCouncils: number) => {
     const existingDownloadFile = `${downloadPath}/${newDownloadFile}`;
     // If existing file is already downloaded for this month, we don't need to download it again
     if (fs.existsSync(existingDownloadFile)) {
-      console.log(
+      logger.info(
         `Skip ${newDownloadFile} since we have already downloaded data for this council`
       );
     } else {
-      console.log(`Downloading ${newDownloadFile}`);
+      logger.info(`Downloading ${newDownloadFile}`);
       await download.saveAs(`${downloadPath}/${newDownloadFile}`);
     }
     newDownloads.push(newDownloadFile);
@@ -76,56 +83,62 @@ const downloadInspire = async (numCouncils: number) => {
   await browser.close();
 };
 
-/** Unzip archives for each of the new downloads in parallel */
+/** Unzip archives for each of the new downloads */
 const unzipArchives = async () => {
-  await Promise.all(
-    newDownloads.map(async (file) => {
-      const unzipDir = path.resolve(
-        `${downloadPath}/${file}`.replace(".zip", "")
-      );
-      await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
-      console.log("Unzip:", file);
-      await extract(path.resolve(`${downloadPath}/${file}`), {
-        dir: unzipDir,
-      });
-    })
-  );
+  for (const file of newDownloads) {
+    const unzipDir = path.resolve(
+      `${downloadPath}/${file}`.replace(".zip", "")
+    );
+    await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
+    logger.info(`Unzip: ${file}`);
+    await extract(path.resolve(`${downloadPath}/${file}`), {
+      dir: unzipDir,
+    });
+  }
 };
 
-/** Transform gml files into GeoJSON for each council in parallel */
+/**
+ * Transform gml files into GeoJSON for each council (if GeoJSON hasn't already been generated).
+ */
 const transformGMLToGeoJson = async () => {
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
   fs.mkdirSync(geojsonPath, { recursive: true });
 
-  await Promise.all(
-    councils.map(async (council) => {
-      const folderPath = `${downloadPath}/${council}`;
-      const stat = await lstat(folderPath);
+  for (const council of councils) {
+    const geojsonFilePath = `${geojsonPath}/${council}.json`;
+    // If GeoJSON already exists for this council and month, we don't need to transform it again
+    if (fs.existsSync(geojsonFilePath)) {
+      logger.info(
+        `Skip transforming ${council} GML since GeoJSON already exists`
+      );
+      continue;
+    }
 
-      if (stat.isDirectory()) {
-        const files = await readdir(folderPath);
-        if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
-          const gmlFile = `${folderPath}/Land_Registry_Cadastral_Parcels.gml`;
-          console.log("Transform GML:", council);
+    const downloadFolderPath = `${downloadPath}/${council}`;
+    const stat = await lstat(downloadFolderPath);
 
-          const { data } = await ogr2ogr(gmlFile, {
-            maxBuffer: 500 * 1024 * 1024, // 500 MB
-            options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
-          });
+    if (stat.isDirectory()) {
+      const files = await readdir(downloadFolderPath);
+      if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
+        const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
+        logger.info(`Transform GML: ${council}`);
 
-          try {
-            await writeFile(
-              `${geojsonPath}/${council}.json`,
-              JSON.stringify(data)
-            );
-            console.log(`Written ${council}.json successfully`);
-          } catch (err) {
-            console.error(`Writing ${council}.json error`, err);
-          }
+        const { data } = await ogr2ogr(gmlFile, {
+          maxBuffer: 500 * 1024 * 1024, // 500 MB
+          options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
+        });
+
+        try {
+          await writeFile(geojsonFilePath, JSON.stringify(data));
+          logger.info(`Written ${council}.json successfully`);
+        } catch (err) {
+          logger.error(err, `Writing ${council}.json error`);
+          throw err;
         }
       }
-    })
-  );
+    }
+  }
+  logger.info("Finished transforming GML files");
 };
 
 /**
@@ -139,54 +152,79 @@ const geoJsonSanityCheck = () => {
     .filter((f) => f.includes(".json"));
 
   for (const filename of geoJsonFiles) {
+    logger.info(`Checking validity of ${filename}`);
     const contents = readFileSync(
       path.resolve(`${geojsonPath}/${filename}`),
       "utf8"
     );
-    errors.push(
-      ...geojsonhint.hint(contents).map((errors) => ({ ...errors, filename }))
-    );
+    const geojsonErrors = geojsonhint
+      .hint(JSON.parse(contents))
+      .map((errors) => ({ ...errors, filename }));
+    errors.push(...geojsonErrors);
   }
   return errors;
+};
+
+const createPendingPolygons = async () => {
+  await deleteAllPendingPolygons();
+
+  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
+
+  for (const council of councils) {
+    const filePath = `${geojsonPath}/${council}.json`;
+    const data: FeatureCollection<Polygon> = JSON.parse(
+      fs.readFileSync(filePath, "utf8")
+    );
+    const councilName = path.parse(filePath).name;
+    logger.info(
+      `Number of polygons in ${councilName}: ${data.features.length}`
+    );
+
+    // Insert into DB in chunks so we don't hit MySQL max packet limit
+    const chunkSize = 10000;
+    while (data.features.length > 0) {
+      const chunk = data.features.splice(0, chunkSize);
+      await bulkCreatePendingPolygons(chunk, councilName);
+    }
+  }
+
+  logger.info("Created all pending INSPIRE polygons in DB");
 };
 
 /**
  * Download the latest INSPIRE data, unzip the archive for each council, then transform each of the
  * GML files to GeoJSON data. The results will be saved to the geojson/ folder, a json file for each
- * council.
+ * council. Finally, after checking that the GeoJSON is valid, insert the data from these GeoJSON
+ * files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
  *
+ * @param latestInspirePublishMonth month of the latest available INSPIRE data in YYYY-MM format
  * @param numCouncils Download the data for the first <numCouncils> councils. Defaults to all.
  */
-export const downloadGeoJsonPolygons = async (numCouncils: number = 1e4) => {
-  //  INSPIRE data is published on the first Sunday of every month. Let's find the month of the
-  //  latest publish
-  const date = moment().tz("Europe/London").startOf("month");
-  date.day(7); // the next sunday
-  if (date.date() > 7) {
-    // if the date is now after 7th, go back one week
-    date.day(-7);
-  }
-  const today = moment().tz("Europe/London");
-  if (date.isSame(today, "date")) {
-    throw new Error(
-      "Today is first Sunday of the month. Wait until tomorrow to run, to avoid data inconsistency problems"
-    );
-  }
-  if (date.isAfter(today)) {
-    // Data for this month hasn't been published yet so subtract a month
-    date.subtract(1, "month");
-  }
-  const latestInspirePublishMonth = date.format("YYYY-MM");
-  downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
+export const downloadInspirePolygons = async (
+  pipelineUniqueKey: string,
+  latestInspirePublishMonth: string,
+  numCouncils: number = 1e4
+) => {
+  logger = getLogger(pipelineUniqueKey);
 
-  // reset geojson folder
-  fs.rmSync(geojsonPath, { recursive: true, force: true });
-  // delete old files in the downloads folder
-  const oldFolders = fs
+  downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
+  geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
+
+  // delete old files in the geojson and downloads folder
+  const oldDownloadsFolders = fs
     .readdirSync("./downloads")
     .filter((folderName) => folderName !== latestInspirePublishMonth);
-  for (const folder of oldFolders) {
+  for (const folder of oldDownloadsFolders) {
     fs.rmSync(path.resolve("./downloads", folder), {
+      recursive: true,
+      force: true,
+    });
+  }
+  const oldGeojsonFolders = fs
+    .readdirSync("./geojson")
+    .filter((folderName) => folderName !== latestInspirePublishMonth);
+  for (const folder of oldGeojsonFolders) {
+    fs.rmSync(path.resolve("./geojson", folder), {
       recursive: true,
       force: true,
     });
@@ -203,5 +241,9 @@ export const downloadGeoJsonPolygons = async (numCouncils: number = 1e4) => {
     throw new Error(
       `GeoJSON validation failed: ${JSON.stringify(errors, null, 2)}`
     );
+  } else {
+    logger.info("All GeoJSON files are valid");
   }
+
+  await createPendingPolygons();
 };
