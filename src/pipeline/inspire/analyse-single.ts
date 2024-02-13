@@ -33,7 +33,7 @@ const analysePolygonInJSON = async (
       vertex.reverse();
     }
 
-    const existingPolygon = (await getExistingPolygons(logger, [id]))[0];
+    const existingPolygon: any = (await getExistingPolygons([id]))[0];
 
     if (existingPolygon) {
       const oldCoords = existingPolygon.geom.coordinates[0];
