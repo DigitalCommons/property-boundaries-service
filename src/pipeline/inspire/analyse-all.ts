@@ -118,11 +118,6 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
   if (existingPolygon) {
     const newCoords: number[][] = geom.coordinates[0];
     const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
-    // // Our DB is in lat-long format and INSPIRE (GeoJSON) is in long-lat format.
-    // // Reverse old ones since turf uses long-lat
-    // for (const vertex of oldCoords) {
-    //   vertex.reverse();
-    // }
 
     // Get address of matching title (if exists)
     const titleAddress = existingPolygon.property_address || undefined;
@@ -160,7 +155,8 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
     switch (match) {
       case Match.Exact:
         allIds.exactMatchIds.add(inspireId);
-        break;
+        // Move on to the next polygon and skip updating the database
+        return;
       case Match.SameVertices:
         allIds.sameVerticesIds.add(inspireId);
         break;

@@ -6,7 +6,7 @@ module.exports = {
       `CREATE TABLE land_ownership_polygons (
         id int NOT NULL AUTO_INCREMENT,
         poly_id int NOT NULL,
-        title_no varchar(255) NOT NULL,
+        title_no varchar(255) DEFAULT NULL,
         geom geometry NOT NULL,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP,

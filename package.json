@@ -6,10 +6,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc",
     "serve": "pm2 start dist/app.js --node-args='--max-old-space-size=5120'",
-    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=1024' nodemon -e ts -w src src/app.ts",
-    "pipeline": "node dist/pipeline.run.js 2>> logs/error.log 1>> logs/output.log",
-    "download": "node dist/download.js",
-    "analyse": "node dist/pipeline/inspire/analyse-all.js",
+    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=1024' nodemon -e ts src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/plot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
