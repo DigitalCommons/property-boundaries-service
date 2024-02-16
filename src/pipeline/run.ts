@@ -1,14 +1,11 @@
 import "dotenv/config";
 import axios from "axios";
 import { hostname } from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { startPipelineRun } from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
-import { downloadInspirePolygons } from "./inspire/download";
+import { downloadAndBackupInspirePolygons } from "./inspire/download";
 import { analyseAllPendingPolygons } from "./inspire/analyse-all";
 import getLogger from "./logger";
-import { Logger } from "pino";
 import moment from "moment-timezone";
 
 const matrixWebhookUrl = process.env.MATRIX_WEBHOOK_URL;
@@ -30,9 +27,10 @@ const runPipeline = async (uniqueKey: string) => {
 
     const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
-    await downloadInspirePolygons(uniqueKey, latestInspirePublishMonth);
-
-    backupInspireDownloads(logger); // don't await, let it run in background
+    await downloadAndBackupInspirePolygons(
+      uniqueKey,
+      latestInspirePublishMonth
+    );
 
     // Run our matching algorithm on the new INSPIRE data
     const summaryTable = await analyseAllPendingPolygons(uniqueKey, true);
@@ -63,18 +61,6 @@ const runPipeline = async (uniqueKey: string) => {
 
     throw err;
   }
-};
-
-/**
- * Run backup script in a separate shell process to upload latest raw INSPIRE data to our Hetzner
- * storage box.
- */
-const backupInspireDownloads = async (logger: Logger) => {
-  const command = "bash scripts/backup-inspire-downloads.sh";
-  logger.info(`Running '${command}'`);
-  const { stdout, stderr } = await promisify(exec)(command);
-  logger.info(`raw INSPIRE backup script stdout: ${stdout}`);
-  logger.info(`raw INSPIRE backup script stderr: ${stderr}`);
 };
 
 /**
