@@ -29,8 +29,6 @@ let logger: Logger;
 
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (numCouncils: number) => {
-  fs.mkdirSync(downloadPath, { recursive: true });
-
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
@@ -102,7 +100,6 @@ const unzipArchives = async () => {
  */
 const transformGMLToGeoJson = async () => {
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
-  fs.mkdirSync(geojsonPath, { recursive: true });
 
   for (const council of councils) {
     const geojsonFilePath = `${geojsonPath}/${council}.json`;
@@ -209,6 +206,8 @@ export const downloadInspirePolygons = async (
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
   geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
+  fs.mkdirSync(downloadPath, { recursive: true });
+  fs.mkdirSync(geojsonPath, { recursive: true });
 
   // delete old files in the geojson and downloads folder
   const oldDownloadsFolders = fs
