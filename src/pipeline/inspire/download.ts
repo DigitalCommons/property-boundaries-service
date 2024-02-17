@@ -141,7 +141,7 @@ const transformGMLToGeoJson = async () => {
         logger.info(`Transform GML: ${council}`);
 
         const { data } = await ogr2ogr(gmlFile, {
-          maxBuffer: 500 * 1024 * 1024, // 500 MB
+          maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
           options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
         });
 
