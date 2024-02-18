@@ -162,8 +162,8 @@ const runPipeline = async (
 
   const uniqueKey = await triggerPipelineRun();
   const msg = uniqueKey
-    ? `Pipeline ${uniqueKey} has started`
-    : "Pipeline already running";
+    ? `Pipeline ${uniqueKey} has started\n`
+    : "Pipeline already running\n";
   console.log(msg);
   return h.response(msg);
 };

@@ -74,11 +74,13 @@ const downloadInspire = async (numCouncils: number) => {
     )}`;
     if (fs.existsSync(geojsonFilePath)) {
       // If GeoJSON already exists for this month, we don't need to download and transform it again
-      logger.info(`Skip ${newDownloadFile} since GeoJSON already exists`);
+      logger.info(
+        `Skip downloading and transforming ${newDownloadFile} since GeoJSON already exists`
+      );
     } else if (fs.existsSync(existingDownloadFile)) {
       // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
-        `Skip ${newDownloadFile} since we have already downloaded data for this council`
+        `Skip downloading ${newDownloadFile} since zipfile already exists`
       );
       // We still want to add it to newDownloads so that we unzip and transform it
       newDownloads.push(newDownloadFile);
@@ -104,72 +106,63 @@ const backupInspireDownloads = async () => {
   logger.info(`raw INSPIRE backup script stderr: ${stderr}`);
 };
 
-/** Unzip archives for each of the new downloads then delete the original zip (to save space) */
-const unzipArchives = async () => {
-  for (const file of newDownloads) {
-    const zipFile = path.resolve(`${downloadPath}/${file}`);
-    const unzipDir = path.resolve(
-      `${downloadPath}/${file}`.replace(".zip", "")
-    );
-    await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
-    logger.info(`Unzip: ${file}`);
-    await extract(zipFile, {
-      dir: unzipDir,
-    });
-    await rm(zipFile, { force: true }); // Remove zip file
-  }
+/** Unzip an archive then delete the original archive (to save space) */
+const unzipArchive = async (council: string) => {
+  const zipFile = path.resolve(`${downloadPath}/${council}.zip`);
+  const unzipDir = path.resolve(`${downloadPath}/${council}`);
+  await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
+  logger.info(`Unzip: ${council}.zip`);
+  await extract(zipFile, {
+    dir: unzipDir,
+  });
+  await rm(zipFile, { force: true }); // Remove zip file
 };
 
 /**
- * Transform gml files into GeoJSON for each council (if GeoJSON hasn't already been generated),
- * then delete the unzipped folder that contained the gml file.
+ * Transform GML file for a council into a GeoJSON (if GeoJSON hasn't already been generated), then
+ * delete the unzipped folder that contained the GML file to save space.
  */
-const transformGMLToGeoJson = async () => {
-  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
+const transformGMLToGeoJson = async (council: string) => {
+  const downloadFolderPath = `${downloadPath}/${council}`;
+  const geojsonFilePath = `${geojsonPath}/${council}.json`;
 
-  for (const council of councils) {
-    const downloadFolderPath = `${downloadPath}/${council}`;
-    const geojsonFilePath = `${geojsonPath}/${council}.json`;
+  // If GeoJSON already exists for this council and month, we don't need to transform it again
+  if (fs.existsSync(geojsonFilePath)) {
+    logger.info(
+      `Skip transforming ${council} GML since GeoJSON already exists`
+    );
+    // Remove download folder to save space
+    await rm(downloadFolderPath, { recursive: true, force: true });
+    return;
+  }
 
-    // If GeoJSON already exists for this council and month, we don't need to transform it again
-    if (fs.existsSync(geojsonFilePath)) {
-      logger.info(
-        `Skip transforming ${council} GML since GeoJSON already exists`
-      );
+  const stat = await lstat(downloadFolderPath);
+
+  if (stat.isDirectory()) {
+    const files = await readdir(downloadFolderPath);
+    if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
+      const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
+      logger.info(`Transform GML: ${council}`);
+
+      const { data } = await ogr2ogr(gmlFile, {
+        maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
+        options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
+      });
+
+      try {
+        await writeFile(geojsonFilePath, JSON.stringify(data));
+        logger.info(`Written ${council}.json successfully`);
+      } catch (err) {
+        logger.error(err, `Writing ${council}.json error`);
+        throw err;
+      }
+
       // Remove download folder to save space
       await rm(downloadFolderPath, { recursive: true, force: true });
-      continue;
-    }
-
-    const stat = await lstat(downloadFolderPath);
-
-    if (stat.isDirectory()) {
-      const files = await readdir(downloadFolderPath);
-      if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
-        const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
-        logger.info(`Transform GML: ${council}`);
-
-        const { data } = await ogr2ogr(gmlFile, {
-          maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
-          options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
-        });
-
-        try {
-          await writeFile(geojsonFilePath, JSON.stringify(data));
-          logger.info(`Written ${council}.json successfully`);
-        } catch (err) {
-          logger.error(err, `Writing ${council}.json error`);
-          throw err;
-        }
-
-        // Remove download folder to save space
-        await rm(downloadFolderPath, { recursive: true, force: true });
-      } else {
-        throw new Error(`Download for ${council} didn't include GML file`);
-      }
+    } else {
+      throw new Error(`Download for ${council} didn't contain a GML file`);
     }
   }
-  logger.info("Finished transforming GML files");
 };
 
 /**
@@ -267,8 +260,14 @@ export const downloadAndBackupInspirePolygons = async (
 
   await downloadInspire(numCouncils);
   await backupInspireDownloads();
-  await unzipArchives();
-  await transformGMLToGeoJson();
+
+  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
+
+  for (const council of councils) {
+    await unzipArchive(council);
+    await transformGMLToGeoJson(council);
+  }
+  logger.info("Finished transforming GML files");
 
   const errors = geoJsonSanityCheck();
   if (errors.length > 0) {
