@@ -68,16 +68,25 @@ const downloadInspire = async (numCouncils: number) => {
     const newDownloadFile = download.suggestedFilename();
 
     const existingDownloadFile = `${downloadPath}/${newDownloadFile}`;
-    // If existing file is already downloaded for this month, we don't need to download it again
-    if (fs.existsSync(existingDownloadFile)) {
+    const geojsonFilePath = `${geojsonPath}/${newDownloadFile.replace(
+      ".zip",
+      ".json"
+    )}`;
+    if (fs.existsSync(geojsonFilePath)) {
+      // If GeoJSON already exists for this month, we don't need to download and transform it again
+      logger.info(`Skip ${newDownloadFile} since GeoJSON already exists`);
+    } else if (fs.existsSync(existingDownloadFile)) {
+      // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
         `Skip ${newDownloadFile} since we have already downloaded data for this council`
       );
+      // We still want to add it to newDownloads so that we unzip and transform it
+      newDownloads.push(newDownloadFile);
     } else {
       logger.info(`Downloading ${newDownloadFile}`);
       await download.saveAs(`${downloadPath}/${newDownloadFile}`);
+      newDownloads.push(newDownloadFile);
     }
-    newDownloads.push(newDownloadFile);
   }
 
   await browser.close();
