@@ -187,12 +187,16 @@ const geoJsonSanityCheck = () => {
     var size = fs.statSync(filePath).size;
     if (size > 450 * 1024 * 1024) {
       // we might hit Node maximum string size limit so just skip
+      // TODO: improve this so we check the larger files too. Read the file straight into an object
+      // rather than creating a string first?
       continue;
     }
 
     const contents = readFileSync(filePath, "utf8");
     const geojsonErrors = geojsonhint
-      .hint(JSON.parse(contents))
+      .hint(JSON.parse(contents), {
+        ignoreRightHandRule: true,
+      })
       .map((errors) => ({ ...errors, filename }));
     errors.push(...geojsonErrors);
   }

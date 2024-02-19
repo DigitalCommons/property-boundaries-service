@@ -67,6 +67,8 @@ const runPipeline = async (uniqueKey: string) => {
         body: `[${hostname()}] [property_boundaries] 🔴 Failed ownership + INSPIRE pipeline ${uniqueKey}`,
       });
     }
+
+    throw err;
   }
 };
 
