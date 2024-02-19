@@ -162,10 +162,10 @@ const runPipeline = async (
 
   const uniqueKey = await triggerPipelineRun();
   const msg = uniqueKey
-    ? `Pipeline ${uniqueKey} has started\n`
-    : "Pipeline already running\n";
+    ? `Pipeline ${uniqueKey} has started`
+    : "Pipeline already running";
   console.log(msg);
-  return h.response(msg);
+  return h.response(`${msg}\n`);
 };
 
 const getBoundariesRoute: ServerRoute = {

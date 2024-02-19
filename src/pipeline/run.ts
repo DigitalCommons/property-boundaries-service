@@ -23,22 +23,30 @@ const runPipeline = async (uniqueKey: string) => {
   const startTimeMs = Date.now();
 
   try {
+    // Include brief logs to console so they show up in pm2 logs. Pino logs in more detail to file.
+    console.log(`Pipeline ${uniqueKey} updating ownerships`);
     await updateOwnerships(uniqueKey);
 
     const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
+    console.log(`Pipeline ${uniqueKey} downloading INSPIRE data`);
     await downloadAndBackupInspirePolygons(
       uniqueKey,
       latestInspirePublishMonth
     );
 
     // Run our matching algorithm on the new INSPIRE data
+    console.log(
+      `Pipeline ${uniqueKey} analysing INSPIRE data and updating the DB`
+    );
     const summaryTable = await analyseAllPendingPolygons(uniqueKey, true);
 
     running = false;
     const timeElapsed = moment.duration(Date.now() - startTimeMs);
     const timeElapsedString = `${timeElapsed.hours()} h ${timeElapsed.minutes()} min`;
-    logger.info(`Pipeline ${uniqueKey} finished in ${timeElapsedString}`);
+    const msg = `Pipeline ${uniqueKey} finished in ${timeElapsedString}`;
+    console.log(msg);
+    logger.info(msg);
 
     // Notify Matrix
     if (matrixWebhookUrl) {
@@ -48,8 +56,9 @@ const runPipeline = async (uniqueKey: string) => {
       });
     }
   } catch (err) {
-    logger.error(err, "Pipeline failed");
     running = false;
+    logger.error(err, "Pipeline failed");
+    console.error(`Pipeline ${uniqueKey} failed`, err?.message);
 
     // Notify Matrix
     if (matrixWebhookUrl) {
@@ -58,8 +67,6 @@ const runPipeline = async (uniqueKey: string) => {
         body: `[${hostname()}] [property_boundaries] 🔴 Failed ownership + INSPIRE pipeline ${uniqueKey}`,
       });
     }
-
-    throw err;
   }
 };
 
