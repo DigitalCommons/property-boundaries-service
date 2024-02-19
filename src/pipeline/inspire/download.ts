@@ -203,10 +203,17 @@ const geoJsonSanityCheck = () => {
   return errors;
 };
 
+/**
+ * For all GeoJSONs in the geojson folder, add each polygon to pending_inspire_polygons, ready for
+ * analysis, then delete the GeoJSON file (to save space).
+ */
 const createPendingPolygons = async () => {
   await deleteAllPendingPolygons();
 
-  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
+  const councils = fs
+    .readdirSync(geojsonPath)
+    .filter((f) => f.includes(".json"))
+    .map((filename) => filename.replace(".json", ""));
 
   for (const council of councils) {
     const geojsonFilePath = `${geojsonPath}/${council}.json`;
@@ -222,7 +229,6 @@ const createPendingPolygons = async () => {
       await bulkCreatePendingPolygons(chunk, council);
     }
 
-    // Remove geojson file (to save space)
     await rm(geojsonFilePath, { force: true });
   }
 
