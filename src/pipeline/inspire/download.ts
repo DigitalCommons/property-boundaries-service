@@ -4,7 +4,8 @@ import path from "path";
 import fs, { readFileSync } from "fs";
 import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
-import { spawnSync } from "child_process";
+import { exec } from "child_process";
+import { promisify } from "util";
 import geojsonhint from "@mapbox/geojsonhint";
 import getLogger from "../logger";
 import { Logger } from "pino";
@@ -96,27 +97,12 @@ const downloadInspire = async (numCouncils: number) => {
  * Run backup script in a separate shell process to upload latest INSPIRE zip files to our Hetzner
  * storage box.
  */
-const backupInspireDownloads = () => {
-  logger.info("Running bash scripts/backup-inspire-downloads.sh");
-
-  const { stderr, stdout, status, error } = spawnSync("bash", [
-    "scripts/backup-inspire-downloads.sh",
-  ]);
-
-  if (status !== 0) {
-    if (error) {
-      logger.error(
-        error,
-        "child_process.spawn of INSPIRE backup script failed"
-      );
-      throw new Error("child_process.spawn of INSPIRE backup script failed");
-    }
-
-    logger.error("Error in INSPIRE backup script");
-    throw new Error(stderr.toString());
-  }
-
-  logger.info(`INSPIRE backup script stdout: ${stdout}`);
+const backupInspireDownloads = async () => {
+  const command = "bash scripts/backup-inspire-downloads.sh";
+  logger.info(`Running '${command}'`);
+  const { stdout, stderr } = await promisify(exec)(command);
+  logger.info(`raw INSPIRE backup script stdout: ${stdout}`);
+  logger.info(`raw INSPIRE backup script stderr: ${stderr}`);
 };
 
 /** Unzip an archive then delete the original archive (to save space) */
@@ -158,7 +144,7 @@ const transformGMLToGeoJson = async (council: string) => {
       const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
 
       try {
-        ogr2ogr(gmlFile, geojsonFilePath);
+        await ogr2ogr(gmlFile, geojsonFilePath);
         logger.info(`Written ${council}.json successfully`);
       } catch (err) {
         logger.error(err, `Transforming ${council}.gml error`);
@@ -177,32 +163,11 @@ const transformGMLToGeoJson = async (council: string) => {
  * Wrapper for the GDAL ogr2ogr tool, to convert an input GML file into GeoJSON with the EPSG:4326
  * projection (the standard GPS projection used by GeoJSON and in our DB).
  */
-const ogr2ogr = (inputPath: string, outputPath: string) => {
-  const { stderr, status, error } = spawnSync(
-    "ogr2ogr",
-    [
-      "-f",
-      "GeoJSON",
-      "-skipfailures",
-      "-t_srs",
-      "EPSG:4326",
-      outputPath,
-      inputPath,
-    ],
-    {
-      maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
-    }
-  );
-
-  if (status !== 0) {
-    if (error) {
-      logger.error(error, "child_process.spawn of ogr2ogr failed");
-      throw new Error("child_process.spawn of ogr2ogr failed");
-    }
-
-    logger.error("Error in run of ogr2ogr");
-    throw new Error(stderr.toString());
-  }
+const ogr2ogr = async (inputPath: string, outputPath: string) => {
+  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
+  await promisify(exec)(command, {
+    maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
+  });
 };
 
 /**
@@ -304,7 +269,7 @@ export const downloadAndBackupInspirePolygons = async (
   newDownloads = [];
 
   await downloadInspire(numCouncils);
-  backupInspireDownloads(); // synchronous
+  await backupInspireDownloads();
 
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
 
