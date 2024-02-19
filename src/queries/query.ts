@@ -206,7 +206,7 @@ export type PendingPolygon = {
   council: string;
 };
 
-/** Return the next pending polygon with id at least equal to minId  */
+/** Return the next pending polygon with id at least equal to minId, or null if none exist.  */
 export const getNextPendingPolygon = async (
   minId: number
 ): Promise<PendingPolygon> => {
@@ -214,6 +214,10 @@ export const getNextPendingPolygon = async (
     where: { id: { [Op.gte]: minId } },
     raw: true,
   });
+
+  if (!polygon) {
+    return null;
+  }
 
   return {
     id: polygon.id,
