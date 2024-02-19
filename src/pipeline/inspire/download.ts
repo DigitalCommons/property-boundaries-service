@@ -2,11 +2,10 @@ import "dotenv/config";
 import { chromium } from "playwright";
 import path from "path";
 import fs, { readFileSync } from "fs";
-import { readdir, lstat, writeFile, rm } from "fs/promises";
+import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
-import ogr2ogr from "ogr2ogr";
 import geojsonhint from "@mapbox/geojsonhint";
 import getLogger from "../logger";
 import { Logger } from "pino";
@@ -141,19 +140,14 @@ const transformGMLToGeoJson = async (council: string) => {
   if (stat.isDirectory()) {
     const files = await readdir(downloadFolderPath);
     if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
-      const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
       logger.info(`Transform GML: ${council}`);
-
-      const { data } = await ogr2ogr(gmlFile, {
-        maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
-        options: ["-t_srs", "EPSG:4326"], // GPS projection, which we use in our database
-      });
+      const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
 
       try {
-        await writeFile(geojsonFilePath, JSON.stringify(data));
+        await ogr2ogr(gmlFile, geojsonFilePath);
         logger.info(`Written ${council}.json successfully`);
       } catch (err) {
-        logger.error(err, `Writing ${council}.json error`);
+        logger.error(err, `Transforming ${council}.gml error`);
         throw err;
       }
 
@@ -163,6 +157,17 @@ const transformGMLToGeoJson = async (council: string) => {
       throw new Error(`Download for ${council} didn't contain a GML file`);
     }
   }
+};
+
+/**
+ * Wrapper for the GDAL ogr2ogr tool, to convert an input GML file into GeoJSON with the EPSG:4326
+ * projection (the standard GPS projection used by GeoJSON and in our DB).
+ */
+const ogr2ogr = async (inputPath: string, outputPath: string) => {
+  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
+  await promisify(exec)(command, {
+    maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
+  });
 };
 
 /**
@@ -177,10 +182,15 @@ const geoJsonSanityCheck = () => {
 
   for (const filename of geoJsonFiles) {
     logger.info(`Checking validity of ${filename}`);
-    const contents = readFileSync(
-      path.resolve(`${geojsonPath}/${filename}`),
-      "utf8"
-    );
+    const filePath = path.resolve(`${geojsonPath}/${filename}`);
+
+    var size = fs.statSync(filePath).size;
+    if (size > 450 * 1024 * 1024) {
+      // we might hit Node maximum string size limit so just skip
+      continue;
+    }
+
+    const contents = readFileSync(filePath, "utf8");
     const geojsonErrors = geojsonhint
       .hint(JSON.parse(contents))
       .map((errors) => ({ ...errors, filename }));
@@ -195,21 +205,21 @@ const createPendingPolygons = async () => {
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
 
   for (const council of councils) {
-    const filePath = `${geojsonPath}/${council}.json`;
+    const geojsonFilePath = `${geojsonPath}/${council}.json`;
     const data: FeatureCollection<Polygon> = JSON.parse(
-      fs.readFileSync(filePath, "utf8")
+      fs.readFileSync(geojsonFilePath, "utf8")
     );
-    const councilName = path.parse(filePath).name;
-    logger.info(
-      `Number of polygons in ${councilName}: ${data.features.length}`
-    );
+    logger.info(`Number of polygons in ${council}: ${data.features.length}`);
 
     // Insert into DB in chunks so we don't hit MySQL max packet limit
     const chunkSize = 10000;
     while (data.features.length > 0) {
       const chunk = data.features.splice(0, chunkSize);
-      await bulkCreatePendingPolygons(chunk, councilName);
+      await bulkCreatePendingPolygons(chunk, council);
     }
+
+    // Remove geojson file (to save space)
+    await rm(geojsonFilePath, { force: true });
   }
 
   logger.info("Created all pending INSPIRE polygons in DB");
