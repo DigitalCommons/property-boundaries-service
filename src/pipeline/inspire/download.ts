@@ -171,36 +171,25 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
 };
 
 /**
- * Test that the newly transformed files are all valid GeoJSON.
+ * Test that a newly transformed GeoJSON is valid
  * @returns array of errors (or empty list if GeoJSON is valid)
  */
-const geoJsonSanityCheck = () => {
-  const errors = [];
-  const geoJsonFiles = fs
-    .readdirSync(geojsonPath)
-    .filter((f) => f.includes(".json"));
+const geoJsonSanityCheck = (council: string) => {
+  logger.info(`Checking validity of ${council}.json`);
+  const filePath = path.resolve(`${geojsonPath}/${council}.json`);
 
-  for (const filename of geoJsonFiles) {
-    logger.info(`Checking validity of ${filename}`);
-    const filePath = path.resolve(`${geojsonPath}/${filename}`);
-
-    var size = fs.statSync(filePath).size;
-    if (size > 450 * 1024 * 1024) {
-      // we might hit Node maximum string size limit so just skip
-      // TODO: improve this so we check the larger files too. Read the file straight into an object
-      // rather than creating a string first?
-      continue;
-    }
-
-    const contents = readFileSync(filePath, "utf8");
-    const geojsonErrors = geojsonhint
-      .hint(JSON.parse(contents), {
-        ignoreRightHandRule: true,
-      })
-      .map((errors) => ({ ...errors, filename }));
-    errors.push(...geojsonErrors);
+  var size = fs.statSync(filePath).size;
+  if (size > 450 * 1024 * 1024) {
+    // we might hit Node maximum string size limit so just skip
+    // TODO: improve this so we check the larger files too. Read the file straight into an object
+    // rather than creating a string first?
+    return [];
   }
-  return errors;
+
+  const contents = readFileSync(filePath, "utf8");
+  return geojsonhint.hint(JSON.parse(contents), {
+    ignoreRightHandRule: true,
+  });
 };
 
 /**
@@ -254,7 +243,7 @@ export const downloadAndBackupInspirePolygons = async (
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
   geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
   fs.mkdirSync(downloadPath, { recursive: true });
-  fs.mkdirSync(geojsonPath, { recursive: true });
+  fs.mkdirSync(`${geojsonPath}/invalid`, { recursive: true });
 
   // delete old files in the geojson and downloads folder
   const oldDownloadsFolders = fs
@@ -281,22 +270,25 @@ export const downloadAndBackupInspirePolygons = async (
   await downloadInspire(numCouncils);
   await backupInspireDownloads();
 
+  // Unzip and transform all new downloads
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
-
   for (const council of councils) {
     await unzipArchive(council);
     await transformGMLToGeoJson(council);
+
+    const errors = geoJsonSanityCheck(council);
+    if (errors.length > 0) {
+      // move GeoJSON into the 'invalid' folder
+      fs.renameSync(
+        `${geojsonPath}/${council}.json`,
+        `${geojsonPath}/invalid/${council}.json`
+      );
+      throw new Error(
+        `GeoJSON validation failed for ${council}: ${JSON.stringify(errors)}`
+      );
+    }
   }
   logger.info("Finished transforming GML files");
-
-  const errors = geoJsonSanityCheck();
-  if (errors.length > 0) {
-    throw new Error(
-      `GeoJSON validation failed: ${JSON.stringify(errors, null, 2)}`
-    );
-  } else {
-    logger.info("All GeoJSON files are valid");
-  }
 
   await createPendingPolygons();
 };
