@@ -164,7 +164,7 @@ const transformGMLToGeoJson = async (council: string) => {
  * projection (the standard GPS projection used by GeoJSON and in our DB).
  */
 const ogr2ogr = async (inputPath: string, outputPath: string) => {
-  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
+  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 -lco RFC7946=YES ${outputPath} ${inputPath}`;
   await promisify(exec)(command, {
     maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
   });

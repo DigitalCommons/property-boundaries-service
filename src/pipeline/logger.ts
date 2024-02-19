@@ -15,12 +15,14 @@ export default function getLogger(pipelineUniqueKey: string) {
       },
       timestamp: pino.stdTimeFunctions.isoTime,
     },
-    pino.destination(
-      process.env.NODE_ENV === "development" // log to stdout if in development, else to file
-        ? 1
-        : `logs/${
-            new Date().toISOString().split("T")[0]
-          }_${pipelineUniqueKey}.log`
-    )
+    pino.destination({
+      dest:
+        process.env.NODE_ENV === "development" // log to stdout if in development, else to file
+          ? 1
+          : `logs/${
+              new Date().toISOString().split("T")[0]
+            }_${pipelineUniqueKey}.log`,
+      sync: true,
+    })
   );
 }
