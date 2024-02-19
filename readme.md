@@ -20,10 +20,8 @@ This service manages a database and an API to serve data from the land registry'
 ## Running
 
 - `npm run build` to transpile the typescript code into javascript in the `/dist` folder.
-- `npm run download` to download the INSPIRE data for each council, transform it to GeoJSON, and store the JSON files in the `/geojson` folder.
-- `npm run analyse` to run the analysis script.
-- `npm run plot` to plot the results of the analysis script.
-- `npm run serve` or `npm run dev:serve` to start the server responding to api requests.
+- `npm run plot` to plot some of the analysis after a pipeline has run (useful in development)
+- `npm run serve` or `npm run dev:serve` to start the server responding to API requests.
 
 ## Useful dev commands
 
@@ -39,11 +37,6 @@ pipeline's time and unique key.
 
 - Address the various 'TODO' comments around the codebase
 
-- Query local DB rather than making HTTP requests to a live server. This will greatly increase the speed of the INSPIRE updates. But we maybe need to make a new DB table for 'pending polygons' which replaces the polygons table (or inserts without deleting polygons that no longer exist?) after all the changes have been processed.
-
-- Use a logging library (e.g. Winston) to log the results of pipelines into a dedicated file for
-  each pipeline run. This will give us more control than piping to files using shell commands.
-
 - Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
   polygons, then add unit tests to match this spec
 
@@ -54,6 +47,7 @@ pipeline's time and unique key.
 - Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
   especially for low-level details, prefer Mocha specs over written
   documentation. Docs can be ignored but unit tests can't.
+
 - Create an admin panel, maybe with a library like `react-admin`, so that we can easily search through our DB and visualise the results of pipelines. It would be great if pipelines created visualisations of some of the changed polygons, which could then be viewed in the admin panel, including:
 
   - a sample of successful matches (for quality control)
