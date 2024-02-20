@@ -52,7 +52,7 @@ const runPipeline = async (uniqueKey: string) => {
     if (matrixWebhookUrl) {
       await axios.post(matrixWebhookUrl, {
         msgtype: "m.text",
-        body: `[${hostname()}] [property_boundaries] ✅ Successful ownership + INSPIRE pipeline ${uniqueKey}. Time elapsed: ${timeElapsedString}\n\n${summaryTable}`,
+        body: `[${hostname()}] [property_boundaries] ✅ Successful ownership + INSPIRE pipeline ${uniqueKey}. Time elapsed: ${timeElapsedString}\n\`\`\`\n${summaryTable}\n\`\`\``,
       });
     }
   } catch (err) {

@@ -1,19 +1,22 @@
 import "dotenv/config";
 import { chromium } from "playwright";
 import path from "path";
-import fs, { readFileSync } from "fs";
+import fs from "fs";
 import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
-import geojsonhint from "@mapbox/geojsonhint";
 import getLogger from "../logger";
 import { Logger } from "pino";
 import {
   bulkCreatePendingPolygons,
   deleteAllPendingPolygons,
 } from "../../queries/query";
-import { FeatureCollection, Polygon } from "@turf/turf";
+import { chain } from "stream-chain";
+import { parser } from "stream-json/Parser";
+import { pick } from "stream-json/filters/Pick";
+import { streamArray } from "stream-json/streamers/StreamArray";
+import { Feature, Polygon } from "geojson";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -171,28 +174,6 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
 };
 
 /**
- * Test that a newly transformed GeoJSON is valid
- * @returns array of errors (or empty list if GeoJSON is valid)
- */
-const geoJsonSanityCheck = (council: string) => {
-  logger.info(`Checking validity of ${council}.json`);
-  const filePath = path.resolve(`${geojsonPath}/${council}.json`);
-
-  var size = fs.statSync(filePath).size;
-  if (size > 450 * 1024 * 1024) {
-    // we might hit Node maximum string size limit so just skip
-    // TODO: improve this so we check the larger files too. Read the file straight into an object
-    // rather than creating a string first?
-    return [];
-  }
-
-  const contents = readFileSync(filePath, "utf8");
-  return geojsonhint.hint(JSON.parse(contents), {
-    ignoreRightHandRule: true,
-  });
-};
-
-/**
  * For all GeoJSONs in the geojson folder, add each polygon to pending_inspire_polygons, ready for
  * analysis, then delete the GeoJSON file (to save space).
  */
@@ -204,31 +185,56 @@ const createPendingPolygons = async () => {
     .filter((f) => f.includes(".json"))
     .map((filename) => filename.replace(".json", ""));
 
+  logger.info(
+    `Inserting downloaded polygons from ${councils.length} councils into pending_inspire_polygons...`
+  );
+
   for (const council of councils) {
     const geojsonFilePath = `${geojsonPath}/${council}.json`;
-    const data: FeatureCollection<Polygon> = JSON.parse(
-      fs.readFileSync(geojsonFilePath, "utf8")
-    );
-    logger.info(`Number of polygons in ${council}: ${data.features.length}`);
+    let polygonsCount = 0;
+    const polygonsToCreate = [];
 
-    // Insert into DB in chunks so we don't hit MySQL max packet limit
+    // Stream JSON rather than reading and parsing whole file, to avoid OOME
+    const pipeline = chain([
+      fs.createReadStream(geojsonFilePath),
+      parser(),
+      pick({ filter: "features", once: true }),
+      streamArray(),
+    ]);
+
+    // Insert into DB in chunks rather than individually, to reduce DB operations, but use small
+    // enoguh chunks so that we don't hit MySQL max packet limit
     const chunkSize = 10000;
-    while (data.features.length > 0) {
-      const chunk = data.features.splice(0, chunkSize);
-      await bulkCreatePendingPolygons(chunk, council);
+
+    for await (const data of pipeline) {
+      const polygon: Feature<Polygon> = data.value;
+      ++polygonsCount;
+      polygonsToCreate.push(polygon);
+
+      if (polygonsToCreate.length >= chunkSize) {
+        const chunk = polygonsToCreate.splice(0, chunkSize);
+        await bulkCreatePendingPolygons(chunk, council);
+      }
     }
+
+    // Sanity check that we parsed some data
+    if (polygonsCount < 100) {
+      throw new Error(
+        `We parsed only ${polygonsCount} polygons in ${council}. We expect more than this`
+      );
+    }
+    logger.info(`Number of polygons added from ${council}: ${polygonsCount}`);
 
     await rm(geojsonFilePath, { force: true });
   }
-
   logger.info("Created all pending INSPIRE polygons in DB");
 };
 
 /**
  * Download the latest INSPIRE data, unzip the archive for each council, then transform each of the
  * GML files to GeoJSON data. The results will be saved to the geojson/ folder, a json file for each
- * council. Finally, after checking that the GeoJSON is valid, insert the data from these GeoJSON
- * files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
+ * council. Finally, nsert the data from these GeoJSON files into the 'pending_inspire_polygons'
+ * table in the DB, ready for analysis.
  *
  * @param latestInspirePublishMonth month of the latest available INSPIRE data in YYYY-MM format
  * @param numCouncils Download the data for the first <numCouncils> councils. Defaults to all.
@@ -265,30 +271,28 @@ export const downloadAndBackupInspirePolygons = async (
     });
   }
 
+  // delete pending polygons in the database before we start downloading new data, to ensure there
+  // is disk space
+  await deleteAllPendingPolygons();
+
   newDownloads = [];
 
+  // Download INSPIRE data from govt website
   await downloadInspire(numCouncils);
-  await backupInspireDownloads();
+
+  // If new files were downloaded, back them up
+  if (newDownloads.length > 0) {
+    await backupInspireDownloads();
+  }
 
   // Unzip and transform all new downloads
   const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
   for (const council of councils) {
     await unzipArchive(council);
     await transformGMLToGeoJson(council);
-
-    const errors = geoJsonSanityCheck(council);
-    if (errors.length > 0) {
-      // move GeoJSON into the 'invalid' folder
-      fs.renameSync(
-        `${geojsonPath}/${council}.json`,
-        `${geojsonPath}/invalid/${council}.json`
-      );
-      throw new Error(
-        `GeoJSON validation failed for ${council}: ${JSON.stringify(errors)}`
-      );
-    }
   }
   logger.info("Finished transforming GML files");
 
+  // Insert new polygons in database as pending, ready for analysis
   await createPendingPolygons();
 };

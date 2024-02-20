@@ -13,7 +13,7 @@ import path from "path";
 import fs from "fs";
 import { triggerPipelineRun } from "../pipeline/run";
 
-/** Handler for testing our newly generated INSPIRE JSONs */
+/** Handler for dev testing our newly generated INSPIRE GeoJSONs */
 async function getBoundariesDummy(request: Request): Promise<any> {
   // Get dummy info from a specific council
   const data = JSON.parse(

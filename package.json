@@ -18,6 +18,8 @@
     "@types/lodash.chunk": "^4.2.9",
     "@types/node": "^20.4.9",
     "@types/stats-lite": "^2.2.2",
+    "@types/stream-chain": "^2.0.4",
+    "@types/stream-json": "^1.7.7",
     "@types/unzip-stream": "^0.3.4",
     "@types/uuid": "^9.0.8",
     "cross-env": "^7.0.3",
@@ -46,6 +48,8 @@
     "sequelize": "^6.32.1",
     "sequelize-cli": "^6.6.2",
     "stats-lite": "^2.2.0",
+    "stream-chain": "^2.2.5",
+    "stream-json": "^1.8.0",
     "typescript": "^5.3.3",
     "unzip-stream": "^0.3.1"
   }
