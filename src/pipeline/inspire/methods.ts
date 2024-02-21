@@ -263,13 +263,11 @@ export const comparePolygons = async (
   }
 
   if (percentageIntersect === 0) {
-    logger.info(
+    logger.debug(
       {
         inspireId,
-        oldLat: oldCoords[0][1],
-        oldLong: oldCoords[0][0],
-        newLat: newCoords[0][1],
-        newLong: newCoords[0][0],
+        oldLatLong: oldCoords[0],
+        newLatLong: newCoords[0],
         percentageIntersect,
       },
       "polygon moved to a new location"
@@ -283,7 +281,7 @@ export const comparePolygons = async (
       if (results.length > 0) {
         // Check against each of the geocoded results and find closest match
         const points = results.map((result) =>
-          turf.point([result.longitude, result.latitude])
+          turf.point([result.latitude, result.longitude])
         );
         const newPoly = turf.polygon([newCoords]);
         const metersFromAddress = Math.min(
@@ -298,7 +296,7 @@ export const comparePolygons = async (
         // If new polygon lies within 50m of a geocoded location, accept it as a moved boundary
         if (metersFromAddress < 50) {
           logger.info(
-            `inspireid moved and its center is ${metersFromAddress} m from its associated title address, so accept match`
+            `${inspireId} moved and its center is ${metersFromAddress} m from its associated title address, so accept match`
           );
           return {
             match: Match.Moved,
@@ -307,7 +305,7 @@ export const comparePolygons = async (
           };
         } else {
           logger.info(
-            `inspireid moved and its center is ${metersFromAddress} m from its associated title address, so match failed`
+            `${inspireId} moved and its center is ${metersFromAddress} m from its associated title address, so match failed`
           );
         }
       }
@@ -425,15 +423,14 @@ export const comparePolygons = async (
             if (polyNoLongerExists) {
               oldMergedIds.add(matchedPoly.poly_id);
               if (polygonContains(newPoly, matchedPolyFeature)) {
-                logger.info(`merge match with ${matchedPoly.poly_id}`);
+                logger.debug(`merge match with ${matchedPoly.poly_id}`);
                 return;
               } else {
-                logger.info(
+                logger.debug(
                   {
                     inspireId,
                     matchedId: matchedPoly.poly_id,
-                    lat: newCoords[0][1],
-                    long: newCoords[0][0],
+                    latLong: newCoords[0],
                     percentageIntersect,
                   },
                   "Old matched poly is not completely contained within the new poly"
@@ -446,8 +443,7 @@ export const comparePolygons = async (
                 {
                   inspireId,
                   matchedId: matchedPoly.poly_id,
-                  lat: newCoords[0][1],
-                  long: newCoords[0][0],
+                  latLong: newCoords[0],
                   percentageIntersect,
                 },
                 "merged poly has moved"
@@ -542,8 +538,7 @@ export const comparePolygons = async (
                 {
                   inspireId,
                   matchedInspireId: matchedPoly.poly_id,
-                  lat: newCoords[0][1],
-                  long: newCoords[0][0],
+                  latLong: newCoords[0],
                   percentageIntersect,
                 },
                 "matched polygon is not fully contained within the old poly"
@@ -556,8 +551,7 @@ export const comparePolygons = async (
               {
                 inspireId,
                 matchedInspireId: matchedPoly.poly_id,
-                lat: newCoords[0][1],
-                long: newCoords[0][0],
+                latLong: newCoords[0],
                 percentageIntersect,
               },
               "new segment poly has moved"
@@ -565,7 +559,7 @@ export const comparePolygons = async (
           }
           failedMatch = true;
         } else {
-          logger.info(
+          logger.debug(
             "Part of the old boundary is no longer registered as an INSPIRE polygon"
           );
           incompleteSegmentation = true;
@@ -590,11 +584,10 @@ export const comparePolygons = async (
   if (oldMergedIds.size === 0 && newSegmentIds.size === 0) {
     // This is just a boundary shift i.e. the boundary changed shape without merging/segmenting, and
     // land was maybe taken from/given to a neighbouring property.
-    logger.info(
+    logger.debug(
       {
         inspireId,
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "boundaries shifted"
@@ -617,8 +610,7 @@ export const comparePolygons = async (
         inspireId,
         oldMergedIds: Array.from(oldMergedIds),
         newSegmentIds: Array.from(newSegmentIds),
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "merge and segment"
@@ -633,12 +625,11 @@ export const comparePolygons = async (
   }
 
   if (incompleteMerge) {
-    logger.info(
+    logger.debug(
       {
         inspireId,
         oldMergedIds: Array.from(oldMergedIds),
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "incomplete merge"
@@ -653,12 +644,11 @@ export const comparePolygons = async (
   }
 
   if (incompleteSegmentation) {
-    logger.info(
+    logger.debug(
       {
         inspireId,
         newSegmentIds: Array.from(newSegmentIds),
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "incomplete segmentation"
@@ -673,12 +663,11 @@ export const comparePolygons = async (
   }
 
   if (oldMergedIds.size) {
-    logger.info(
+    logger.debug(
       {
         inspireId,
         oldMergedIds: Array.from(oldMergedIds),
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "complete merge"
@@ -693,12 +682,11 @@ export const comparePolygons = async (
   }
 
   if (newSegmentIds.size) {
-    logger.info(
+    logger.debug(
       {
         inspireId,
         newSegmentIds: Array.from(newSegmentIds),
-        lat: newCoords[0][1],
-        long: newCoords[0][0],
+        latLong: newCoords[0],
         percentageIntersect,
       },
       "complete segmentation"
@@ -718,8 +706,7 @@ export const comparePolygons = async (
       inspireId,
       oldMergedIds,
       newSegmentIds,
-      lat: newCoords[0][1],
-      long: newCoords[0][0],
+      latLong: newCoords[0],
     },
     "We shouldn't hit this"
   );

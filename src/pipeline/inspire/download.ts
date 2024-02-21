@@ -210,6 +210,11 @@ const createPendingPolygons = async () => {
     for await (const data of pipeline) {
       const polygon: Feature<Polygon> = data.value;
       ++polygonsCount;
+
+      // Reverse since we store coords as lat-long in DB, not long-lat like in the govt INSPIRE data
+      for (const vertex of polygon.geometry.coordinates[0]) {
+        vertex.reverse();
+      }
       polygonsToCreate.push(polygon);
 
       if (polygonsToCreate.length >= chunkSize) {

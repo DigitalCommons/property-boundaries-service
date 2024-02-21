@@ -116,8 +116,8 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
   const existingPolygon: any = (await getExistingPolygons([inspireId]))[0];
 
   if (existingPolygon) {
-    const newCoords: number[][] = geom.coordinates[0];
     const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
+    const newCoords: number[][] = geom.coordinates[0];
 
     // Get address of matching title (if exists)
     const titleAddress = existingPolygon.property_address || undefined;
@@ -198,8 +198,8 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
           council,
           ...offsetStats,
           percentageIntersect,
-          oldLatLong: [oldCoords[0][1], oldCoords[0][0]],
-          newLatLong: [newCoords[0][1], newCoords[0][0]],
+          oldLatLong: oldCoords[0],
+          newLatLong: newCoords[0],
           oldMergedIds,
           newSegmentIds,
         });
@@ -224,7 +224,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
           type: Match[match],
           oldMergedIds,
           newSegmentIds,
-          latLong: [newCoords[0][1], newCoords[0][0]],
+          latLong: newCoords[0],
           percentageIntersect,
         });
         newSegmentIds.forEach((id) => {
