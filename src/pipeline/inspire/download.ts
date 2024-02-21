@@ -6,6 +6,7 @@ import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
+import moment from "moment-timezone";
 import getLogger from "../logger";
 import { Logger } from "pino";
 import {
@@ -231,25 +232,49 @@ const createPendingPolygons = async () => {
 };
 
 /**
+ * INSPIRE data is published on the first Sunday of every month. This function works out the month
+ * of the latest available data in YYYY-MM format
+ */
+const getLatestInspirePublishMonth = (): string => {
+  //
+  const date = moment().tz("Europe/London").startOf("month");
+  date.day(7); // the next sunday
+  if (date.date() > 7) {
+    // if the date is now after 7th, go back one week
+    date.day(-7);
+  }
+  const today = moment().tz("Europe/London");
+  if (date.isSame(today, "date")) {
+    throw new Error(
+      "Today is first Sunday of the month. Wait until tomorrow to run pipeline, to avoid data inconsistency problems"
+    );
+  }
+  if (date.isAfter(today)) {
+    // Data for this month hasn't been published yet so subtract a month
+    date.subtract(1, "month");
+  }
+  return date.format("YYYY-MM");
+};
+
+/**
  * Download the latest INSPIRE data, unzip the archive for each council, then transform each of the
  * GML files to GeoJSON data. The results will be saved to the geojson/ folder, a json file for each
  * council. Finally, nsert the data from these GeoJSON files into the 'pending_inspire_polygons'
  * table in the DB, ready for analysis.
  *
- * @param latestInspirePublishMonth month of the latest available INSPIRE data in YYYY-MM format
  * @param numCouncils Download the data for the first <numCouncils> councils. Defaults to all.
  */
 export const downloadAndBackupInspirePolygons = async (
   pipelineUniqueKey: string,
-  latestInspirePublishMonth: string,
   numCouncils: number = 1e4
 ) => {
   logger = getLogger(pipelineUniqueKey);
+  const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
   geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
   fs.mkdirSync(downloadPath, { recursive: true });
-  fs.mkdirSync(`${geojsonPath}/invalid`, { recursive: true });
+  fs.mkdirSync(geojsonPath, { recursive: true });
 
   // delete old files in the geojson and downloads folder
   const oldDownloadsFolders = fs

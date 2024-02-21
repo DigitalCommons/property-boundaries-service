@@ -29,7 +29,14 @@ This service manages a database and an API to serve data from the land registry'
 
 ## Ownerships + INSPIRE updates pipeline
 
-All of the pipeline-related code is in the `src/pipeline` directory. The pipeline can be triggered by a `run-pipeline` GET request.
+All of the pipeline-related code is in the `src/pipeline` directory. The pipeline can be triggered by an API request like this:
+
+`https://<property boundaries service api url>/run-pipeline?secret=<secret>`
+
+or the pipeline can be started at a specific task (e.g. if you don't want to re-download the INSPIRE data again and just want to analyse the pending polygons):
+
+`https://<property boundaries service api url>/run-pipeline?secret=<secret>&startAtTask=analyseInspire`
+
 The resulting data for a pipeline can be found in the `analysis` folder in the project's root folder, in a directory whose name includes the
 pipeline's time and unique key.
 

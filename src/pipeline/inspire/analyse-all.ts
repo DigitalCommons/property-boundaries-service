@@ -262,7 +262,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<number> => {
  */
 export const analyseAllPendingPolygons = async (
   pipelineUniqueKey: string,
-  updateMainDbTable: boolean,
+  updateMainDbTable: boolean = true,
   maxPolygons: number = 1e9
 ): Promise<string> => {
   logger = getLogger(pipelineUniqueKey);

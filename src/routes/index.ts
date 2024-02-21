@@ -146,6 +146,7 @@ async function search(request: Request): Promise<any> {
 
 type RunPipelineRequest = Request & {
   query: {
+    startAtTask?: string;
     secret: string;
   };
 };
@@ -154,13 +155,13 @@ const runPipeline = async (
   request: RunPipelineRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> => {
-  const { secret } = request.query;
+  const { startAtTask, secret } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const uniqueKey = await triggerPipelineRun();
+  const uniqueKey = await triggerPipelineRun(startAtTask);
   const msg = uniqueKey
     ? `Pipeline ${uniqueKey} has started`
     : "Pipeline already running";
