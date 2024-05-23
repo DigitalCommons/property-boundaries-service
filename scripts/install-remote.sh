@@ -55,11 +55,17 @@ fi
 # Echo command with arguments expanded
 set -x
 
-# Copy the install.sh script to the remote server
+# Copy the install.sh file to the remote server
 scp scripts/install.sh $login_user_hostname:~$app_user/install.sh
 
 # Run the script
 ssh $login_user_hostname "su -l $app_user -c 'bash install.sh $branch'"
 
-# Cleanup
+# Cleanup install.sh file
 ssh $login_user_hostname "rm ~$app_user/install.sh"
+
+# Set up reverse proxy so the app is available at
+# (dev|staging).propertyboundaries.landexplorer.coop/api
+# Note this requires the login user to have root or www-data permissions
+ssh $login_user_hostname "rm -f /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"
+echo -e "ProxyPass /api http://localhost:4000\nProxyPassReverse /api http://localhost:4000" | ssh $login_user_hostname -T "cat > /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"

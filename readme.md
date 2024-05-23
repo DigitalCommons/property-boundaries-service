@@ -4,28 +4,29 @@ This service manages a database and an API to serve data from the land registry'
 
 ## Requirements
 
-- Nodejs
+- NodeJS
 - MySQL
 - [GDAL tools](https://gdal.org/download.html) (includes the `ogr2ogr` command line tool)
-- PM2 (for running in production)
-- Nodemon (for running in development)
+- PM2
 
-## Installation
+## Installing and deploying
 
-- `npm install` to install the required packages.
-- Copy `.env.example` and rename the copy to `.env`.
-- Fill in the `.env` with the database credentials and government gateway api key (in Bitwarden).
-- `npx sequelize-cli db:migrate` to run the migration scripts that create the tables of the database.
+- Run the `install-remote.sh` script from your local machine to install the application e.g.:
 
-## Running
+  ```
+  bash install-remote.sh -u aubergine root@prod-2.digitalcommons.coop
+  ```
 
-- `npm run build` to transpile the typescript code into javascript in the `/dist` folder.
-- `npm run plot` to plot some of the analysis after a pipeline has run (useful in development)
-- `npm run serve` or `npm run dev:serve` to start the server responding to API requests.
+- Log into the server and, in the codebase, copy `.env.example` to `.env`.
+- Fill in `.env` with the credentials and API keys (in BitWarden or the password-store).
+- `bash scripts/deploy.sh` to run the DB migration scripts, build and serve the app with PM2
 
 ## Useful dev commands
 
 - `npx sequelize-cli db:migrate:undo:all` to reset database migrations
+- `npm run build` to transpile the typescript code into javascript in the `/dist` folder.
+- `npm run dev:serve` to start the server responding to API requests.
+- `npm run plot` to plot some of the analysis after a pipeline has run
 
 ## Ownerships + INSPIRE updates pipeline
 

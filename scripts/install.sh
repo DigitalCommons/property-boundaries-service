@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Run this script on the server to install the app for the first time. You can use the
-# install-remote.sh script so that you don't have to copy over this file manually.
+# You probably don't want to run this script directly. The install-remote.sh script copies this file
+# to the required server and runs it there to install the app for the first time.
 
 set -e
 
