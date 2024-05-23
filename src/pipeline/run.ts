@@ -17,15 +17,18 @@ let running = false;
 const tasks = [
   {
     name: "ownerships",
+    desc: "Get the latest UK & Overseas Companies property ownerhsip data and store it in the land_ownerships DB table",
     method: async (uniqueKey: string) => await updateOwnerships(uniqueKey),
   },
   {
     name: "downloadInspire",
+    desc: "Download the latest INSPIRE polygons, backup the data, and store it in the pending_inspire_polygons DB table",
     method: async (uniqueKey: string) =>
       await downloadAndBackupInspirePolygons(uniqueKey),
   },
   {
     name: "analyseInspire",
+    desc: "Compare pending_inspire_polygons with the existing land_ownership_polygons and classify changes. Accept changes that meet criteria for a match and output detailed analysis about failed matches.",
     method: async (uniqueKey: string) =>
       await analyseAllPendingPolygons(uniqueKey),
   },

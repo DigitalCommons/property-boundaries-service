@@ -17,7 +17,6 @@ fi
 git pull
 
 # Install dependencies
-export NODE_ENV=production
 npm ci
 
 # Transpile ts into js
@@ -26,5 +25,14 @@ npm run build
 # Run migrations
 npx sequelize-cli db:migrate
 
-# Restart the backend process
-pm2 restart 0
+# Restart the app, or start it for the first time
+pm2_started=$(if pm2 list 2> /dev/null | grep -q property-boundaries-service; then echo "true" ; else echo "false" ; fi)
+
+if [ $pm2_started = "true" ] ; then
+    pm2 restart property-boundaries-service
+else
+    npm run serve
+    
+    # Save the PM2 config so it gets resurrected on system reboot
+    pm2 save
+fi

@@ -6,7 +6,7 @@ export default function getLogger(pipelineUniqueKey: string) {
 
   return pino(
     {
-      level: "info",
+      level: process.env.NODE_ENV === "development" ? "debug" : "info",
       formatters: {
         level: (label) => {
           return { level: label.toUpperCase() };

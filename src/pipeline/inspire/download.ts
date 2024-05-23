@@ -102,6 +102,12 @@ const downloadInspire = async (numCouncils: number) => {
  * storage box.
  */
 const backupInspireDownloads = async () => {
+  if (!process.env.REMOTE_BACKUP_DESTINATION_PATH) {
+    logger.warn(
+      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set"
+    );
+    return;
+  }
   const command = "bash scripts/backup-inspire-downloads.sh";
   logger.info(`Running '${command}'`);
   const { stdout, stderr } = await promisify(exec)(command);
@@ -262,10 +268,10 @@ const getLatestInspirePublishMonth = (): string => {
 };
 
 /**
- * Download the latest INSPIRE data, unzip the archive for each council, then transform each of the
- * GML files to GeoJSON data. The results will be saved to the geojson/ folder, a json file for each
- * council. Finally, nsert the data from these GeoJSON files into the 'pending_inspire_polygons'
- * table in the DB, ready for analysis.
+ * Download the latest INSPIRE data and upload it to our remote backup location. Then, unzip the
+ * archive for each council and transform each of the GML files to GeoJSON data. The results will be
+ * saved to the geojson/ folder, a json file for each council. Finally, insert the data from these
+ * GeoJSON files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
  *
  * @param numCouncils Download the data for the first <numCouncils> councils. Defaults to all.
  */
