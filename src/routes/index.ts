@@ -11,7 +11,7 @@ import {
 } from "../queries/query";
 import path from "path";
 import fs from "fs";
-import { triggerPipelineRun } from "../pipeline/run";
+import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
 
 /** Handler for dev testing our newly generated INSPIRE GeoJSONs */
 async function getBoundariesDummy(request: Request): Promise<any> {
@@ -146,22 +146,21 @@ async function search(request: Request): Promise<any> {
 
 type RunPipelineRequest = Request & {
   query: {
-    startAtTask?: string;
     secret: string;
-  };
+  } & PipelineOptions;
 };
 
 const runPipeline = async (
   request: RunPipelineRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> => {
-  const { startAtTask, secret } = request.query;
+  const { secret, ...options } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const uniqueKey = await triggerPipelineRun(startAtTask);
+  const uniqueKey = await triggerPipelineRun(options);
   const msg = uniqueKey
     ? `Pipeline ${uniqueKey} has started`
     : "Pipeline already running";

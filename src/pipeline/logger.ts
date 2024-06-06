@@ -1,7 +1,8 @@
 import pino from "pino";
 import fs from "fs";
+import { getRunningPipelineKey } from "./util";
 
-export default function getLogger(pipelineUniqueKey: string) {
+export default function getLogger() {
   fs.mkdirSync("logs", { recursive: true });
 
   return pino(
@@ -21,7 +22,7 @@ export default function getLogger(pipelineUniqueKey: string) {
           ? 1
           : `logs/${
               new Date().toISOString().split("T")[0]
-            }_${pipelineUniqueKey}.log`,
+            }_${getRunningPipelineKey()}.log`,
       sync: true,
     })
   );

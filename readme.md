@@ -17,16 +17,17 @@ This service manages a database and an API to serve data from the land registry'
   bash install-remote.sh -u aubergine root@prod-2.digitalcommons.coop
   ```
 
+  Note that this will only succeed once you have uploaded the GitHub SSH deploy key (explained in the script's output).
+
 - Log into the server and, in the codebase, copy `.env.example` to `.env`.
 - Fill in `.env` with the credentials and API keys (in BitWarden or the password-store).
 - `bash scripts/deploy.sh` to run the DB migration scripts, build and serve the app with PM2
 
 ## Useful dev commands
 
-- `npx sequelize-cli db:migrate:undo:all` to reset database migrations
-- `npm run build` to transpile the typescript code into javascript in the `/dist` folder.
+- `npx sequelize-cli db:migrate:undo:all && npx sequelize-cli db:migrate` to reset database migrations
 - `npm run dev:serve` to start the server responding to API requests.
-- `npm run plot` to plot some of the analysis after a pipeline has run
+- `npm run build && npm run plot` to plot some of the analysis after a pipeline has run
 
 ## Ownerships + INSPIRE updates pipeline
 
@@ -55,6 +56,8 @@ pipeline's time and unique key.
 - Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
   especially for low-level details, prefer Mocha specs over written
   documentation. Docs can be ignored but specs with unit tests can't.
+
+- Add analytics to find where bottlenecks are in analysis script, so they can be optimised.
 
 - Create an admin panel, maybe with a library like `react-admin`, so that we can easily search through our DB and visualise the results of pipelines. It would be great if pipelines created visualisations of some of the changed polygons, which could then be viewed in the admin panel, including:
 

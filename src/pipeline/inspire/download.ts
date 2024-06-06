@@ -272,14 +272,12 @@ const getLatestInspirePublishMonth = (): string => {
  * archive for each council and transform each of the GML files to GeoJSON data. The results will be
  * saved to the geojson/ folder, a json file for each council. Finally, insert the data from these
  * GeoJSON files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
- *
- * @param numCouncils Download the data for the first <numCouncils> councils. Defaults to all.
  */
-export const downloadAndBackupInspirePolygons = async (
-  pipelineUniqueKey: string,
-  numCouncils: number = 1e4
-) => {
-  logger = getLogger(pipelineUniqueKey);
+export const downloadAndBackupInspirePolygons = async (options: any) => {
+  // Download the data for the first <maxCouncils> councils. Default to all.
+  const maxCouncils: number = options.maxCouncils || 1e4;
+
+  logger = getLogger();
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
@@ -314,7 +312,7 @@ export const downloadAndBackupInspirePolygons = async (
   newDownloads = [];
 
   // Download INSPIRE data from govt website
-  await downloadInspire(numCouncils);
+  await downloadInspire(maxCouncils);
 
   // If new files were downloaded, back them up
   if (newDownloads.length > 0) {

@@ -25,15 +25,13 @@ EOF
 
 cd ~
 ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-git clone git@github.com:DigitalCommons/property-boundaries-service.git
+git -C property-boundaries-service pull || git clone git@github.com:DigitalCommons/property-boundaries-service.git
 cd property-boundaries-service
 
 # If branch was inputted as argument, check it out
 if [ ! -z "$1" ]; then
     git checkout $1
 fi
-
-git pull
 
 # Install Node and PM2
 asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
@@ -56,9 +54,6 @@ After=network.target
 
 [Service]
 Type=forking
-LimitNOFILE=infinity
-LimitNPROC=infinity
-LimitCORE=infinity
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:%h/.asdf/installs/nodejs/20.8.1/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 Environment=PM2_HOME=%h/.pm2
 Environment=ASDF_DIR=/opt/asdf

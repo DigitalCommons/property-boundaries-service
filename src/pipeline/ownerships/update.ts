@@ -24,8 +24,8 @@ import { Logger } from "pino";
  * - Downloading monthly changes to UK company + overseas company ownerships since the latest update
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
-export const updateOwnerships = async (pipelineUniqueKey: string) => {
-  const logger = getLogger(pipelineUniqueKey);
+export const updateOwnerships = async (options: any) => {
+  const logger = getLogger();
 
   const latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
@@ -38,7 +38,7 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
     logger.info(
       "Download the first full set of ownership data published in Nov 2017"
     );
-    await downloadOwnershipsFullData(11, 2017, pipelineUniqueKey, logger);
+    await downloadOwnershipsFullData(11, 2017, logger);
   }
 
   const ccodHistoricalDatasets = await getDatasetHistory(false, logger);
@@ -146,10 +146,7 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
       !filesToProcess[index + 1] ||
       filesToProcess[index + 1].unsorted_date > file.unsorted_date
     ) {
-      await setPipelineLatestOwnershipData(
-        pipelineUniqueKey,
-        file.unsorted_date
-      );
+      await setPipelineLatestOwnershipData(file.unsorted_date);
     }
   }
 };
@@ -165,7 +162,6 @@ export const updateOwnerships = async (pipelineUniqueKey: string) => {
 async function downloadOwnershipsFullData(
   month: number,
   year: number,
-  pipelineUniqueKey: string,
   logger: Logger
 ) {
   if (year < 2017 || (year === 2017 && month < 11)) {
@@ -232,7 +228,6 @@ async function downloadOwnershipsFullData(
     `Finished downloading the whole UK and overseas companies data from ${paddedMonth}/${year}`
   );
   await setPipelineLatestOwnershipData(
-    pipelineUniqueKey,
     `${year}-${paddedMonth}-28` // data is valid until the start of next month, so the exact day doesn't really matter
   );
 }

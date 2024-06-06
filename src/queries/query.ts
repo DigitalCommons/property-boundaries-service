@@ -1,6 +1,7 @@
 import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
 import { Feature, Polygon } from "@turf/turf";
 import { customAlphabet } from "nanoid";
+import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
 
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
@@ -81,6 +82,26 @@ export const PendingPolygonModel = sequelize.define(
   },
   {
     tableName: "pending_inspire_polygons",
+  }
+);
+
+export const PendingDeletionModel = sequelize.define(
+  "PendingDeletion",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    poly_id: {
+      unique: true,
+      allowNull: false,
+      type: DataTypes.INTEGER,
+    },
+  },
+  {
+    tableName: "pending_polygon_deletions",
   }
 );
 
@@ -179,6 +200,10 @@ export const deleteAllPendingPolygons = async () => {
   await PendingPolygonModel.truncate();
 };
 
+export const resetPolygonsPendingDeletion = async () => {
+  await PendingDeletionModel.truncate();
+};
+
 export const bulkCreatePendingPolygons = async (
   polygonGeojsonFeatures: Feature<Polygon>[],
   council: string,
@@ -215,16 +240,14 @@ export const getNextPendingPolygon = async (
     raw: true,
   });
 
-  if (!polygon) {
-    return null;
-  }
-
-  return {
-    id: polygon.id,
-    poly_id: polygon.poly_id,
-    geom: polygon.geom,
-    council: polygon.council,
-  };
+  return polygon
+    ? {
+        id: polygon.id,
+        poly_id: polygon.poly_id,
+        geom: polygon.geom,
+        council: polygon.council,
+      }
+    : null;
 };
 
 export const createOrUpdatePolygonGeom = async (
@@ -466,6 +489,27 @@ export const getPendingPolygonsInSearchArea = async (searchArea: string) => {
 };
 
 /**
+ * Return pending polygon with poly_id if it exists, or null.
+ */
+export const getPendingPolygon = async (
+  poly_id: number
+): Promise<PendingPolygon> => {
+  const polygon: any = await PendingPolygonModel.findOne({
+    where: { poly_id },
+    raw: true,
+  });
+
+  return polygon
+    ? {
+        id: polygon.id,
+        poly_id: polygon.poly_id,
+        geom: polygon.geom,
+        council: polygon.council,
+      }
+    : null;
+};
+
+/**
  * Check whether a pending polygon with the given poly_id exists.
  */
 export const pendingPolygonExists = async (
@@ -490,6 +534,31 @@ export const acceptPendingPolygon = async (poly_id: number) => {
 };
 
 /**
+ * Ensure pending polygon is marked as not accepted.
+ */
+export const rejectPendingPolygon = async (poly_id: number) => {
+  await PendingPolygonModel.update(
+    { accepted: false },
+    {
+      where: {
+        poly_id,
+      },
+    }
+  );
+};
+
+/**
+ * Mark existing polygon for deletion.
+ */
+export const markPolygonDeletion = async (poly_id: number) => {
+  await PendingDeletionModel.findOrCreate({
+    where: {
+      poly_id,
+    },
+  });
+};
+
+/**
  * Insert all accepted pending polygons into the main land_ownership_polygons table
  */
 export const insertAllAcceptedPendingPolygons = async () => {
@@ -501,6 +570,22 @@ export const insertAllAcceptedPendingPolygons = async () => {
   return await sequelize.query(query, {
     type: QueryTypes.INSERT,
   });
+};
+
+/**
+ * Delete all polygons pending deletion from land_ownerhsip_polygons table, then clear
+ * pending_polygon_deletions.
+ */
+export const deleteAllPolygonsPendingDeletion = async () => {
+  const query = `DELETE land_ownership_polygons
+  FROM land_ownership_polygons INNER JOIN pending_polygon_deletions
+  ON land_ownership_polygons.poly_id = pending_polygon_deletions.poly_id`;
+
+  await sequelize.query(query, {
+    type: QueryTypes.DELETE,
+  });
+
+  return await PendingDeletionModel.truncate();
 };
 
 /**
@@ -547,29 +632,26 @@ export const getPolygonsByProprietorName = async (name: string) => {
   });
 };
 
-/** Create an entry in the pipeline_runs table and return its unique key */
+/** Create an entry in the pipeline_runs table, store and return its unique key */
 export const startPipelineRun = async (): Promise<string> => {
   const unique_key = nanoid();
   await PipelineRunModel.create({
     unique_key,
   });
+  setRunningPipelineKey(unique_key);
   return unique_key;
 };
 
 /**
  * Set latest ownership data date for a pipeline run.
- * @param unique_key the unique_key for the pipeline run
  * @param date in YYYY-MM-DD format
  */
-export const setPipelineLatestOwnershipData = async (
-  unique_key: string,
-  date: string
-) => {
+export const setPipelineLatestOwnershipData = async (date: string) => {
   await PipelineRunModel.update(
     { latest_ownership_data: date },
     {
       where: {
-        unique_key,
+        unique_key: getRunningPipelineKey(),
       },
     }
   );
@@ -577,18 +659,14 @@ export const setPipelineLatestOwnershipData = async (
 
 /**
  * Set latest INSPIRE polygon data date for a pipeline run.
- * @param unique_key the unique_key for the pipeline run
  * @param date in YYYY-MM-DD format
  */
-export const setPipelineLatestInspireData = async (
-  unique_key: string,
-  date: string
-) => {
+export const setPipelineLatestInspireData = async (date: string) => {
   await PipelineRunModel.update(
     { latest_inspire_data: date },
     {
       where: {
-        unique_key,
+        unique_key: getRunningPipelineKey(),
       },
     }
   );

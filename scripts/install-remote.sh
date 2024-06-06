@@ -5,12 +5,12 @@
 
 # General usage:
 # 
-#       bash install-remote.sh [-u <app user>] [-b <branch, default main)>] [<ssh login <user>@<hostname>]
+#       bash scripts/install-remote.sh [-u <app user>] [-b <branch, default main)>] [<ssh login <user>@<hostname>]
 # 
 # Example usage, to login to root user on dev-2 (for which we have ssh access), and install the app 
 # for the aubergine user:
 # 
-#       bash install-remote.sh -u aubergine -b development root@dev-2.digitalcommons.coop
+#       bash scripts/install-remote.sh -u aubergine -b development root@dev-2.digitalcommons.coop
 
 set -e
 

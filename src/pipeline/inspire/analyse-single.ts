@@ -13,7 +13,7 @@ const analysePolygonInJSON = async (
   geoJsonPath,
   inspireId: number | undefined
 ) => {
-  const logger = getLogger("analyse-single");
+  const logger = getLogger();
   const data = JSON.parse(await readFile(geoJsonPath, "utf8"));
   console.log(`Number of polygons in ${geoJsonPath}:`, data.features.length);
   let id: number;
@@ -45,7 +45,7 @@ const analysePolygonInJSON = async (
       console.log("Coordinates diff:", diff);
 
       const { match, percentageIntersect, offsetStats } = await comparePolygons(
-        logger,
+        id,
         id,
         oldCoords,
         newCoords
