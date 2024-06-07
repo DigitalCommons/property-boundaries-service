@@ -26,6 +26,19 @@ async function start() {
 
   server.route(routes);
 
+  // Log requests and response codes
+  server.events.on("response", (request: any) => {
+    console.log(
+      request.info.remoteAddress +
+        ": " +
+        request.method.toUpperCase() +
+        " " +
+        request.path +
+        " --> " +
+        request.response.statusCode
+    );
+  });
+
   console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
   server.start();
 }

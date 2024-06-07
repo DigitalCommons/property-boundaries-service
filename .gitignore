@@ -1,4 +1,8 @@
-node_modules/
-dist/
-downloads/
+node_modules
+dist
+downloads
+geojson
+analysis
+logs
 .env
+.DS_Store

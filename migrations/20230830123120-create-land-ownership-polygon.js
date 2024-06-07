@@ -6,14 +6,14 @@ module.exports = {
       `CREATE TABLE land_ownership_polygons (
         id int NOT NULL AUTO_INCREMENT,
         poly_id int NOT NULL,
-        title_no varchar(255) NOT NULL,
+        title_no varchar(255) DEFAULT NULL,
         geom geometry NOT NULL,
-        createdAt date DEFAULT NULL,
-        updatedAt date DEFAULT NULL,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP,
+        updatedAt datetime DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         SPATIAL KEY geom (geom),
-        KEY title_no (title_no),
-        KEY poly_id (poly_id)
+        UNIQUE KEY poly_id (poly_id),
+        KEY title_no (title_no)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
   },
