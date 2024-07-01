@@ -40,7 +40,7 @@ export const PolygonModel = sequelize.define(
     },
     geom: {
       allowNull: false,
-      type: DataTypes.GEOMETRY,
+      type: DataTypes.GEOMETRY("POLYGON", 4326),
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
@@ -66,7 +66,7 @@ export const PendingPolygonModel = sequelize.define(
     },
     geom: {
       allowNull: false,
-      type: DataTypes.GEOMETRY,
+      type: DataTypes.GEOMETRY("POLYGON", 4326),
     },
     council: {
       allowNull: false,
@@ -102,6 +102,8 @@ export const PendingDeletionModel = sequelize.define(
   },
   {
     tableName: "pending_polygon_deletions",
+    createdAt: false,
+    updatedAt: false,
   }
 );
 
@@ -209,17 +211,26 @@ export const bulkCreatePendingPolygons = async (
   council: string,
   logging = false
 ) => {
-  const parsedPolygons = polygonGeojsonFeatures.map((feature) => ({
-    poly_id: feature.properties.INSPIREID,
-    geom: feature.geometry,
+  const numFeatures = polygonGeojsonFeatures.length;
+  const parsedPolygonValues = polygonGeojsonFeatures.map((feature) => [
+    feature.properties.INSPIREID, // poly_id
+    JSON.stringify(feature.geometry), // geom
     council,
-    accepted: false,
-  }));
+    false, // accepted
+  ]);
 
-  await PendingPolygonModel.bulkCreate(parsedPolygons, {
+  const query = `INSERT INTO pending_inspire_polygons (poly_id, geom, council, accepted)
+    VALUES
+    ${"(?, ST_GeomFromGeoJSON(?), ?, ?),".repeat(numFeatures - 1)}
+    (?, ST_GeomFromGeoJSON(?), ?, ?)
+    ON DUPLICATE KEY UPDATE
+      geom = VALUES(geom), council = VALUES(council), accepted = VALUES(accepted);`;
+
+  return await sequelize.query(query, {
+    replacements: parsedPolygonValues.flat(),
+    type: QueryTypes.INSERT,
     logging: logging ? console.log : false,
     benchmark: true,
-    updateOnDuplicate: ["geom", "council", "accepted"],
   });
 };
 
@@ -248,22 +259,6 @@ export const getNextPendingPolygon = async (
         council: polygon.council,
       }
     : null;
-};
-
-export const createOrUpdatePolygonGeom = async (
-  poly_id: number,
-  geom: Polygon,
-  logging = false
-) => {
-  await PolygonModel.upsert(
-    {
-      poly_id,
-      geom,
-    },
-    {
-      logging: logging ? console.log : false,
-    }
-  );
 };
 
 export const createOrUpdateLandOwnership = async (
@@ -475,12 +470,18 @@ export const getPolygonsByIdInSearchArea = async (
  * Get pending polygons that intersect with the search area.
  *
  * @param searchArea a stringified GeoJSON Polygon geometry
+ * @param acceptedOnly whether to only return accepted pending polygons (default to all)
  * @returns an array of pending polygons that match the criteria
  */
-export const getPendingPolygonsInSearchArea = async (searchArea: string) => {
+export const getPendingPolygonsInSearchArea = async (
+  searchArea: string,
+  acceptedOnly = false
+) => {
+  const acceptedCondition = acceptedOnly ? "AND accepted = true" : "";
   const query = `SELECT *
     FROM pending_inspire_polygons
-    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?));`;
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
+    ${acceptedCondition};`;
 
   return await sequelize.query(query, {
     replacements: [searchArea],

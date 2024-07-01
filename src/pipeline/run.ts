@@ -20,7 +20,10 @@ type TaskOptions = {
   updateBoundaries?: boolean; // Whether to actually update the boundaries in the DB after analysing
 };
 
-export type PipelineOptions = { startAtTask?: string } & TaskOptions;
+export type PipelineOptions = {
+  startAtTask?: string;
+  stopBeforeTask?: string;
+} & TaskOptions;
 
 /** The pipeline runs these methods in this order */
 const tasks = [
@@ -52,25 +55,40 @@ const runPipeline = async (options: PipelineOptions) => {
   const pipelineKey = getRunningPipelineKey();
   const logger = getLogger();
 
-  let { startAtTask, ...taskOptions } = options;
+  let { startAtTask, stopBeforeTask, ...taskOptions } = options;
 
-  let startTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
-  if (startTaskIndex === -1) {
+  let startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
+  if (startAtTaskIndex === -1) {
     if (startAtTask) {
       logger.error(
-        `${startAtTask} isn't a valid task, so just start at beginning of pipeline`
+        `'${startAtTask}' isn't a valid startAtTask, so just start at beginning of pipeline`
       );
     }
     startAtTask = undefined;
-    startTaskIndex = 0;
+    startAtTaskIndex = 0;
   }
+  let stopBeforeTaskIndex = tasks.findIndex(
+    (task) => task.name === stopBeforeTask
+  );
+  if (stopBeforeTaskIndex === -1) {
+    if (stopBeforeTask) {
+      logger.error(
+        `'${stopBeforeTask}' isn't a valid stopBeforeTask, so just continue to the end of the pipeline`
+      );
+    }
+    stopBeforeTask = undefined;
+    stopBeforeTaskIndex = tasks.length;
+  }
+
   logger.info(
-    `Started pipeline run ${pipelineKey} at ${startAtTask || "beginning"}`
+    `Started pipeline run ${pipelineKey} at ${
+      startAtTask || "beginning"
+    }, will stop at ${stopBeforeTask || "end"}`
   );
 
   try {
     let output: string | void;
-    for (const task of tasks.slice(startTaskIndex)) {
+    for (const task of tasks.slice(startAtTaskIndex, stopBeforeTaskIndex)) {
       const msg = `Pipeline ${pipelineKey} running task: ${
         task.name
       } with options: ${JSON.stringify(taskOptions)}`;
@@ -115,8 +133,8 @@ const runPipeline = async (options: PipelineOptions) => {
 };
 
 /**
- * Function which is exposed to Hapi API to trigger a pipeline run. Starts the pipeline but doesn't
- * wait for it to finish
+ * Function which is exposed to server routes to trigger a pipeline run. Starts the pipeline but
+ * doesn't wait for it to finish.
  * @returns unique key for the pipeline, or null if the pipeline is already running
  */
 export const triggerPipelineRun = async (
@@ -131,3 +149,6 @@ export const triggerPipelineRun = async (
   runPipeline(options);
   return pipelineKey;
 };
+
+// ┌────────────────────────┬───────┬───────┐\n│        (index)         │ count │   %   │\n├────────────────────────┼───────┼───────┤\n│     exactMatchIds      │   2   │ 0.01  │\n│    sameVerticesIds     │   0   │   0   │\n│     exactOffsetIds     │ 19598 │ 97.99 │\n│     highOverlapIds     │  76   │ 0.38  │\n│  boundariesShiftedIds  │  35   │ 0.18  │\n│       mergedIds        │   1   │ 0.01  │\n│  mergedIncompleteIds   │   0   │   0   │\n│      segmentedIds      │  31   │ 0.16  │\n│ segmentedIncompleteIds │   0   │   0   │\n│ mergedAndSegmentedIds  │   3   │ 0.02  │\n│     newSegmentIds      │  38   │ 0.19  │\n│        movedIds        │   1   │ 0.01  │\n│     failedMatchIds     │   7   │ 0.04  │\n│     newInspireIds      │  208  │ 1.04  │\n└────────────────────────┴───────┴───────┘
+// ┌────────────────────────┬───────┬───────┐\n│        (index)         │ count │   %   │\n├────────────────────────┼───────┼───────┤\n│     exactMatchIds      │   2   │ 0.01  │\n│    sameVerticesIds     │   0   │   0   │\n│     exactOffsetIds     │ 19598 │ 97.99 │\n│     highOverlapIds     │  76   │ 0.38  │\n│  boundariesShiftedIds  │  35   │ 0.18  │\n│       mergedIds        │   1   │ 0.01  │\n│  mergedIncompleteIds   │   0   │   0   │\n│      segmentedIds      │  31   │ 0.16  │\n│ segmentedIncompleteIds │   0   │   0   │\n│ mergedAndSegmentedIds  │   3   │ 0.02  │\n│     newSegmentIds      │  38   │ 0.19  │\n│        movedIds        │   1   │ 0.01  │\n│     failedMatchIds     │   7   │ 0.04  │\n│     newInspireIds      │  208  │ 1.04  │\n└────────────────────────┴───────┴───────┘

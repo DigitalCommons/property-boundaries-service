@@ -2,7 +2,6 @@ import path from "path";
 import { readdirSync } from "fs";
 import { readFile } from "fs/promises";
 import { Match, getExistingPolygons, comparePolygons } from "./methods";
-import getLogger from "../logger";
 
 // Analyse a single polygon with the following INSPIRE ID (or just take any if undefined)
 const ID = undefined;
@@ -13,7 +12,6 @@ const analysePolygonInJSON = async (
   geoJsonPath,
   inspireId: number | undefined
 ) => {
-  const logger = getLogger();
   const data = JSON.parse(await readFile(geoJsonPath, "utf8"));
   console.log(`Number of polygons in ${geoJsonPath}:`, data.features.length);
   let id: number;

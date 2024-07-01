@@ -46,13 +46,13 @@ export enum Match {
   Fail,
 }
 
-const options = {
+const options: NodeGeocoder.Options = {
   provider: "mapbox",
   apiKey: process.env.MAPBOX_GEOCODER_TOKEN,
   formatter: null,
 };
 
-const geocoder = NodeGeocoder(options);
+let geocoder: NodeGeocoder.Geocoder;
 
 /**
  * Query the existing land_ownership_polygon table for freehold or unknown tenure (i.e. potentially
@@ -238,6 +238,7 @@ export const comparePolygons = async (
   oldMergedIds?: number[];
 }> => {
   const logger = getLogger();
+  geocoder = NodeGeocoder(options);
 
   if (areExactMatch(oldCoords, newCoords)) {
     return { match: Match.Exact, percentageIntersect: 100 };
@@ -299,9 +300,14 @@ export const comparePolygons = async (
     );
 
     if (titleAddress) {
-      logger.info(`Title address is ${titleAddress}`);
+      logger.debug(`Title address is ${titleAddress}`);
+      let results = [];
       // Try geocoding the matching title address
-      const results = await geocoder.geocode(`${titleAddress}, UK`);
+      try {
+        results = await geocoder.geocode(`${titleAddress}, UK`);
+      } catch (err) {
+        logger.error(err, "Failed to geocode title address");
+      }
 
       if (results.length > 0) {
         // Check against each of the geocoded results and find closest match
@@ -320,7 +326,7 @@ export const comparePolygons = async (
 
         // If new polygon lies within 50m of a geocoded location, accept it as a moved boundary
         if (metersFromAddress < 50) {
-          logger.info(
+          logger.debug(
             {
               oldInspireId,
               newInspireId,
@@ -333,7 +339,7 @@ export const comparePolygons = async (
             offsetStats,
           };
         } else {
-          logger.info(
+          logger.debug(
             {
               oldInspireId,
               newInspireId,
@@ -583,7 +589,7 @@ export const comparePolygons = async (
               } else {
                 // Something complicated has happened e.g. property has segmented and some segments
                 // have taken land from a neighbouring property. Mark as a fail.
-                logger.info(
+                logger.debug(
                   {
                     oldInspireId,
                     newInspireId,
@@ -658,7 +664,7 @@ export const comparePolygons = async (
     (oldMergedIds.size && incompleteSegmentation) ||
     (oldMergedIds.size && newSegmentIds.size)
   ) {
-    logger.info(
+    logger.debug(
       {
         oldInspireId,
         newInspireId,

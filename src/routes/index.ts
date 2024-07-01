@@ -5,7 +5,7 @@ import {
   ResponseToolkit,
 } from "@hapi/hapi";
 import {
-  getPolygonsByArea,
+  getPendingPolygonsInSearchArea,
   getPolygonsByProprietorName,
   getPolygonsByIdInSearchArea,
 } from "../queries/query";
@@ -13,69 +13,22 @@ import path from "path";
 import fs from "fs";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
 
-/** Handler for dev testing our newly generated INSPIRE GeoJSONs */
-async function getBoundariesDummy(request: Request): Promise<any> {
-  // Get dummy info from a specific council
-  const data = JSON.parse(
-    fs.readFileSync(
-      path.resolve(`./geojson/Adur_District_Council.json`),
-      "utf8"
-    )
-  );
-  console.log(
-    "Last polygon in dataset:",
-    data.features.slice(-1)[0].geometry.coordinates[0]
-  );
-
-  // CHANGE THESE:
-  const id_we_want = 34853603;
-  const numSurroundingPolys = 2000;
-
-  let index = data.features.findIndex(
-    (feature) => feature.properties.INSPIREID === id_we_want
-  );
-  if (index === -1) {
-    console.log("ID doesn't exist, so just show first", numSurroundingPolys);
-    index = Math.round(numSurroundingPolys / 2) - 1;
-  }
-  const firstNearbyPolygonIndex = Math.max(
-    0,
-    index - Math.round(numSurroundingPolys / 2)
-  );
-
-  // Transform into what LX expects
-  const polygons = data.features
-    .slice(
-      firstNearbyPolygonIndex,
-      firstNearbyPolygonIndex + numSurroundingPolys + 1
-    )
-    .map((feature) => ({
-      poly_id: feature.properties.INSPIREID,
-      geom: {
-        ...feature.geometry,
-        coordinates: [
-          feature.geometry.coordinates[0].map((c) => c.toReversed()),
-        ],
-      },
-    }));
-  return [polygons];
-}
-
 type GetPolygonsInBoxRequest = Request & {
   query: {
     sw_lng: number;
     sw_lat: number;
     ne_lng: number;
     ne_lat: number;
+    acceptedOnly?: string;
     secret: string;
   };
 };
 
 // TODO: combine with search route so we can filter by a box and ownership at the same time?
-async function getPolygonsInBox(
+const getPolygonsInBox = async (
   request: GetPolygonsInBoxRequest,
   h: ResponseToolkit
-): Promise<ResponseObject> {
+): Promise<ResponseObject> => {
   const { sw_lng, sw_lat, ne_lng, ne_lat, secret } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
@@ -86,13 +39,61 @@ async function getPolygonsInBox(
     return h.response("bounds are not valid").code(400);
   }
 
-  const searchArea = `POLYGON ((${sw_lng} ${sw_lat}, ${ne_lng} ${sw_lat}, ${ne_lng} ${ne_lat}, ${sw_lng} ${ne_lat}, ${sw_lng} ${sw_lat}))`;
+  const searchArea = JSON.stringify({
+    type: "Polygon",
+    coordinates: [
+      [
+        [+sw_lat, +sw_lng],
+        [+ne_lat, +sw_lng],
+        [+ne_lat, +ne_lng],
+        [+sw_lat, +ne_lng],
+        [+sw_lat, +sw_lng],
+      ],
+    ],
+  });
 
-  const polygons = await getPolygonsByArea(searchArea);
+  const polygons = await getPolygonsByIdInSearchArea(undefined, searchArea);
 
-  // TODO: remove this double-nested array and fix on backend API too
-  return h.response([polygons]).code(200);
-}
+  return h.response(polygons).code(200);
+};
+
+const getPendingPolygonsInBox = async (
+  request: GetPolygonsInBoxRequest,
+  h: ResponseToolkit
+): Promise<ResponseObject> => {
+  const { sw_lng, sw_lat, ne_lng, ne_lat, acceptedOnly, secret } =
+    request.query;
+
+  if (!secret || secret !== process.env.SECRET) {
+    return h.response("missing or incorrect secret").code(403);
+  }
+
+  if (!sw_lng || !sw_lat || !ne_lng || !ne_lat) {
+    return h.response("bounds are not valid").code(400);
+  }
+
+  const searchArea = JSON.stringify({
+    type: "Polygon",
+    coordinates: [
+      [
+        [+sw_lat, +sw_lng],
+        [+ne_lat, +sw_lng],
+        [+ne_lat, +ne_lng],
+        [+sw_lat, +ne_lng],
+        [+sw_lat, +sw_lng],
+      ],
+    ],
+  });
+
+  console.log("bbbb", typeof acceptedOnly);
+
+  const polygons = await getPendingPolygonsInSearchArea(
+    searchArea,
+    acceptedOnly === "true"
+  );
+
+  return h.response(polygons).code(200);
+};
 
 type GetPolygonsRequest = Request & {
   payload: {
@@ -168,10 +169,67 @@ const runPipeline = async (
   return h.response(`${msg}\n`);
 };
 
+/** Handler for dev testing our newly generated INSPIRE GeoJSONs */
+const getBoundariesDummy = async (request: Request): Promise<any> => {
+  // Get dummy info from a specific council
+  const data = JSON.parse(
+    fs.readFileSync(
+      path.resolve(`./geojson/Adur_District_Council.json`),
+      "utf8"
+    )
+  );
+  console.log(
+    "Last polygon in dataset:",
+    data.features.slice(-1)[0].geometry.coordinates[0]
+  );
+
+  // CHANGE THESE:
+  const id_we_want = 34853603;
+  const numSurroundingPolys = 2000;
+
+  let index = data.features.findIndex(
+    (feature) => feature.properties.INSPIREID === id_we_want
+  );
+  if (index === -1) {
+    console.log("ID doesn't exist, so just show first", numSurroundingPolys);
+    index = Math.round(numSurroundingPolys / 2) - 1;
+  }
+  const firstNearbyPolygonIndex = Math.max(
+    0,
+    index - Math.round(numSurroundingPolys / 2)
+  );
+
+  // Transform into what LX expects
+  const polygons = data.features
+    .slice(
+      firstNearbyPolygonIndex,
+      firstNearbyPolygonIndex + numSurroundingPolys + 1
+    )
+    .map((feature) => ({
+      poly_id: feature.properties.INSPIREID,
+      geom: {
+        ...feature.geometry,
+        coordinates: [
+          feature.geometry.coordinates[0].map((c) => c.toReversed()),
+        ],
+      },
+    }));
+  return polygons;
+};
+
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
   path: "/boundaries",
-  handler: getPolygonsInBox, // TODO: change this back to getPolygonsInBox in the live app
+  handler: getPolygonsInBox,
+  options: {
+    auth: false,
+  },
+};
+
+const getPendingBoundariesRoute: ServerRoute = {
+  method: "GET",
+  path: "/pending/boundaries",
+  handler: getPendingPolygonsInBox,
   options: {
     auth: false,
   },
@@ -209,6 +267,7 @@ const runPipelineRoute: ServerRoute = {
 
 const routes = [
   getBoundariesRoute,
+  getPendingBoundariesRoute,
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,

@@ -6,25 +6,36 @@
   "scripts": {
     "build": "rm -rf dist && tsc",
     "serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=5120'",
-    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=1024' nodemon -e ts src/app.ts",
+    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/plot.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "env-cmd -f .env.test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/chai": "^4.3.16",
     "@types/lodash.chunk": "^4.2.9",
+    "@types/mocha": "^10.0.6",
     "@types/node": "^20.4.9",
+    "@types/node-geocoder": "^4.2.6",
+    "@types/proxyquire": "^1.3.31",
+    "@types/sinon": "^17.0.3",
     "@types/stats-lite": "^2.2.2",
     "@types/stream-chain": "^2.0.4",
     "@types/stream-json": "^1.7.7",
     "@types/unzip-stream": "^0.3.4",
     "@types/uuid": "^9.0.8",
+    "chai": "^5.1.1",
     "cross-env": "^7.0.3",
+    "env-cmd": "^10.1.0",
+    "mocha": "^10.4.0",
     "nodemon": "^3.1.0",
     "prettier": "3.1.1",
+    "proxyquire": "^2.1.3",
+    "sinon": "^18.0.0",
+    "ts-mocha": "^10.0.0",
     "ts-node": "^10.9.2"
   },
   "dependencies": {

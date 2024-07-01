@@ -33,7 +33,7 @@ let newDownloads: string[] = [];
 let logger: Logger;
 
 /** Download INSPIRE files using a headless playwright browser */
-const downloadInspire = async (numCouncils: number) => {
+const downloadInspire = async (maxCouncils: number) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
@@ -62,7 +62,7 @@ const downloadInspire = async (numCouncils: number) => {
     `We found INSPIRE download links for ${inspireDownloadLinks.length} councils`
   );
 
-  for (const link of inspireDownloadLinks.slice(0, numCouncils)) {
+  for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const downloadButton = await page.waitForSelector("#" + link);
 
     const downloadPromise = page.waitForEvent("download");
@@ -174,7 +174,7 @@ const transformGMLToGeoJson = async (council: string) => {
  * projection (the standard GPS projection used by GeoJSON and in our DB).
  */
 const ogr2ogr = async (inputPath: string, outputPath: string) => {
-  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 -lco RFC7946=YES ${outputPath} ${inputPath}`;
+  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
   await promisify(exec)(command, {
     maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
   });
@@ -210,17 +210,26 @@ const createPendingPolygons = async () => {
     ]);
 
     // Insert into DB in chunks rather than individually, to reduce DB operations, but use small
-    // enoguh chunks so that we don't hit MySQL max packet limit
+    // enough chunks so that we don't hit MySQL max packet limit
     const chunkSize = 10000;
 
     for await (const data of pipeline) {
       const polygon: Feature<Polygon> = data.value;
       ++polygonsCount;
 
-      // Reverse since we store coords as lat-long in DB, not long-lat like in the govt INSPIRE data
-      for (const vertex of polygon.geometry.coordinates[0]) {
-        vertex.reverse();
+      try {
+        // Reverse since we store coords as lat-long in DB, not long-lat as in the govt INSPIRE data
+        for (const vertex of polygon.geometry.coordinates[0]) {
+          vertex.reverse();
+        }
+      } catch (error) {
+        logger.error(
+          { error, polygon },
+          `Error reversing polygon coordinates, skip this bad polygon`
+        );
+        continue;
       }
+
       polygonsToCreate.push(polygon);
 
       if (polygonsToCreate.length >= chunkSize) {

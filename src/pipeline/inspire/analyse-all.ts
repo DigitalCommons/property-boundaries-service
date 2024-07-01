@@ -24,7 +24,6 @@ import stringTable from "nodestringtable";
 import getLogger from "../logger";
 import { Logger } from "pino";
 import { getRunningPipelineKey } from "../util";
-import { all } from "axios";
 
 let logger: Logger;
 const analysisFolder = path.resolve("./analysis");
@@ -132,8 +131,8 @@ const resetAnalysis = async () => {
 const processMatch = async (
   match: Match,
   inspireId: number,
-  oldMergedIds: number[],
-  newSegmentIds: number[]
+  oldMergedIds?: number[],
+  newSegmentIds?: number[]
 ) => {
   switch (match) {
     /** Old and new polys have same vertices (to above precision decimal places) */
@@ -322,15 +321,14 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
           latLong: newCoords[0],
           percentageIntersect,
         });
+        newSegmentIds?.forEach((id) => {
+          allIds.newSegmentIds.add(id);
+          allIds.newInspireIds.delete(id); // in case we already added the ID to this set
+        });
         break;
     }
 
-    newSegmentIds.forEach((id) => {
-      allIds.newSegmentIds.add(id);
-      allIds.newInspireIds.delete(id); // in case we already added the ID to this set
-    });
-
-    processMatch(match, inspireId, oldMergedIds, newSegmentIds);
+    await processMatch(match, inspireId, oldMergedIds, newSegmentIds);
   } else {
     if (!allIds.newSegmentIds.has(inspireId)) {
       allIds.newInspireIds.add(inspireId);
@@ -339,6 +337,11 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
 };
 
 const analyseNewInspireId = async (inspireId: number) => {
+  if (!allIds.newInspireIds.has(inspireId)) {
+    // Already processed this new INSPIRE ID as part of a segmentation
+    return;
+  }
+
   const polygon: PendingPolygon = await getPendingPolygon(inspireId);
   const newCoords: number[][] = polygon.geom.coordinates[0];
   const latLongOffset = previousLatLongOffsets[polygon.council] || [0, 0];
@@ -349,7 +352,9 @@ const analyseNewInspireId = async (inspireId: number) => {
     coords[1] - latLongOffset[1],
   ]);
 
-  if (!coordsOverlapWithExistingPoly(newCoordsMinusOffset)) {
+  const coordsOverlapWithExisting =
+    await coordsOverlapWithExistingPoly(newCoordsMinusOffset);
+  if (!coordsOverlapWithExisting) {
     // Can just accept this new poly since it doensn't have any conflicts
     await acceptPendingPolygon(inspireId);
     return;
@@ -359,7 +364,8 @@ const analyseNewInspireId = async (inspireId: number) => {
     await findExistingContainingOrContainedPoly(newCoordsMinusOffset);
 
   if (!existingPoly) {
-    // There is overlap but not a clean merge/segment to mark as a fail
+    console.log("messy", inspireId);
+    // There is overlap but not a clean merge/segment so mark as a fail
     allIds.newInspireIds.delete(inspireId);
     allIds.failedMatchIds.add(inspireId);
     allFailedMatchesInfo.push({
@@ -382,6 +388,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       latLongOffset
     );
 
+  console.log("contained", inspireId, existingPoly.inspireId, match);
   switch (match) {
     case Match.Exact:
     case Match.SameVertices:
@@ -417,6 +424,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       });
       [...newSegmentIds, inspireId].forEach((id) => {
         allIds.newSegmentIds.add(id);
+        allIds.failedMatchIds.delete(id);
         allIds.newInspireIds.delete(id); // we don't need to analyse this new INSPIRE ID again
       });
       break;
@@ -426,6 +434,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       break;
     case Match.Fail:
       allIds.newInspireIds.delete(inspireId);
+      allIds.newSegmentIds.delete(inspireId);
       allIds.failedMatchIds.add(inspireId);
       allFailedMatchesInfo.push({
         inspireId,
@@ -436,10 +445,10 @@ const analyseNewInspireId = async (inspireId: number) => {
       break;
   }
 
-  processMatch(
+  await processMatch(
     match,
     inspireId,
-    [...oldMergedIds, existingPoly.inspireId],
+    oldMergedIds?.concat([existingPoly.inspireId]),
     newSegmentIds
   );
 };
@@ -467,7 +476,7 @@ export const analyseAllPendingPolygons = async (
   // Max number of pending polygons we will analyse, default to all
   const maxPolygons: number = options.maxPolygons || 1e9;
   // Whether to overwrite existing boundary data with pending polygons that we accept, default yes.
-  const updateBoundaries: boolean = options.updateBoundaries || true;
+  const updateBoundaries: boolean = options.updateBoundaries !== "false";
 
   logger = getLogger();
   await resetAnalysis();
@@ -481,7 +490,7 @@ export const analyseAllPendingPolygons = async (
   let polygon: PendingPolygon = await getNextPendingPolygon(1);
 
   while (polygon && totalNumPolygonsAnalysed < maxPolygons) {
-    analysePolygon(polygon);
+    await analysePolygon(polygon);
     totalNumPolygonsAnalysed += 1;
 
     if (totalNumPolygonsAnalysed % 5000 === 0) {
@@ -553,6 +562,7 @@ export const analyseAllPendingPolygons = async (
   }
 
   if (updateBoundaries) {
+    logger.info("Updating main land_ownership_polygons table");
     await deleteAllPolygonsPendingDeletion();
     await insertAllAcceptedPendingPolygons();
 
