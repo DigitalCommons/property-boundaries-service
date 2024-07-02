@@ -7,8 +7,7 @@ import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
 import moment from "moment-timezone";
-import getLogger from "../logger";
-import { Logger } from "pino";
+import logger from "../logger";
 import {
   bulkCreatePendingPolygons,
   deleteAllPendingPolygons,
@@ -30,7 +29,6 @@ const userAgents = [
 let downloadPath: string;
 let geojsonPath: string;
 let newDownloads: string[] = [];
-let logger: Logger;
 
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (maxCouncils: number) => {
@@ -174,7 +172,7 @@ const transformGMLToGeoJson = async (council: string) => {
  * projection (the standard GPS projection used by GeoJSON and in our DB).
  */
 const ogr2ogr = async (inputPath: string, outputPath: string) => {
-  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
+  const command = `ogr2ogr -f GeoJSON -lco RFC7946=YES -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
   await promisify(exec)(command, {
     maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
   });
@@ -238,6 +236,9 @@ const createPendingPolygons = async () => {
       }
     }
 
+    // Final chunk
+    await bulkCreatePendingPolygons(polygonsToCreate, council);
+
     // Sanity check that we parsed some data
     if (polygonsCount < 100) {
       throw new Error(
@@ -286,7 +287,6 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   // Download the data for the first <maxCouncils> councils. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
-  logger = getLogger();
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);

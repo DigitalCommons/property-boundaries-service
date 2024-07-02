@@ -5,7 +5,7 @@ import { startPipelineRun } from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
 import { downloadAndBackupInspirePolygons } from "./inspire/download";
 import { analyseAllPendingPolygons } from "./inspire/analyse-all";
-import getLogger from "./logger";
+import logger, { initLogger } from "./logger";
 import moment from "moment-timezone";
 import { getRunningPipelineKey } from "./util";
 
@@ -53,7 +53,6 @@ const runPipeline = async (options: PipelineOptions) => {
   running = true;
   const startTimeMs = Date.now();
   const pipelineKey = getRunningPipelineKey();
-  const logger = getLogger();
 
   let { startAtTask, stopBeforeTask, ...taskOptions } = options;
 
@@ -146,9 +145,7 @@ export const triggerPipelineRun = async (
   }
 
   const pipelineKey = await startPipelineRun();
+  initLogger(pipelineKey);
   runPipeline(options);
   return pipelineKey;
 };
-
-// ┌────────────────────────┬───────┬───────┐\n│        (index)         │ count │   %   │\n├────────────────────────┼───────┼───────┤\n│     exactMatchIds      │   2   │ 0.01  │\n│    sameVerticesIds     │   0   │   0   │\n│     exactOffsetIds     │ 19598 │ 97.99 │\n│     highOverlapIds     │  76   │ 0.38  │\n│  boundariesShiftedIds  │  35   │ 0.18  │\n│       mergedIds        │   1   │ 0.01  │\n│  mergedIncompleteIds   │   0   │   0   │\n│      segmentedIds      │  31   │ 0.16  │\n│ segmentedIncompleteIds │   0   │   0   │\n│ mergedAndSegmentedIds  │   3   │ 0.02  │\n│     newSegmentIds      │  38   │ 0.19  │\n│        movedIds        │   1   │ 0.01  │\n│     failedMatchIds     │   7   │ 0.04  │\n│     newInspireIds      │  208  │ 1.04  │\n└────────────────────────┴───────┴───────┘
-// ┌────────────────────────┬───────┬───────┐\n│        (index)         │ count │   %   │\n├────────────────────────┼───────┼───────┤\n│     exactMatchIds      │   2   │ 0.01  │\n│    sameVerticesIds     │   0   │   0   │\n│     exactOffsetIds     │ 19598 │ 97.99 │\n│     highOverlapIds     │  76   │ 0.38  │\n│  boundariesShiftedIds  │  35   │ 0.18  │\n│       mergedIds        │   1   │ 0.01  │\n│  mergedIncompleteIds   │   0   │   0   │\n│      segmentedIds      │  31   │ 0.16  │\n│ segmentedIncompleteIds │   0   │   0   │\n│ mergedAndSegmentedIds  │   3   │ 0.02  │\n│     newSegmentIds      │  38   │ 0.19  │\n│        movedIds        │   1   │ 0.01  │\n│     failedMatchIds     │   7   │ 0.04  │\n│     newInspireIds      │  208  │ 1.04  │\n└────────────────────────┴───────┴───────┘

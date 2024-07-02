@@ -8,7 +8,7 @@
     "serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=5120'",
     "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
-    "plot": "node dist/pipeline/plot.js",
+    "plot": "node dist/pipeline/inspire/plot.js",
     "test": "env-cmd -f .env.test"
   },
   "keywords": [],
@@ -42,7 +42,7 @@
     "@hapi/hapi": "^21.3.2",
     "@mapbox/geojsonhint": "^3.3.0",
     "@playwright/browser-chromium": "^1.40.1",
-    "@turf/turf": "^6.5.0",
+    "@turf/turf": "^7.0.0",
     "axios": "^1.4.0",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.3.1",

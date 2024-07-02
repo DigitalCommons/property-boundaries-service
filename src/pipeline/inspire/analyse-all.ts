@@ -21,11 +21,9 @@ import {
 } from "../../queries/query";
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
-import getLogger from "../logger";
-import { Logger } from "pino";
+import logger from "../logger";
 import { getRunningPipelineKey } from "../util";
 
-let logger: Logger;
 const analysisFolder = path.resolve("./analysis");
 
 export type IdCollection = {
@@ -104,7 +102,6 @@ const resetAnalysis = async () => {
 
   allIds = {
     exactMatchIds: new Set(),
-    sameVerticesIds: new Set(),
     exactOffsetIds: new Set(),
     highOverlapIds: new Set(),
     boundariesShiftedIds: new Set(),
@@ -116,7 +113,8 @@ const resetAnalysis = async () => {
     newSegmentIds: new Set(),
     movedIds: new Set(),
     failedMatchIds: new Set(),
-    newInspireIds: new Set(),
+    changedInspireIds: new Set(),
+    newBoundaryIds: new Set(),
   };
 
   allMergeAndSegmentInstances = [];
@@ -137,10 +135,6 @@ const processMatch = async (
   switch (match) {
     /** Old and new polys have same vertices (to above precision decimal places) */
     case Match.Exact:
-      await acceptPendingPolygon(inspireId);
-      break;
-    /** Same vertices but a different presentation order */
-    case Match.SameVertices:
       await acceptPendingPolygon(inspireId);
       break;
     /** Same vertices, each offset by the same lat and long (within distance and std thresholds) */
@@ -196,6 +190,11 @@ const processMatch = async (
 const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
   const { poly_id: inspireId, geom, council } = polygon;
 
+  // Skip if already marked as failed (e.g. a new segment of a failed match)
+  if (allIds.failedMatchIds.has(inspireId)) {
+    return;
+  }
+
   if (!allStats.percentageIntersects[council]) {
     allStats.percentageIntersects[council] = [];
   }
@@ -232,28 +231,25 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
     );
 
     // Record all the stats for us to analyse/plot later
-
-    allStats.percentageIntersects[council].push(percentageIntersect);
-    if (offsetStats?.sameNumberVertices) {
-      // If offset could be calculated
-      allStats.offsetMeans[council].push(
-        Math.max(
-          // Choose max of either long or lat i.e. the worst case
-          Math.abs(offsetStats.latMean),
-          Math.abs(offsetStats.longMean)
-        )
-      );
-      allStats.offsetStds[council].push(
-        Math.max(offsetStats.latStd, offsetStats.longStd)
-      );
-    }
+    // Commented out for now to save storage and memory
+    // allStats.percentageIntersects[council].push(percentageIntersect);
+    // if (offsetStats?.sameNumberVertices) {
+    //   // If offset could be calculated
+    //   allStats.offsetMeans[council].push(
+    //     Math.max(
+    //       // Choose max of either long or lat i.e. the worst case
+    //       Math.abs(offsetStats.latMean),
+    //       Math.abs(offsetStats.longMean)
+    //     )
+    //   );
+    //   allStats.offsetStds[council].push(
+    //     Math.max(offsetStats.latStd, offsetStats.longStd)
+    //   );
+    // }
 
     switch (match) {
       case Match.Exact:
         allIds.exactMatchIds.add(inspireId);
-        break;
-      case Match.SameVertices:
-        allIds.sameVerticesIds.add(inspireId);
         break;
       case Match.ExactOffset:
         allIds.exactOffsetIds.add(inspireId);
@@ -287,7 +283,10 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
         allIds.movedIds.add(inspireId);
         break;
       case Match.Fail:
-        allIds.failedMatchIds.add(inspireId);
+        [inspireId, ...newSegmentIds].forEach((id) => {
+          allIds.failedMatchIds.add(id);
+          allIds.newBoundaryIds.delete(id); // in case we already added the ID to this set
+        });
         allFailedMatchesInfo.push({
           inspireId: inspireId,
           council,
@@ -323,7 +322,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
         });
         newSegmentIds?.forEach((id) => {
           allIds.newSegmentIds.add(id);
-          allIds.newInspireIds.delete(id); // in case we already added the ID to this set
+          allIds.newBoundaryIds.delete(id); // in case we already added the ID to this set
         });
         break;
     }
@@ -331,14 +330,17 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
     await processMatch(match, inspireId, oldMergedIds, newSegmentIds);
   } else {
     if (!allIds.newSegmentIds.has(inspireId)) {
-      allIds.newInspireIds.add(inspireId);
+      allIds.newBoundaryIds.add(inspireId);
     }
   }
 };
 
 const analyseNewInspireId = async (inspireId: number) => {
-  if (!allIds.newInspireIds.has(inspireId)) {
-    // Already processed this new INSPIRE ID as part of a segmentation
+  if (
+    allIds.failedMatchIds.has(inspireId) ||
+    !allIds.newBoundaryIds.has(inspireId)
+  ) {
+    // Already processed this new INSPIRE ID
     return;
   }
 
@@ -364,9 +366,8 @@ const analyseNewInspireId = async (inspireId: number) => {
     await findExistingContainingOrContainedPoly(newCoordsMinusOffset);
 
   if (!existingPoly) {
-    console.log("messy", inspireId);
-    // There is overlap but not a clean merge/segment so mark as a fail
-    allIds.newInspireIds.delete(inspireId);
+    // There is overlap (determined previously) but not a clean merge/segment, so mark as a fail
+    allIds.newBoundaryIds.delete(inspireId);
     allIds.failedMatchIds.add(inspireId);
     allFailedMatchesInfo.push({
       inspireId,
@@ -388,16 +389,19 @@ const analyseNewInspireId = async (inspireId: number) => {
       latLongOffset
     );
 
-  console.log("contained", inspireId, existingPoly.inspireId, match);
   switch (match) {
     case Match.Exact:
-    case Match.SameVertices:
     case Match.ExactOffset:
     case Match.HighOverlap:
     case Match.BoundariesShifted:
-      // The INSPIRE
       logger.info(
-        `INSPIRE ID of polygon has changed from ${existingPoly.inspireId} to ${inspireId}`
+        {
+          oldInspireId: existingPoly.inspireId,
+          newInspireId: inspireId,
+          latLong: newCoords[0],
+          percentageIntersect,
+        },
+        `INSPIRE ID of polygon has changed`
       );
       allInspireIdChanges.push({
         oldInspireId: existingPoly.inspireId,
@@ -405,8 +409,11 @@ const analyseNewInspireId = async (inspireId: number) => {
         latLong: newCoords[0],
         oldTitleNo: existingPoly.titleNo,
       });
+      allIds.newBoundaryIds.delete(inspireId);
+      allIds.newSegmentIds.delete(inspireId);
+      allIds.changedInspireIds.add(inspireId);
       await markPolygonDeletion(existingPoly.inspireId);
-      // TODO: can we link the old title to the new polygon?
+      // TODO: can/should we link the old title to the new polygon?
       break;
     case Match.Merged:
     case Match.MergedIncomplete:
@@ -425,7 +432,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       [...newSegmentIds, inspireId].forEach((id) => {
         allIds.newSegmentIds.add(id);
         allIds.failedMatchIds.delete(id);
-        allIds.newInspireIds.delete(id); // we don't need to analyse this new INSPIRE ID again
+        allIds.newBoundaryIds.delete(id); // we don't need to analyse these new INSPIRE IDs again
       });
       break;
     case Match.Moved:
@@ -433,9 +440,11 @@ const analyseNewInspireId = async (inspireId: number) => {
       // for this scenario where the INSPIRE ID is different.
       break;
     case Match.Fail:
-      allIds.newInspireIds.delete(inspireId);
-      allIds.newSegmentIds.delete(inspireId);
-      allIds.failedMatchIds.add(inspireId);
+      [inspireId, ...newSegmentIds].forEach((id) => {
+        allIds.failedMatchIds.add(id);
+        allIds.newBoundaryIds.delete(id);
+        allIds.newSegmentIds.delete(id);
+      });
       allFailedMatchesInfo.push({
         inspireId,
         council: polygon.council,
@@ -456,7 +465,7 @@ const analyseNewInspireId = async (inspireId: number) => {
 /**
  * Loop through all the pending polygons in the pending_inspire_polygons table, trying to find a
  * match with our existing polygons. If the match is successful, mark the pending polygon as
- * accepted. Then, if 'updateMainDbTable' is true, copy all of the accepted pending polygons into
+ * accepted. Then, if 'updateBoundaries' is true, copy all of the accepted pending polygons into
  * the main land_ownership_polygons table and overwrite existing geometry data.
  *
  * Log a summary of the results of the analysis and store the full results in the
@@ -475,10 +484,9 @@ export const analyseAllPendingPolygons = async (
 ): Promise<string> => {
   // Max number of pending polygons we will analyse, default to all
   const maxPolygons: number = options.maxPolygons || 1e9;
-  // Whether to overwrite existing boundary data with pending polygons that we accept, default yes.
-  const updateBoundaries: boolean = options.updateBoundaries !== "false";
+  // Whether to overwrite existing boundary data with pending polygons that we accept, default no.
+  const updateBoundaries: boolean = options.updateBoundaries === "true";
 
-  logger = getLogger();
   await resetAnalysis();
 
   if (maxPolygons !== 1e9) {
@@ -503,7 +511,7 @@ export const analyseAllPendingPolygons = async (
 
   // Process the complete list of polygons with new INSPIRE IDs (which aren't part of a segmentation
   // that we previously identified)
-  for (const inspireId of allIds.newInspireIds) {
+  for (const inspireId of allIds.newBoundaryIds) {
     await analyseNewInspireId(inspireId);
   }
 

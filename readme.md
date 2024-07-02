@@ -53,11 +53,11 @@ pipeline's time and unique key.
   - Add these tests to a Github CI pipeline, like on LX backend
   - We'll need to modularise some of the long functions in the pipeline a bit more (e.g. the `comparePolygons` function) to make unit testing easier
 
+- Add analytics and do profiling to find where bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council.
+
 - Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
   especially for low-level details, prefer Mocha specs over written
   documentation. Docs can be ignored but specs with unit tests can't.
-
-- Add analytics to find where bottlenecks are in analysis script, so they can be optimised.
 
 - Create an admin panel, maybe with a library like `react-admin`, so that we can easily search through our DB and visualise the results of pipelines. It would be great if pipelines created visualisations of some of the changed polygons, which could then be viewed in the admin panel, including:
 

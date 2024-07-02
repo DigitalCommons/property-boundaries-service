@@ -1,7 +1,11 @@
 import path from "path";
 import { plot, Layout } from "nodeplotlib";
 import fs from "fs";
-import { StatsCollection, StatsForEachCouncil } from "./analyse-all";
+import {
+  IdCollection,
+  StatsCollection,
+  StatsForEachCouncil,
+} from "./analyse-all";
 // import { percentile } from "stats-lite";
 
 const analysisPath = path.resolve("./analysis");
@@ -95,12 +99,31 @@ const plotOffsetStds = (offsetStds: StatsForEachCouncil) => {
 };
 
 // Script:
-const json = fs.readFileSync(
-  path.resolve(`${analysisPath}/stats.json`),
+// const json = fs.readFileSync(
+//   path.resolve(`${analysisPath}/stats.json`),
+//   "utf8"
+// );
+// const allStats: StatsCollection = JSON.parse(json);
+// console.log("Plotting histograms...");
+// plotPercentageIntersects(allStats.percentageIntersects);
+// plotOffsetMeans(allStats.offsetMeans);
+// plotOffsetStds(allStats.offsetStds);
+
+const idsJson = fs.readFileSync(
+  path.resolve(`${analysisPath}/2024-07-02_220714_hn8d5lpi4x/ids.json`),
   "utf8"
 );
-const allStats: StatsCollection = JSON.parse(json);
-console.log("Plotting histograms...");
-plotPercentageIntersects(allStats.percentageIntersects);
-plotOffsetMeans(allStats.offsetMeans);
-plotOffsetStds(allStats.offsetStds);
+const allIds = JSON.parse(idsJson);
+const dup = Object.values(allIds).flat().sort();
+let duplicate;
+for (let i = 0; i < dup.length; i++) {
+  if (dup[i] === dup[i + 1]) {
+    console.log("Duplicate ID:", dup[i]);
+    duplicate = dup[i];
+  }
+}
+for (const key of Object.keys(allIds)) {
+  if (allIds[key].includes(duplicate)) {
+    console.log("Category", key);
+  }
+}

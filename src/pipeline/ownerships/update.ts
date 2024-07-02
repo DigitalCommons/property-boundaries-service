@@ -12,7 +12,7 @@ import {
   getLatestDatasets,
   pipeZippedCsvFromUrlIntoFun,
 } from "./helpers";
-import getLogger from "../logger";
+import logger from "../logger";
 import { Logger } from "pino";
 
 /**
@@ -25,8 +25,6 @@ import { Logger } from "pino";
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
 export const updateOwnerships = async (options: any) => {
-  const logger = getLogger();
-
   const latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
   if (latestOwnershipDataDate) {
@@ -41,12 +39,12 @@ export const updateOwnerships = async (options: any) => {
     await downloadOwnershipsFullData(11, 2017, logger);
   }
 
-  const ccodHistoricalDatasets = await getDatasetHistory(false, logger);
-  const ocodHistoricalDatasets = await getDatasetHistory(true, logger);
+  const ccodHistoricalDatasets = await getDatasetHistory(false);
+  const ocodHistoricalDatasets = await getDatasetHistory(true);
 
   // Add the latest datasets which are (annoyingly) not included in the history API's response
-  const latestCcodDatasets = await getLatestDatasets(false, logger);
-  const latestOcodDatasets = await getLatestDatasets(true, logger);
+  const latestCcodDatasets = await getLatestDatasets(false);
+  const latestOcodDatasets = await getLatestDatasets(true);
 
   const unsortedListOfDatasets = [
     ...ccodHistoricalDatasets,
@@ -109,7 +107,6 @@ export const updateOwnerships = async (options: any) => {
       fileResponse.data.result.download_url,
       (ownershipsChunk) => addOwnershipToArray(ownershipsChunk[0]),
       1,
-      logger,
       false
     );
 
@@ -197,8 +194,7 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetUKResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, false),
-    20000,
-    logger
+    20000
   );
 
   const datasetOverseasResponse = await axios.get(
@@ -220,8 +216,7 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetOverseasResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, true),
-    20000,
-    logger
+    20000
   );
 
   logger.info(

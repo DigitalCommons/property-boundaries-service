@@ -2,11 +2,11 @@ import "dotenv/config";
 import axios from "axios";
 import * as unzip from "unzip-stream";
 import csvParser, { CsvParser } from "csv-parser";
-import { Logger } from "pino";
+import logger from "../logger";
 
 // These are all helper functions for the 2 main functions in ./update.ts
 
-export const getDatasetHistory = async (overseas: boolean, logger: Logger) => {
+export const getDatasetHistory = async (overseas: boolean) => {
   const type = overseas ? "ocod" : "ccod";
   const response = await axios.get(
     `${process.env.GOV_API_URL}/datasets/history/${type}`,
@@ -31,7 +31,7 @@ export const getDatasetHistory = async (overseas: boolean, logger: Logger) => {
   }));
 };
 
-export const getLatestDatasets = async (overseas: boolean, logger: Logger) => {
+export const getLatestDatasets = async (overseas: boolean) => {
   const type = overseas ? "ocod" : "ccod";
   const response = await axios.get(
     `${process.env.GOV_API_URL}/datasets/${type}`,
@@ -66,14 +66,13 @@ export const pipeZippedCsvFromUrlIntoFun = async (
   downloadUrl: string,
   processChunkOfRowsFunc: (chunkOfRows: any[]) => Promise<void>,
   chunkSize: number,
-  logger: Logger,
   logProgress: boolean = true
 ) => {
   const response = await axios.get(downloadUrl, {
     responseType: "stream",
   });
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     response.data.pipe(unzip.Parse()).on("entry", (entry) => {
       var filePath = entry.path;
       logger.info(`Reading ${filePath}`);
@@ -109,7 +108,11 @@ export const pipeZippedCsvFromUrlIntoFun = async (
           rowsToSend.push(row);
         });
 
-        csvPipe.on("end", resolve);
+        csvPipe.on("end", async () => {
+          // Final chunk
+          await processChunkOfRowsFunc(rowsToSend);
+          resolve();
+        });
         csvPipe.on("error", reject);
       } else {
         entry.autodrain();

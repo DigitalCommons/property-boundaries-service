@@ -53,11 +53,6 @@ const analysePolygonInJSON = async (
         case Match.Exact:
           console.log("Exact match");
           break;
-        case Match.SameVertices:
-          console.log(
-            "Same set of vertices but in different presentation order"
-          );
-          break;
         case Match.ExactOffset:
           console.log(
             "Same vertices, each offset by the same lat and long (within distance and std thresholds)"

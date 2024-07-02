@@ -85,8 +85,6 @@ const getPendingPolygonsInBox = async (
     ],
   });
 
-  console.log("bbbb", typeof acceptedOnly);
-
   const polygons = await getPendingPolygonsInSearchArea(
     searchArea,
     acceptedOnly === "true"

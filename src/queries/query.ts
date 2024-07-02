@@ -1,5 +1,5 @@
 import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
-import { Feature, Polygon } from "@turf/turf";
+import { Feature, Polygon } from "geojson";
 import { customAlphabet } from "nanoid";
 import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
 
