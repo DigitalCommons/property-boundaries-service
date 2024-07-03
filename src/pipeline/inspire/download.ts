@@ -7,7 +7,7 @@ import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
 import moment from "moment-timezone";
-import logger from "../logger";
+import { logger } from "../logger";
 import {
   bulkCreatePendingPolygons,
   deleteAllPendingPolygons,

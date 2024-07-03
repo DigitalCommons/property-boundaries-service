@@ -1,6 +1,6 @@
 import pino from "pino";
 
-let logger: pino.Logger;
+export let logger: pino.Logger;
 
 export const initLogger = (pipelineKey?: string) => {
   logger = pino(
@@ -22,8 +22,8 @@ export const initLogger = (pipelineKey?: string) => {
       sync: true,
     })
   );
+
+  logger.info(`Logger initialised`);
 };
 
 initLogger();
-
-export default logger;

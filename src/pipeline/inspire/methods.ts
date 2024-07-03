@@ -7,7 +7,7 @@ import {
   getPolygonsByIdInSearchArea,
   pendingPolygonExists,
 } from "../../queries/query";
-import logger from "../logger";
+import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
 
 const precisionDecimalPlaces = 10;

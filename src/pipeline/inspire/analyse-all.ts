@@ -21,7 +21,7 @@ import {
 } from "../../queries/query";
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
-import logger from "../logger";
+import { logger } from "../logger";
 import { getRunningPipelineKey } from "../util";
 
 const analysisFolder = path.resolve("./analysis");
@@ -489,7 +489,7 @@ export const analyseAllPendingPolygons = async (
 
   await resetAnalysis();
 
-  if (maxPolygons !== 1e9) {
+  if (options.maxPolygons) {
     logger.info(`Analyse first ${maxPolygons} polygons`);
   }
   let totalNumPolygonsAnalysed = 0;
@@ -560,7 +560,7 @@ export const analyseAllPendingPolygons = async (
       "%": Math.round((10000 * count) / finalDataPolygonCount) / 100, // round to 2 d.p.
     };
   }
-  logger.info(`Total polygons in final data: ${finalDataPolygonCount}`);
+  finalDataCounts["Total"] = { count: finalDataPolygonCount, "%": 100 };
   logger.info(finalDataCounts);
 
   if (finalDataPolygonCount !== totalNumPolygonsAnalysed) {
@@ -574,7 +574,10 @@ export const analyseAllPendingPolygons = async (
     await deleteAllPolygonsPendingDeletion();
     await insertAllAcceptedPendingPolygons();
 
-    if (maxPolygons === 1e9) {
+    if (
+      options.maxPolygons === undefined &&
+      options.maxCouncils === undefined
+    ) {
       // All polygons were analysed so mark that the pipeline has updated all INSPIRE polygons
       await setPipelineLatestInspireData(currentDateString.split("_")[0]);
     }

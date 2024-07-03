@@ -12,8 +12,7 @@ import {
   getLatestDatasets,
   pipeZippedCsvFromUrlIntoFun,
 } from "./helpers";
-import logger from "../logger";
-import { Logger } from "pino";
+import { logger } from "../logger";
 
 /**
  * Ensure the land_ownerships DB table is up-to-date.
@@ -36,7 +35,7 @@ export const updateOwnerships = async (options: any) => {
     logger.info(
       "Download the first full set of ownership data published in Nov 2017"
     );
-    await downloadOwnershipsFullData(11, 2017, logger);
+    await downloadOwnershipsFullData(11, 2017);
   }
 
   const ccodHistoricalDatasets = await getDatasetHistory(false);
@@ -73,7 +72,7 @@ export const updateOwnerships = async (options: any) => {
 
     /** Thhe function we'll use to process each CSV row and add it to the apprioriate array */
     const addOwnershipToArray = async (ownership: any) => {
-      if (ownership["Title Number"] === "Row Count:") {
+      if (!ownership || ownership["Title Number"] === "Row Count:") {
         // This is the last row of the CSV, which we can ignore
         return;
       }
@@ -156,11 +155,7 @@ export const updateOwnerships = async (options: any) => {
  * According to the gov website, the UK dataset contains over 3.2 million records and the overseas
  * dataset contains over 100K.
  */
-async function downloadOwnershipsFullData(
-  month: number,
-  year: number,
-  logger: Logger
-) {
+async function downloadOwnershipsFullData(month: number, year: number) {
   if (year < 2017 || (year === 2017 && month < 11)) {
     logger.error("Must specify a month since Nov 2017");
     return null;

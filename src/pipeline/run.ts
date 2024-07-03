@@ -5,7 +5,7 @@ import { startPipelineRun } from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
 import { downloadAndBackupInspirePolygons } from "./inspire/download";
 import { analyseAllPendingPolygons } from "./inspire/analyse-all";
-import logger, { initLogger } from "./logger";
+import { logger, initLogger } from "./logger";
 import moment from "moment-timezone";
 import { getRunningPipelineKey } from "./util";
 

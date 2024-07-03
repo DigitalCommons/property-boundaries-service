@@ -2,7 +2,7 @@ import "dotenv/config";
 import axios from "axios";
 import * as unzip from "unzip-stream";
 import csvParser, { CsvParser } from "csv-parser";
-import logger from "../logger";
+import { logger } from "../logger";
 
 // These are all helper functions for the 2 main functions in ./update.ts
 
@@ -91,8 +91,8 @@ export const pipeZippedCsvFromUrlIntoFun = async (
             sendingChunk = true;
             csvPipe.pause(); // pause the stream to avoid OOM error
             if (logProgress) {
-              logger.info(
-                `Row ${rowCount} of ${filePath} , processing chunk of size ${chunkSize}`
+              logger.debug(
+                `Row ${rowCount} of ${filePath}, processing chunk of size ${chunkSize}`
               );
             }
             const chunk = rowsToSend.splice(0, chunkSize);
@@ -111,6 +111,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
         csvPipe.on("end", async () => {
           // Final chunk
           await processChunkOfRowsFunc(rowsToSend);
+          logger.debug(`Finished processing ${rowCount} rows of ${filePath}`);
           resolve();
         });
         csvPipe.on("error", reject);
