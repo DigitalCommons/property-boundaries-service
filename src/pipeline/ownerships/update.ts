@@ -68,7 +68,6 @@ export const updateOwnerships = async (options: any) => {
   for (const [index, file] of filesToProcess.entries()) {
     const ownershipAdditions = [];
     const ownershipDeletions = [];
-    const badOwnerships = [];
 
     /** Thhe function we'll use to process each CSV row and add it to the apprioriate array */
     const addOwnershipToArray = async (ownership: any) => {
@@ -89,7 +88,9 @@ export const updateOwnerships = async (options: any) => {
             { filename: file.filename, ownership },
             "No change indicator... we don't expect this!"
           );
-          badOwnerships.push(ownership);
+          throw new Error(
+            `No change indicator for ownership title ${ownership["Title Number"]} in file ${file.filename}`
+          );
       }
     };
 
@@ -132,7 +133,6 @@ export const updateOwnerships = async (options: any) => {
         file: file.filename,
         additions: ownershipAdditions.length,
         deletions: ownershipDeletions.length,
-        badEntries: badOwnerships.length,
       },
       "Finished processing ownership change file"
     );

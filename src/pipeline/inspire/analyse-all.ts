@@ -4,7 +4,7 @@ import {
   Match,
   getExistingPolygons,
   comparePolygons,
-  findExistingContainingOrContainedPoly,
+  findOldContainingOrContainedPoly,
   coordsOverlapWithExistingPoly,
 } from "./methods";
 import {
@@ -362,11 +362,11 @@ const analyseNewInspireId = async (inspireId: number) => {
     return;
   }
 
-  const existingPoly =
-    await findExistingContainingOrContainedPoly(newCoordsMinusOffset);
+  const oldPoly = await findOldContainingOrContainedPoly(newCoordsMinusOffset);
 
-  if (!existingPoly) {
-    // There is overlap (determined previously) but not a clean merge/segment, so mark as a fail
+  if (!oldPoly) {
+    // There is overlap (determined previously) but not a clean merge/segment, or the poly still
+    // exists, so mark as a fail.
     allIds.newBoundaryIds.delete(inspireId);
     allIds.failedMatchIds.add(inspireId);
     allFailedMatchesInfo.push({
@@ -382,9 +382,9 @@ const analyseNewInspireId = async (inspireId: number) => {
   // Compare against this contained/containing polygon, returning the match type
   const { match, percentageIntersect, oldMergedIds, newSegmentIds } =
     await comparePolygons(
-      existingPoly.inspireId,
+      oldPoly.inspireId,
       inspireId,
-      existingPoly.coords,
+      oldPoly.coords,
       newCoords,
       latLongOffset
     );
@@ -396,7 +396,7 @@ const analyseNewInspireId = async (inspireId: number) => {
     case Match.BoundariesShifted:
       logger.info(
         {
-          oldInspireId: existingPoly.inspireId,
+          oldInspireId: oldPoly.inspireId,
           newInspireId: inspireId,
           latLong: newCoords[0],
           percentageIntersect,
@@ -404,15 +404,15 @@ const analyseNewInspireId = async (inspireId: number) => {
         `INSPIRE ID of polygon has changed`
       );
       allInspireIdChanges.push({
-        oldInspireId: existingPoly.inspireId,
+        oldInspireId: oldPoly.inspireId,
         newInspireId: inspireId,
         latLong: newCoords[0],
-        oldTitleNo: existingPoly.titleNo,
+        oldTitleNo: oldPoly.titleNo,
       });
       allIds.newBoundaryIds.delete(inspireId);
       allIds.newSegmentIds.delete(inspireId);
       allIds.changedInspireIds.add(inspireId);
-      await markPolygonDeletion(existingPoly.inspireId);
+      await markPolygonDeletion(oldPoly.inspireId);
       // TODO: can/should we link the old title to the new polygon?
       break;
     case Match.Merged:
@@ -421,18 +421,20 @@ const analyseNewInspireId = async (inspireId: number) => {
     case Match.SegmentedIncomplete:
     case Match.MergedAndSegmented:
       allMergeAndSegmentInstances.push({
-        inspireId: inspireId,
+        inspireId: oldPoly.inspireId,
         council: polygon.council,
         type: Match[match],
-        oldMergedIds: [...oldMergedIds, existingPoly.inspireId],
-        newSegmentIds,
+        oldMergedIds,
+        newSegmentIds: [...newSegmentIds, inspireId],
         latLong: newCoords[0],
         percentageIntersect,
       });
       [...newSegmentIds, inspireId].forEach((id) => {
-        allIds.newSegmentIds.add(id);
-        allIds.failedMatchIds.delete(id);
-        allIds.newBoundaryIds.delete(id); // we don't need to analyse these new INSPIRE IDs again
+        if (!allIds.changedInspireIds.has(id)) {
+          allIds.newSegmentIds.add(id);
+          allIds.failedMatchIds.delete(id);
+          allIds.newBoundaryIds.delete(id); // we don't need to analyse these new INSPIRE IDs again
+        }
       });
       break;
     case Match.Moved:
@@ -457,7 +459,7 @@ const analyseNewInspireId = async (inspireId: number) => {
   await processMatch(
     match,
     inspireId,
-    oldMergedIds?.concat([existingPoly.inspireId]),
+    oldMergedIds?.concat([oldPoly.inspireId]),
     newSegmentIds
   );
 };

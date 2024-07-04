@@ -685,25 +685,6 @@ export const comparePolygons = async (
     }
   }
 
-  if (oldMergedIds.size === 0 && newSegmentIds.size === 0) {
-    // This is just a boundary shift i.e. the boundary changed shape without merging/segmenting, and
-    // land was maybe taken from/given to a neighbouring property.
-    logger.debug(
-      {
-        oldInspireId,
-        newInspireId,
-        latLong: newCoords[0],
-        percentageIntersect,
-      },
-      "boundaries shifted"
-    );
-    return {
-      match: Match.BoundariesShifted,
-      percentageIntersect,
-      offsetStats,
-    };
-  }
-
   if (
     (incompleteMerge && incompleteSegmentation) ||
     (incompleteMerge && newSegmentIds.size) ||
@@ -811,6 +792,25 @@ export const comparePolygons = async (
     };
   }
 
+  if (oldMergedIds.size === 0 && newSegmentIds.size === 0) {
+    // This is just a boundary shift i.e. the boundary changed shape without merging/segmenting, and
+    // land was maybe taken from/given to a neighbouring property.
+    logger.debug(
+      {
+        oldInspireId,
+        newInspireId,
+        latLong: newCoords[0],
+        percentageIntersect,
+      },
+      "boundaries shifted"
+    );
+    return {
+      match: Match.BoundariesShifted,
+      percentageIntersect,
+      offsetStats,
+    };
+  }
+
   logger.error(
     {
       oldInspireId,
@@ -846,12 +846,12 @@ export const coordsOverlapWithExistingPoly = async (
 };
 
 /**
- * Find an existing polygon that contains or is contained by the given coords.
+ * Find an old polygon that no longer exists and contained or was contained by the given coords.
  *
- * @returns the existing poly's INSPIRE ID, coords, and matching title address, or null if none
+ * @returns the old poly's INSPIRE ID, coords, and matching title address, or null if none
  *          match.
  */
-export const findExistingContainingOrContainedPoly = async (
+export const findOldContainingOrContainedPoly = async (
   coords: number[][]
 ): Promise<{
   inspireId: number;
@@ -867,9 +867,13 @@ export const findExistingContainingOrContainedPoly = async (
 
   for (const matchedPoly of matchedPolys) {
     const matchedPolyFeature = turf.polygon(matchedPoly.geom.coordinates);
+    const matchedPolyStillExists = await pendingPolygonExists(
+      matchedPoly.poly_id
+    );
     if (
-      polygonContains(poly, matchedPolyFeature) ||
-      polygonContains(matchedPolyFeature, poly)
+      !matchedPolyStillExists &&
+      (polygonContains(poly, matchedPolyFeature) ||
+        polygonContains(matchedPolyFeature, poly))
     ) {
       return {
         inspireId: matchedPoly.poly_id,
