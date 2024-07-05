@@ -28,10 +28,13 @@ const userAgents = [
 
 let downloadPath: string;
 let geojsonPath: string;
-let newDownloads: string[] = [];
+let councils: string[] = [];
 
 /** Download INSPIRE files using a headless playwright browser */
-const downloadInspire = async (maxCouncils: number) => {
+const downloadInspire = async (
+  maxCouncils: number,
+  firstCouncil: string | undefined
+) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
@@ -42,53 +45,60 @@ const downloadInspire = async (maxCouncils: number) => {
   const page = await context.newPage();
   await page.goto(url);
 
-  const inspireDownloadLinks = await page.evaluate(() => {
-    const inspireDownloadLinks: string[] = [];
+  const inspireDownloadLinks = await page.evaluate((firstCouncil) => {
+    const inspireDownloadLinks: any[] = [];
     const pageLinks = document.getElementsByTagName("a");
+    // If firstCouncil is undefined, we want to download all councils, so set matched=true
+    let firstCouncilMatched = firstCouncil === undefined;
     let linkIdCount = 0;
+    let totalLinksCount = 0;
+
     for (const link of pageLinks) {
       if (link.innerText === "Download .gml") {
-        link.id = `download-link-${linkIdCount++}`;
-        inspireDownloadLinks.push(link.id);
+        totalLinksCount++;
+
+        if (!firstCouncilMatched && link.href.includes(firstCouncil)) {
+          firstCouncilMatched = true;
+        }
+
+        if (firstCouncilMatched) {
+          link.id = `download-link-${linkIdCount++}`;
+          inspireDownloadLinks.push({
+            id: link.id,
+            council: link.href.split("/").pop().replace(".zip", ""),
+          });
+        }
       }
     }
-
     return inspireDownloadLinks;
-  });
-
-  logger.info(
-    `We found INSPIRE download links for ${inspireDownloadLinks.length} councils`
-  );
+  }, firstCouncil);
 
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
-    const downloadButton = await page.waitForSelector("#" + link);
+    const council = link.council;
+    const downloadFilePath = `${downloadPath}/${council}.zip`;
+    const geojsonFilePath = `${geojsonPath}/${council}.json`;
 
-    const downloadPromise = page.waitForEvent("download");
-    await downloadButton.click();
-    const download = await downloadPromise;
-    const newDownloadFile = download.suggestedFilename();
-
-    const existingDownloadFile = `${downloadPath}/${newDownloadFile}`;
-    const geojsonFilePath = `${geojsonPath}/${newDownloadFile.replace(
-      ".zip",
-      ".json"
-    )}`;
     if (fs.existsSync(geojsonFilePath)) {
       // If GeoJSON already exists for this month, we don't need to download and transform it again
       logger.info(
-        `Skip downloading and transforming ${newDownloadFile} since GeoJSON already exists`
+        `Skip downloading and transforming ${council}.zip since GeoJSON already exists`
       );
-    } else if (fs.existsSync(existingDownloadFile)) {
+    } else if (fs.existsSync(downloadFilePath)) {
       // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
-        `Skip downloading ${newDownloadFile} since zipfile already exists`
+        `Skip downloading ${council}.zip since zipfile already exists`
       );
       // We still want to add it to newDownloads so that we unzip and transform it
-      newDownloads.push(newDownloadFile);
+      councils.push(council);
     } else {
-      logger.info(`Downloading ${newDownloadFile}`);
-      await download.saveAs(`${downloadPath}/${newDownloadFile}`);
-      newDownloads.push(newDownloadFile);
+      const downloadButton = await page.waitForSelector("#" + link.id);
+      const downloadPromise = page.waitForEvent("download");
+      await downloadButton.click();
+      const download = await downloadPromise;
+
+      logger.info(`Downloading ${council}.zip`);
+      await download.saveAs(downloadFilePath);
+      councils.push(council);
     }
   }
 
@@ -284,7 +294,8 @@ const getLatestInspirePublishMonth = (): string => {
  * GeoJSON files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
  */
 export const downloadAndBackupInspirePolygons = async (options: any) => {
-  // Download the data for the first <maxCouncils> councils. Default to all.
+  const firstCouncil: string | undefined = options.firstCouncil;
+  // Download the data for the first <maxCouncils> councils after firstCouncil. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
@@ -318,18 +329,17 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   // is disk space
   await deleteAllPendingPolygons();
 
-  newDownloads = [];
+  councils = [];
 
   // Download INSPIRE data from govt website
-  await downloadInspire(maxCouncils);
+  await downloadInspire(maxCouncils, firstCouncil);
 
   // If new files were downloaded, back them up
-  if (newDownloads.length > 0) {
+  if (councils.length > 0) {
     await backupInspireDownloads();
   }
 
   // Unzip and transform all new downloads
-  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
   for (const council of councils) {
     await unzipArchive(council);
     await transformGMLToGeoJson(council);

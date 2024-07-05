@@ -15,6 +15,7 @@ const matrixWebhookUrl = process.env.MATRIX_WEBHOOK_URL;
 let running = false;
 
 type TaskOptions = {
+  firstCouncil?: string; // First council alphabetically to process
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process
   updateBoundaries?: boolean; // Whether to actually update the boundaries in the DB after analysing

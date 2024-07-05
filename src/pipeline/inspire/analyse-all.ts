@@ -394,7 +394,7 @@ const analyseNewInspireId = async (inspireId: number) => {
     case Match.ExactOffset:
     case Match.HighOverlap:
     case Match.BoundariesShifted:
-      logger.info(
+      logger.debug(
         {
           oldInspireId: oldPoly.inspireId,
           newInspireId: inspireId,
@@ -578,7 +578,8 @@ export const analyseAllPendingPolygons = async (
 
     if (
       options.maxPolygons === undefined &&
-      options.maxCouncils === undefined
+      options.maxCouncils === undefined &&
+      options.firstCouncil === undefined
     ) {
       // All polygons were analysed so mark that the pipeline has updated all INSPIRE polygons
       await setPipelineLatestInspireData(currentDateString.split("_")[0]);
