@@ -13,6 +13,7 @@ import {
   pipeZippedCsvFromUrlIntoFun,
 } from "./helpers";
 import { logger } from "../logger";
+import { notifyMatrix } from "../util";
 
 /**
  * Ensure the land_ownerships DB table is up-to-date.
@@ -145,6 +146,8 @@ export const updateOwnerships = async (options: any) => {
       await setPipelineLatestOwnershipData(file.unsorted_date);
     }
   }
+
+  await notifyMatrix(`✅ Successful update of ownership info`);
 };
 
 /**

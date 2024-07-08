@@ -11,6 +11,7 @@ import {
   PendingPolygon,
   acceptPendingPolygon,
   deleteAllPolygonsPendingDeletion,
+  getLastAcceptedPendingPolygonId,
   getNextPendingPolygon,
   getPendingPolygon,
   insertAllAcceptedPendingPolygons,
@@ -203,6 +204,14 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
   }
   if (!allStats.offsetStds[council]) {
     allStats.offsetStds[council] = [];
+  }
+
+  // TODO: handle instances that we have a multi-polygon e.g. poly 60674447 in Halton_Borough_Council
+  if (geom.type !== "Polygon") {
+    allIds.failedMatchIds.add(inspireId);
+    allIds.newBoundaryIds.delete(inspireId); // in case we already added the ID to this set
+    await processMatch(Match.Fail, inspireId);
+    return;
   }
 
   const existingPolygon: any = (await getExistingPolygons([inspireId]))[0];
@@ -484,6 +493,7 @@ const analyseNewInspireId = async (inspireId: number) => {
 export const analyseAllPendingPolygons = async (
   options: any
 ): Promise<string> => {
+  const resume = options.resume === "true";
   // Max number of pending polygons we will analyse, default to all
   const maxPolygons: number = options.maxPolygons || 1e9;
   // Whether to overwrite existing boundary data with pending polygons that we accept, default no.
@@ -496,8 +506,10 @@ export const analyseAllPendingPolygons = async (
   }
   let totalNumPolygonsAnalysed = 0;
 
-  // Analyse each row in pending_inspire_polygons
-  let polygon: PendingPolygon = await getNextPendingPolygon(1);
+  // Analyse each row in pending_inspire_polygons. If we are resuming, start after the last accepted
+  // polygon, otherwise start from the first row.
+  const startingId = resume ? (await getLastAcceptedPendingPolygonId()) + 1 : 1;
+  let polygon: PendingPolygon = await getNextPendingPolygon(startingId);
 
   while (polygon && totalNumPolygonsAnalysed < maxPolygons) {
     await analysePolygon(polygon);
@@ -579,7 +591,7 @@ export const analyseAllPendingPolygons = async (
     if (
       options.maxPolygons === undefined &&
       options.maxCouncils === undefined &&
-      options.firstCouncil === undefined
+      options.afterCouncil === undefined
     ) {
       // All polygons were analysed so mark that the pipeline has updated all INSPIRE polygons
       await setPipelineLatestInspireData(currentDateString.split("_")[0]);

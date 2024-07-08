@@ -6,17 +6,19 @@ import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
-import moment from "moment-timezone";
 import { logger } from "../logger";
 import {
   bulkCreatePendingPolygons,
   deleteAllPendingPolygons,
+  getLastPipelineRun,
+  setPipelineLastCouncilDownloaded,
 } from "../../queries/query";
 import { chain } from "stream-chain";
 import { parser } from "stream-json/Parser";
 import { pick } from "stream-json/filters/Pick";
 import { streamArray } from "stream-json/streamers/StreamArray";
 import { Feature, Polygon } from "geojson";
+import { getLatestInspirePublishMonth } from "../util";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -33,7 +35,7 @@ let councils: string[] = [];
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (
   maxCouncils: number,
-  firstCouncil: string | undefined
+  afterCouncil: string | undefined
 ) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
@@ -45,11 +47,11 @@ const downloadInspire = async (
   const page = await context.newPage();
   await page.goto(url);
 
-  const inspireDownloadLinks = await page.evaluate((firstCouncil) => {
+  const inspireDownloadLinks = await page.evaluate((afterCouncil) => {
     const inspireDownloadLinks: any[] = [];
     const pageLinks = document.getElementsByTagName("a");
-    // If firstCouncil is undefined, we want to download all councils, so set matched=true
-    let firstCouncilMatched = firstCouncil === undefined;
+    // If afterCouncil is undefined, we want to download all councils, so set matched=true
+    let afterCouncilMatched = afterCouncil === undefined;
     let linkIdCount = 0;
     let totalLinksCount = 0;
 
@@ -57,21 +59,21 @@ const downloadInspire = async (
       if (link.innerText === "Download .gml") {
         totalLinksCount++;
 
-        if (!firstCouncilMatched && link.href.includes(firstCouncil)) {
-          firstCouncilMatched = true;
-        }
-
-        if (firstCouncilMatched) {
+        if (afterCouncilMatched) {
           link.id = `download-link-${linkIdCount++}`;
           inspireDownloadLinks.push({
             id: link.id,
             council: link.href.split("/").pop().replace(".zip", ""),
           });
         }
+
+        if (!afterCouncilMatched && link.href.includes(afterCouncil)) {
+          afterCouncilMatched = true;
+        }
       }
     }
     return inspireDownloadLinks;
-  }, firstCouncil);
+  }, afterCouncil);
 
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const council = link.council;
@@ -193,8 +195,6 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
  * analysis, then delete the GeoJSON file (to save space).
  */
 const createPendingPolygons = async () => {
-  await deleteAllPendingPolygons();
-
   const councils = fs
     .readdirSync(geojsonPath)
     .filter((f) => f.includes(".json"))
@@ -257,34 +257,10 @@ const createPendingPolygons = async () => {
     }
     logger.info(`Number of polygons added from ${council}: ${polygonsCount}`);
 
+    await setPipelineLastCouncilDownloaded(council);
     await rm(geojsonFilePath, { force: true });
   }
   logger.info("Created all pending INSPIRE polygons in DB");
-};
-
-/**
- * INSPIRE data is published on the first Sunday of every month. This function works out the month
- * of the latest available data in YYYY-MM format
- */
-const getLatestInspirePublishMonth = (): string => {
-  //
-  const date = moment().tz("Europe/London").startOf("month");
-  date.day(7); // the next sunday
-  if (date.date() > 7) {
-    // if the date is now after 7th, go back one week
-    date.day(-7);
-  }
-  const today = moment().tz("Europe/London");
-  if (date.isSame(today, "date")) {
-    throw new Error(
-      "Today is first Sunday of the month. Wait until tomorrow to run pipeline, to avoid data inconsistency problems"
-    );
-  }
-  if (date.isAfter(today)) {
-    // Data for this month hasn't been published yet so subtract a month
-    date.subtract(1, "month");
-  }
-  return date.format("YYYY-MM");
 };
 
 /**
@@ -294,8 +270,11 @@ const getLatestInspirePublishMonth = (): string => {
  * GeoJSON files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
  */
 export const downloadAndBackupInspirePolygons = async (options: any) => {
-  const firstCouncil: string | undefined = options.firstCouncil;
-  // Download the data for the first <maxCouncils> councils after firstCouncil. Default to all.
+  const resume = options.resume === "true";
+  const afterCouncil: string | undefined = resume
+    ? (await getLastPipelineRun())?.last_council_downloaded || undefined
+    : options.afterCouncil;
+  // Download the data for the first <maxCouncils> councils after afterCouncil. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
@@ -325,14 +304,17 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
     });
   }
 
-  // delete pending polygons in the database before we start downloading new data, to ensure there
-  // is disk space
-  await deleteAllPendingPolygons();
+  if (!resume) {
+    // delete pending polygons in the database before we start downloading new data, to ensure there
+    // is disk space
+    logger.info("Deleting all pending polygons in the database");
+    await deleteAllPendingPolygons();
+  }
 
   councils = [];
 
   // Download INSPIRE data from govt website
-  await downloadInspire(maxCouncils, firstCouncil);
+  await downloadInspire(maxCouncils, afterCouncil);
 
   // If new files were downloaded, back them up
   if (councils.length > 0) {

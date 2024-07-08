@@ -1,29 +1,35 @@
 import "dotenv/config";
-import axios from "axios";
-import { hostname } from "os";
-import { startPipelineRun } from "../queries/query";
+import {
+  getLastPipelineRun,
+  setPipelineLastTask,
+  startPipelineRun,
+} from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
 import { downloadAndBackupInspirePolygons } from "./inspire/download";
 import { analyseAllPendingPolygons } from "./inspire/analyse-all";
 import { logger, initLogger } from "./logger";
 import moment from "moment-timezone";
-import { getRunningPipelineKey } from "./util";
-
-const matrixWebhookUrl = process.env.MATRIX_WEBHOOK_URL;
+import {
+  getLatestInspirePublishDate,
+  getRunningPipelineKey,
+  notifyMatrix,
+} from "./util";
 
 /** Set flag so we don't run 2 pipelines at the same time, which would lead to file conflicts */
 let running = false;
 
 type TaskOptions = {
-  firstCouncil?: string; // First council alphabetically to process
+  afterCouncil?: string; // Only process councils after this one, alphabetically
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process
-  updateBoundaries?: boolean; // Whether to actually update the boundaries in the DB after analysing
+  updateBoundaries?: string; // If 'true', update the boundaries in the main DB table after analysis
+  resume?: string; // If 'true', resume from where we left off in the previous run
 };
 
 export type PipelineOptions = {
-  startAtTask?: string;
-  stopBeforeTask?: string;
+  startAtTask?: string; // Start from this task
+  stopBeforeTask?: string; // Stop before this task
+  resume?: string; // If 'true', resume from where we left off in the previous run (ignoring startAtTask)
 } & TaskOptions;
 
 /** The pipeline runs these methods in this order */
@@ -54,6 +60,9 @@ const runPipeline = async (options: PipelineOptions) => {
   running = true;
   const startTimeMs = Date.now();
   const pipelineKey = getRunningPipelineKey();
+  logger.info(
+    `Run pipeline ${pipelineKey} with options: ${JSON.stringify(options)}`
+  );
 
   let { startAtTask, stopBeforeTask, ...taskOptions } = options;
 
@@ -80,6 +89,34 @@ const runPipeline = async (options: PipelineOptions) => {
     stopBeforeTaskIndex = tasks.length;
   }
 
+  if (taskOptions.resume === "true") {
+    // Can only resume if the latest pipeline run date is more recent than the latest INSPIRE
+    // publish date
+    const latestPipelineRun = await getLastPipelineRun();
+    const latestInspirePublishDate = getLatestInspirePublishDate();
+    if (
+      latestPipelineRun?.startedAt &&
+      new Date(latestPipelineRun.startedAt) > latestInspirePublishDate
+    ) {
+      startAtTask = (await getLastPipelineRun())?.last_task;
+      startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
+      if (startAtTaskIndex === -1) {
+        // Shouldn't hit this but just in case something went wrong with DB
+        startAtTaskIndex = 0;
+      }
+      logger.info(
+        `Resuming pipeline run from task ${startAtTask}, old key: ${latestPipelineRun.unique_key}`
+      );
+    } else {
+      taskOptions.resume = "false";
+      logger.warn(
+        `Can't resume because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
+      );
+    }
+  } else {
+    taskOptions.resume = "false";
+  }
+
   logger.info(
     `Started pipeline run ${pipelineKey} at ${
       startAtTask || "beginning"
@@ -94,6 +131,7 @@ const runPipeline = async (options: PipelineOptions) => {
       } with options: ${JSON.stringify(taskOptions)}`;
       logger.info(msg);
       console.log(msg); // Include task logs to console so they also show up in the pm2 logs
+      await setPipelineLastTask(task.name);
       output = await task.method(taskOptions);
       logger.info(`Output of task ${task.name}: ${output}`);
     }
@@ -108,25 +146,15 @@ const runPipeline = async (options: PipelineOptions) => {
     logger.info(msg);
     console.log(msg);
 
-    // Notify Matrix
-    if (matrixWebhookUrl) {
-      await axios.post(matrixWebhookUrl, {
-        msgtype: "m.text",
-        body: `[${hostname()}] [property_boundaries] ✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. Time elapsed: ${timeElapsedString}\n\`\`\`\n${summaryTable}\n\`\`\``,
-      });
-    }
+    await notifyMatrix(
+      `✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. Time elapsed: ${timeElapsedString}\n\`\`\`\n${summaryTable}\n\`\`\``
+    );
   } catch (err) {
     running = false;
     logger.error(err, "Pipeline failed");
     console.error(`Pipeline ${pipelineKey} failed`, err?.message);
 
-    // Notify Matrix
-    if (matrixWebhookUrl) {
-      await axios.post(matrixWebhookUrl, {
-        msgtype: "m.text",
-        body: `[${hostname()}] [property_boundaries] 🔴 Failed ownership + INSPIRE pipeline ${pipelineKey}`,
-      });
-    }
+    await notifyMatrix(`🔴 Failed ownership + INSPIRE pipeline ${pipelineKey}`);
 
     throw err;
   }

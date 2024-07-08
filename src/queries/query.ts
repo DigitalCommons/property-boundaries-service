@@ -178,9 +178,11 @@ export const PipelineRunModel = sequelize.define(
       unique: true,
       type: DataTypes.STRING,
     },
+    startedAt: DataTypes.DATE,
     latest_ownership_data: DataTypes.DATEONLY,
     latest_inspire_data: DataTypes.DATEONLY,
-    startedAt: DataTypes.DATE,
+    last_task: DataTypes.STRING,
+    last_council_downloaded: DataTypes.STRING,
   },
   {
     tableName: "pipeline_runs",
@@ -659,6 +661,18 @@ export const setPipelineLatestOwnershipData = async (date: string) => {
 };
 
 /**
+ * Return the date of the latest ownership data that was processed by the latest pipeline run, or
+ * null if no pipeline has completed yet.
+ */
+export const getLatestOwnershipDataDate = async () => {
+  const latestRun: any = await PipelineRunModel.findOne({
+    where: { latest_ownership_data: { [Op.ne]: null } },
+    order: [["startedAt", "DESC"]],
+  });
+  return latestRun ? new Date(latestRun.latest_ownership_data) : null;
+};
+
+/**
  * Set latest INSPIRE polygon data date for a pipeline run.
  * @param date in YYYY-MM-DD format
  */
@@ -674,13 +688,52 @@ export const setPipelineLatestInspireData = async (date: string) => {
 };
 
 /**
- * Return the date of the latest ownership data that was processed by the latest pipeline run, or
- * null if no pipeline has completed yet.
+ * Get the previous pipeline run, or null if no pipeline has completed yet.
  */
-export const getLatestOwnershipDataDate = async () => {
-  const latestRun: any = await PipelineRunModel.findOne({
-    where: { latest_ownership_data: { [Op.ne]: null } },
+export const getLastPipelineRun = async (): Promise<any> => {
+  return await PipelineRunModel.findOne({
+    where: { unique_key: { [Op.ne]: getRunningPipelineKey() } },
     order: [["startedAt", "DESC"]],
+    raw: true,
   });
-  return latestRun ? new Date(latestRun.latest_ownership_data) : null;
+};
+
+/**
+ * Set last task that has been reached in a pipeline run.
+ */
+export const setPipelineLastTask = async (task: string) => {
+  await PipelineRunModel.update(
+    { last_task: task },
+    {
+      where: {
+        unique_key: getRunningPipelineKey(),
+      },
+    }
+  );
+};
+
+/**
+ * Set last council for which we downloaded INSPIRE data and inserted into pending_inspire_polygons.
+ */
+export const setPipelineLastCouncilDownloaded = async (council: string) => {
+  await PipelineRunModel.update(
+    { last_council_downloaded: council },
+    {
+      where: {
+        unique_key: getRunningPipelineKey(),
+      },
+    }
+  );
+};
+
+/**
+ * Get row ID of the last polygon marked as accepted in pending_inspire_polygons, or -1 if none are
+ * accepted.
+ */
+export const getLastAcceptedPendingPolygonId = async (): Promise<number> => {
+  const polygon: any = await PendingPolygonModel.findOne({
+    where: { accepted: true },
+    order: [["id", "DESC"]],
+  });
+  return polygon ? polygon.id : -1;
 };
