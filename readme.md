@@ -35,33 +35,43 @@ All of the pipeline-related code is in the `src/pipeline` directory. The pipelin
 
 `https://<property boundaries service api url>/run-pipeline?secret=<secret>`
 
-or the pipeline can be started at a specific task (e.g. if you don't want to re-download the INSPIRE data again and just want to analyse the pending polygons):
+or the pipeline can be started with additional options (see PipelineOptions for details), e.g.:
 
-`https://<property boundaries service api url>/run-pipeline?secret=<secret>&startAtTask=analyseInspire`
+`https://<property boundaries service api url>/run-pipeline?secret=<secret>&startAtTask=analyseInspire&updateBoundaries=true`
 
-The resulting data for a pipeline can be found in the `analysis` folder in the project's root folder, in a directory whose name includes the
-pipeline's time and unique key.
+## Analysing the output
 
-## TODO
+A pipeline always updates the Land Ownership data (this is the fast, easy bit of the pipeline). Once the `updateOwnerships` task is complete, the new data should be visible in LX for all users.
 
-- Address the various 'TODO' comments around the codebase
+After the `downloadOwnerships` task, a LX super user can see the pending INSPIRE polygons that have been downloaded in a separate, secret data layer.
+
+If the `updateBoundaries` param is true, the `analyseInspire` task will write the pending polygons that are accepted as a successful match into the DB, so that they're visible for all users. Further detailed output for the pipeline can be found in the `analysis` folder in the project's root folder. This output can help you manually investigate something further e.g. if you want to investigate a failed match:
+
+- find the details in `failed-matches.json` and copy a lat-lng of a vertex
+- login to LX as a super user (to become a super user, update your record in MySQL on the server)
+- enable the Pending Polygons data layer
+- search for the lat-lng in the LX search bar, then click on nearby properties to visualise the polygon(s) involved
+
+## TODO (roughly in priority order)
+
+- Step back and think about what we want the pipeline to achieve, and what info we want to try to save as boundaries gradually change. Prioritise and try to narrow the scope. And think about whether we need any other data sources to achieve this.
+
+- Add analytics and do profiling to find where the bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council. Also decide which bits of the algorithm are most needed and remove some computation that isn't necessary.
 
 - Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
   polygons, then add unit tests to match this spec
 
-  - Use Mocha for writing a specification and tests, like we have started to do on the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Testing#unit-tests)
+  - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Testing#unit-tests)
   - Add these tests to a Github CI pipeline, like on LX backend
   - We'll need to modularise some of the long functions in the pipeline a bit more (e.g. the `comparePolygons` function) to make unit testing easier
+  - Maybe we need to plot some different polygon scenarios that can be visualised and used for different edge cases.
 
-- Add analytics and do profiling to find where bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council.
+- Address the various 'TODO' comments around the codebase
 
 - Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
   especially for low-level details, prefer Mocha specs over written
   documentation. Docs can be ignored but specs with unit tests can't.
 
-- Create an admin panel, maybe with a library like `react-admin`, so that we can easily search through our DB and visualise the results of pipelines. It would be great if pipelines created visualisations of some of the changed polygons, which could then be viewed in the admin panel, including:
+- Improve how the results of the analysis can be understood/visualised. It's currently a lot of data, and it's hard to know which matches to check individually.
 
-  - a sample of successful matches (for quality control)
-  - the full set of failed matches, which will indicate ways to improve the algorithm going forwards
-
-- Enable strict Typescript checking in tsconfig.json and fixup existing checking failures.
+- Enable strict Typescript checking in tsconfig.json and fixup existing checking failures. Use more modern Sequelize definitions so that we get types https://sequelize.org/docs/v7/models/defining-models/

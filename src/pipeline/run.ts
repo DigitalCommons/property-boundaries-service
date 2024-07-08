@@ -26,6 +26,7 @@ type TaskOptions = {
   resume?: string; // If 'true', resume from where we left off in the previous run
 };
 
+// TODO: use a proper boolean type for resume, using Hapi query.parser (see https://hapi.dev/api/?v=21.3.3)
 export type PipelineOptions = {
   startAtTask?: string; // Start from this task
   stopBeforeTask?: string; // Stop before this task
