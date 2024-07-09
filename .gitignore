@@ -3,6 +3,6 @@ dist
 downloads
 geojson
 analysis
-logs
+logs/*
 .env
 .DS_Store

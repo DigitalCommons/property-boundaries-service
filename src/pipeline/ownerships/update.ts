@@ -12,8 +12,8 @@ import {
   getLatestDatasets,
   pipeZippedCsvFromUrlIntoFun,
 } from "./helpers";
-import getLogger from "../logger";
-import { Logger } from "pino";
+import { logger } from "../logger";
+import { notifyMatrix } from "../util";
 
 /**
  * Ensure the land_ownerships DB table is up-to-date.
@@ -25,9 +25,7 @@ import { Logger } from "pino";
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
 export const updateOwnerships = async (options: any) => {
-  const logger = getLogger();
-
-  const latestOwnershipDataDate = await getLatestOwnershipDataDate();
+  let latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
   if (latestOwnershipDataDate) {
     logger.info(`Latest ownership data is from ${latestOwnershipDataDate}`);
@@ -38,15 +36,16 @@ export const updateOwnerships = async (options: any) => {
     logger.info(
       "Download the first full set of ownership data published in Nov 2017"
     );
-    await downloadOwnershipsFullData(11, 2017, logger);
+    await downloadOwnershipsFullData(11, 2017);
+    latestOwnershipDataDate = new Date("2017-11-28");
   }
 
-  const ccodHistoricalDatasets = await getDatasetHistory(false, logger);
-  const ocodHistoricalDatasets = await getDatasetHistory(true, logger);
+  const ccodHistoricalDatasets = await getDatasetHistory(false);
+  const ocodHistoricalDatasets = await getDatasetHistory(true);
 
   // Add the latest datasets which are (annoyingly) not included in the history API's response
-  const latestCcodDatasets = await getLatestDatasets(false, logger);
-  const latestOcodDatasets = await getLatestDatasets(true, logger);
+  const latestCcodDatasets = await getLatestDatasets(false);
+  const latestOcodDatasets = await getLatestDatasets(true);
 
   const unsortedListOfDatasets = [
     ...ccodHistoricalDatasets,
@@ -71,11 +70,10 @@ export const updateOwnerships = async (options: any) => {
   for (const [index, file] of filesToProcess.entries()) {
     const ownershipAdditions = [];
     const ownershipDeletions = [];
-    const badOwnerships = [];
 
     /** Thhe function we'll use to process each CSV row and add it to the apprioriate array */
     const addOwnershipToArray = async (ownership: any) => {
-      if (ownership["Title Number"] === "Row Count:") {
+      if (!ownership || ownership["Title Number"] === "Row Count:") {
         // This is the last row of the CSV, which we can ignore
         return;
       }
@@ -92,7 +90,9 @@ export const updateOwnerships = async (options: any) => {
             { filename: file.filename, ownership },
             "No change indicator... we don't expect this!"
           );
-          badOwnerships.push(ownership);
+          throw new Error(
+            `No change indicator for ownership title ${ownership["Title Number"]} in file ${file.filename}`
+          );
       }
     };
 
@@ -109,7 +109,6 @@ export const updateOwnerships = async (options: any) => {
       fileResponse.data.result.download_url,
       (ownershipsChunk) => addOwnershipToArray(ownershipsChunk[0]),
       1,
-      logger,
       false
     );
 
@@ -136,7 +135,6 @@ export const updateOwnerships = async (options: any) => {
         file: file.filename,
         additions: ownershipAdditions.length,
         deletions: ownershipDeletions.length,
-        badEntries: badOwnerships.length,
       },
       "Finished processing ownership change file"
     );
@@ -149,6 +147,8 @@ export const updateOwnerships = async (options: any) => {
       await setPipelineLatestOwnershipData(file.unsorted_date);
     }
   }
+
+  await notifyMatrix(`✅ Successful update of ownership info`);
 };
 
 /**
@@ -159,11 +159,7 @@ export const updateOwnerships = async (options: any) => {
  * According to the gov website, the UK dataset contains over 3.2 million records and the overseas
  * dataset contains over 100K.
  */
-async function downloadOwnershipsFullData(
-  month: number,
-  year: number,
-  logger: Logger
-) {
+async function downloadOwnershipsFullData(month: number, year: number) {
   if (year < 2017 || (year === 2017 && month < 11)) {
     logger.error("Must specify a month since Nov 2017");
     return null;
@@ -197,8 +193,7 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetUKResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, false),
-    20000,
-    logger
+    20000
   );
 
   const datasetOverseasResponse = await axios.get(
@@ -220,8 +215,7 @@ async function downloadOwnershipsFullData(
   await pipeZippedCsvFromUrlIntoFun(
     datasetOverseasResponse.data.result.download_url,
     (ownership) => processOwnership(ownership, true),
-    20000,
-    logger
+    20000
   );
 
   logger.info(

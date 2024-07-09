@@ -6,18 +6,19 @@ import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
-import moment from "moment-timezone";
-import getLogger from "../logger";
-import { Logger } from "pino";
+import { logger } from "../logger";
 import {
   bulkCreatePendingPolygons,
   deleteAllPendingPolygons,
+  getLastPipelineRun,
+  setPipelineLastCouncilDownloaded,
 } from "../../queries/query";
 import { chain } from "stream-chain";
 import { parser } from "stream-json/Parser";
 import { pick } from "stream-json/filters/Pick";
 import { streamArray } from "stream-json/streamers/StreamArray";
 import { Feature, Polygon } from "geojson";
+import { getLatestInspirePublishMonth } from "../util";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -29,11 +30,13 @@ const userAgents = [
 
 let downloadPath: string;
 let geojsonPath: string;
-let newDownloads: string[] = [];
-let logger: Logger;
+let councils: string[] = [];
 
 /** Download INSPIRE files using a headless playwright browser */
-const downloadInspire = async (numCouncils: number) => {
+const downloadInspire = async (
+  maxCouncils: number,
+  afterCouncil: string | undefined
+) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
@@ -44,53 +47,60 @@ const downloadInspire = async (numCouncils: number) => {
   const page = await context.newPage();
   await page.goto(url);
 
-  const inspireDownloadLinks = await page.evaluate(() => {
-    const inspireDownloadLinks: string[] = [];
+  const inspireDownloadLinks = await page.evaluate((afterCouncil) => {
+    const inspireDownloadLinks: any[] = [];
     const pageLinks = document.getElementsByTagName("a");
+    // If afterCouncil is undefined, we want to download all councils, so set matched=true
+    let afterCouncilMatched = afterCouncil === undefined;
     let linkIdCount = 0;
+    let totalLinksCount = 0;
+
     for (const link of pageLinks) {
       if (link.innerText === "Download .gml") {
-        link.id = `download-link-${linkIdCount++}`;
-        inspireDownloadLinks.push(link.id);
+        totalLinksCount++;
+
+        if (afterCouncilMatched) {
+          link.id = `download-link-${linkIdCount++}`;
+          inspireDownloadLinks.push({
+            id: link.id,
+            council: link.href.split("/").pop().replace(".zip", ""),
+          });
+        }
+
+        if (!afterCouncilMatched && link.href.includes(afterCouncil)) {
+          afterCouncilMatched = true;
+        }
       }
     }
-
     return inspireDownloadLinks;
-  });
+  }, afterCouncil);
 
-  logger.info(
-    `We found INSPIRE download links for ${inspireDownloadLinks.length} councils`
-  );
+  for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
+    const council = link.council;
+    const downloadFilePath = `${downloadPath}/${council}.zip`;
+    const geojsonFilePath = `${geojsonPath}/${council}.json`;
 
-  for (const link of inspireDownloadLinks.slice(0, numCouncils)) {
-    const downloadButton = await page.waitForSelector("#" + link);
-
-    const downloadPromise = page.waitForEvent("download");
-    await downloadButton.click();
-    const download = await downloadPromise;
-    const newDownloadFile = download.suggestedFilename();
-
-    const existingDownloadFile = `${downloadPath}/${newDownloadFile}`;
-    const geojsonFilePath = `${geojsonPath}/${newDownloadFile.replace(
-      ".zip",
-      ".json"
-    )}`;
     if (fs.existsSync(geojsonFilePath)) {
       // If GeoJSON already exists for this month, we don't need to download and transform it again
       logger.info(
-        `Skip downloading and transforming ${newDownloadFile} since GeoJSON already exists`
+        `Skip downloading and transforming ${council}.zip since GeoJSON already exists`
       );
-    } else if (fs.existsSync(existingDownloadFile)) {
+    } else if (fs.existsSync(downloadFilePath)) {
       // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
-        `Skip downloading ${newDownloadFile} since zipfile already exists`
+        `Skip downloading ${council}.zip since zipfile already exists`
       );
       // We still want to add it to newDownloads so that we unzip and transform it
-      newDownloads.push(newDownloadFile);
+      councils.push(council);
     } else {
-      logger.info(`Downloading ${newDownloadFile}`);
-      await download.saveAs(`${downloadPath}/${newDownloadFile}`);
-      newDownloads.push(newDownloadFile);
+      const downloadButton = await page.waitForSelector("#" + link.id);
+      const downloadPromise = page.waitForEvent("download");
+      await downloadButton.click();
+      const download = await downloadPromise;
+
+      logger.info(`Downloading ${council}.zip`);
+      await download.saveAs(downloadFilePath);
+      councils.push(council);
     }
   }
 
@@ -174,7 +184,7 @@ const transformGMLToGeoJson = async (council: string) => {
  * projection (the standard GPS projection used by GeoJSON and in our DB).
  */
 const ogr2ogr = async (inputPath: string, outputPath: string) => {
-  const command = `ogr2ogr -f GeoJSON -skipfailures -t_srs EPSG:4326 -lco RFC7946=YES ${outputPath} ${inputPath}`;
+  const command = `ogr2ogr -f GeoJSON -lco RFC7946=YES -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
   await promisify(exec)(command, {
     maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
   });
@@ -185,8 +195,6 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
  * analysis, then delete the GeoJSON file (to save space).
  */
 const createPendingPolygons = async () => {
-  await deleteAllPendingPolygons();
-
   const councils = fs
     .readdirSync(geojsonPath)
     .filter((f) => f.includes(".json"))
@@ -210,17 +218,26 @@ const createPendingPolygons = async () => {
     ]);
 
     // Insert into DB in chunks rather than individually, to reduce DB operations, but use small
-    // enoguh chunks so that we don't hit MySQL max packet limit
+    // enough chunks so that we don't hit MySQL max packet limit
     const chunkSize = 10000;
 
     for await (const data of pipeline) {
       const polygon: Feature<Polygon> = data.value;
       ++polygonsCount;
 
-      // Reverse since we store coords as lat-long in DB, not long-lat like in the govt INSPIRE data
-      for (const vertex of polygon.geometry.coordinates[0]) {
-        vertex.reverse();
+      try {
+        // Reverse since we store coords as lat-long in DB, not long-lat as in the govt INSPIRE data
+        for (const vertex of polygon.geometry.coordinates[0]) {
+          vertex.reverse();
+        }
+      } catch (error) {
+        logger.error(
+          { error, polygon },
+          `Error reversing polygon coordinates, skip this bad polygon`
+        );
+        continue;
       }
+
       polygonsToCreate.push(polygon);
 
       if (polygonsToCreate.length >= chunkSize) {
@@ -228,6 +245,9 @@ const createPendingPolygons = async () => {
         await bulkCreatePendingPolygons(chunk, council);
       }
     }
+
+    // Final chunk
+    await bulkCreatePendingPolygons(polygonsToCreate, council);
 
     // Sanity check that we parsed some data
     if (polygonsCount < 100) {
@@ -237,34 +257,10 @@ const createPendingPolygons = async () => {
     }
     logger.info(`Number of polygons added from ${council}: ${polygonsCount}`);
 
+    await setPipelineLastCouncilDownloaded(council);
     await rm(geojsonFilePath, { force: true });
   }
   logger.info("Created all pending INSPIRE polygons in DB");
-};
-
-/**
- * INSPIRE data is published on the first Sunday of every month. This function works out the month
- * of the latest available data in YYYY-MM format
- */
-const getLatestInspirePublishMonth = (): string => {
-  //
-  const date = moment().tz("Europe/London").startOf("month");
-  date.day(7); // the next sunday
-  if (date.date() > 7) {
-    // if the date is now after 7th, go back one week
-    date.day(-7);
-  }
-  const today = moment().tz("Europe/London");
-  if (date.isSame(today, "date")) {
-    throw new Error(
-      "Today is first Sunday of the month. Wait until tomorrow to run pipeline, to avoid data inconsistency problems"
-    );
-  }
-  if (date.isAfter(today)) {
-    // Data for this month hasn't been published yet so subtract a month
-    date.subtract(1, "month");
-  }
-  return date.format("YYYY-MM");
 };
 
 /**
@@ -274,10 +270,13 @@ const getLatestInspirePublishMonth = (): string => {
  * GeoJSON files into the 'pending_inspire_polygons' table in the DB, ready for analysis.
  */
 export const downloadAndBackupInspirePolygons = async (options: any) => {
-  // Download the data for the first <maxCouncils> councils. Default to all.
+  const resume = options.resume === "true";
+  const afterCouncil: string | undefined = resume
+    ? (await getLastPipelineRun())?.last_council_downloaded || undefined
+    : options.afterCouncil;
+  // Download the data for the first <maxCouncils> councils after afterCouncil. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
-  logger = getLogger();
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
@@ -305,22 +304,24 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
     });
   }
 
-  // delete pending polygons in the database before we start downloading new data, to ensure there
-  // is disk space
-  await deleteAllPendingPolygons();
+  if (!resume) {
+    // delete pending polygons in the database before we start downloading new data, to ensure there
+    // is disk space
+    logger.info("Deleting all pending polygons in the database");
+    await deleteAllPendingPolygons();
+  }
 
-  newDownloads = [];
+  councils = [];
 
   // Download INSPIRE data from govt website
-  await downloadInspire(maxCouncils);
+  await downloadInspire(maxCouncils, afterCouncil);
 
   // If new files were downloaded, back them up
-  if (newDownloads.length > 0) {
+  if (councils.length > 0) {
     await backupInspireDownloads();
   }
 
   // Unzip and transform all new downloads
-  const councils = newDownloads.map((filename) => filename.replace(".zip", ""));
   for (const council of councils) {
     await unzipArchive(council);
     await transformGMLToGeoJson(council);

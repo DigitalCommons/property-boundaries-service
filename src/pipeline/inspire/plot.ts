@@ -96,7 +96,7 @@ const plotOffsetStds = (offsetStds: StatsForEachCouncil) => {
 
 // Script:
 const json = fs.readFileSync(
-  path.resolve(`${analysisPath}/stats.json`),
+  path.resolve(`${analysisPath}/<ADD DIR NAME>/stats.json`),
   "utf8"
 );
 const allStats: StatsCollection = JSON.parse(json);

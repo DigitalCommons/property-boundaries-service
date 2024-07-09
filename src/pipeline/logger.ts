@@ -1,13 +1,11 @@
 import pino from "pino";
-import fs from "fs";
-import { getRunningPipelineKey } from "./util";
 
-export default function getLogger() {
-  fs.mkdirSync("logs", { recursive: true });
+export let logger: pino.Logger;
 
-  return pino(
+export const initLogger = (pipelineKey?: string) => {
+  logger = pino(
     {
-      level: process.env.NODE_ENV === "development" ? "debug" : "info",
+      level: process.env.LOG_LEVEL ?? "info",
       formatters: {
         level: (label) => {
           return { level: label.toUpperCase() };
@@ -18,12 +16,14 @@ export default function getLogger() {
     },
     pino.destination({
       dest:
-        process.env.NODE_ENV === "development" // log to stdout if in development, else to file
-          ? 1
-          : `logs/${
-              new Date().toISOString().split("T")[0]
-            }_${getRunningPipelineKey()}.log`,
+        process.env.NODE_ENV === "development" || !pipelineKey
+          ? 1 // log to stdout
+          : `logs/${new Date().toISOString().split("T")[0]}_${pipelineKey}.log`,
       sync: true,
     })
   );
-}
+
+  logger.info(`Logger initialised`);
+};
+
+initLogger();
