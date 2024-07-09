@@ -25,7 +25,7 @@ import { notifyMatrix } from "../util";
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
 export const updateOwnerships = async (options: any) => {
-  const latestOwnershipDataDate = await getLatestOwnershipDataDate();
+  let latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
   if (latestOwnershipDataDate) {
     logger.info(`Latest ownership data is from ${latestOwnershipDataDate}`);
@@ -37,6 +37,7 @@ export const updateOwnerships = async (options: any) => {
       "Download the first full set of ownership data published in Nov 2017"
     );
     await downloadOwnershipsFullData(11, 2017);
+    latestOwnershipDataDate = new Date("2017-11-28");
   }
 
   const ccodHistoricalDatasets = await getDatasetHistory(false);
