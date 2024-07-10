@@ -56,7 +56,7 @@ If the `updateBoundaries` param is true, the `analyseInspire` task will write th
 
 - Step back and think about what we want the pipeline to achieve, and what info we want to try to save as boundaries gradually change. Prioritise and try to narrow the scope. And think about whether we need any other data sources to achieve this.
 
-- Add analytics and do profiling to find where the bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council. Also decide which bits of the algorithm are most needed and remove some computation that isn't necessary.
+- Add analytics and do profiling to find where the bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council. Also decide which bits of the algorithm are most needed and remove some computation that isn't necessary. And allow pipelines to resume automatically if something goes wrong e.g. the server reboots, which is fairly likely since the pipeline is going to take a long time even if we optimise it really well (it's processing a huge amount of data!)
 
 - Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
   polygons, then add unit tests to match this spec

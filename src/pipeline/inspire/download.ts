@@ -206,6 +206,16 @@ const createPendingPolygons = async () => {
 
   for (const council of councils) {
     const geojsonFilePath = `${geojsonPath}/${council}.json`;
+    const stats = fs.statSync(geojsonFilePath);
+    const fileSizeInBytes = stats.size;
+    if (fileSizeInBytes < 1024) {
+      // Sometimes the gov supplies empty datasets (e.g. if the council has been renamed)
+      logger.warn(
+        `${council}.json is only ${fileSizeInBytes} bytes so doesn't contain any data, skipping...`
+      );
+      continue;
+    }
+
     let polygonsCount = 0;
     const polygonsToCreate = [];
 
