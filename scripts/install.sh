@@ -2,6 +2,9 @@
 
 # You probably don't want to run this script directly. The install-remote.sh script copies this file
 # to the required server and runs it there to install the app for the first time.
+#
+# Note that before running this script, the user's DBUS session must have already been started using
+# 'machinectl shell' so that the bus socket file exists.
 
 set -e
 
