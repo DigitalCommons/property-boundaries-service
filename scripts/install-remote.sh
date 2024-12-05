@@ -5,7 +5,7 @@
 
 # General usage:
 # 
-#       bash scripts/install-remote.sh [-u <app user>] [-b <branch, default main)>] [<ssh login <user>@<hostname>]
+#       bash scripts/install-remote.sh [-u <app user>] [-b <branch, default main)>] [<ssh login user>@<hostname>]
 # 
 # Example usage, to login to root user on dev-2 (for which we have ssh access), and install the app 
 # for the aubergine user:
@@ -57,6 +57,12 @@ set -x
 
 # Copy the install.sh file to the remote server
 scp scripts/install.sh $login_user_hostname:~$app_user/install.sh
+
+# Before running the script, we need to start the user's DBUS session in order for the install
+# script to be able to set up the systemd service. We do that be invoking the machinectl shell (and
+# /bin/true just does nothing). This requires sudo privileges, so if the login user is not root,
+# you need to grant them permission to run machinectl using PolKit rules.
+ssh $login_user_hostname "machinectl shell $app_user@ /bin/true"
 
 # Run the script
 ssh $login_user_hostname "su -l $app_user -c 'bash install.sh $branch'"

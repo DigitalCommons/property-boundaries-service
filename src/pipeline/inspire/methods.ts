@@ -323,13 +323,15 @@ export const comparePolygons = async (
         }
       }
     }
-    return {
-      match: Match.Fail,
-      percentageIntersect,
-      offsetStats,
-      newSegmentIds: [],
-    };
   }
+
+  // Skip the rest of the analysis for now, until we work out how to optimise the code
+  return {
+    match: Match.Fail,
+    percentageIntersect,
+    offsetStats,
+    newSegmentIds: [],
+  };
 
   // TODO: move all this to separate segment/merge function?
 

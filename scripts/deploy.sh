@@ -26,7 +26,7 @@ npm run build
 npx sequelize-cli db:migrate
 
 # Restart the app, or start it for the first time
-pm2_started=$(if pm2 list 2> /dev/null | grep -q property-boundaries-service; then echo "true" ; else echo "false" ; fi)
+pm2_started=$(if pm2 list -m 2> /dev/null | grep -q property-boundaries-service; then echo "true" ; else echo "false" ; fi)
 
 if [ $pm2_started = "true" ] ; then
     pm2 restart property-boundaries-service
