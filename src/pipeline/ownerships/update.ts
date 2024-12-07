@@ -68,6 +68,10 @@ export const updateOwnerships = async (options: any) => {
   logger.info(`There are ${filesToProcess.length} change files to process`);
 
   for (const [index, file] of filesToProcess.entries()) {
+    logger.info(
+      `Processing ownership change file ${file.filename}, size ${file.file_size}`
+    );
+
     const ownershipAdditions = [];
     const ownershipDeletions = [];
 
@@ -116,6 +120,7 @@ export const updateOwnerships = async (options: any) => {
     const ownershipDeletionTitleNos = ownershipDeletions.map(
       (ownership) => ownership["Title Number"]
     );
+    logger.info(`Deleting ${ownershipDeletionTitleNos.length} ownerships`);
     await bulkDeleteLandOwnerships(ownershipDeletionTitleNos);
 
     // TODO: rather than just updating the entries of each title and overwriting old data, it would
@@ -124,20 +129,15 @@ export const updateOwnerships = async (options: any) => {
     // datasets is publicly available, this is a feature we can add later without storing all the
     // data ourselves
 
+    logger.info(`Creating ${ownershipAdditions.length} ownerships`);
+
     // break additions into chunks of 2000 so we don't hit max packet limit for MySQL
     const chunksOfAdditions = chunk(ownershipAdditions, 20000);
     for (const chunk of chunksOfAdditions) {
       await bulkCreateOrUpdateLandOwnerships(chunk, file.type === "ocod");
     }
 
-    logger.info(
-      {
-        file: file.filename,
-        additions: ownershipAdditions.length,
-        deletions: ownershipDeletions.length,
-      },
-      "Finished processing ownership change file"
-    );
+    logger.info(`Finished processing ${file.filename}`);
 
     // If there are no more files from the same date to process, update DB with this latest date
     if (
