@@ -18,7 +18,7 @@ export const initLogger = (pipelineKey?: string) => {
       dest:
         process.env.NODE_ENV === "development" || !pipelineKey
           ? 1 // log to stdout
-          : `logs/${new Date().toISOString().split("T")[0]}_${pipelineKey}.log`,
+          : `logs/${new Date().toISOString().split(".")[0]}_${pipelineKey}.log`,
       sync: true,
     })
   );
