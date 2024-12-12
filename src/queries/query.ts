@@ -407,6 +407,8 @@ export async function getLandOwnership(title_no: string) {
  * AND
  * - intersect with the search area (if given)
  *
+ * Limit result to 500 polygons to avoid OOMEs.
+ *
  * @param poly_ids an array of INSPIRE IDs
  * @param searchArea a stringified GeoJSON Polygon geometry
  * @param includeLeasholds whether to include polygons for leasholds (default true)
@@ -435,7 +437,8 @@ export const getPolygonsByIdInSearchArea = async (
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
     WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?)) 
-    ${noLeaseholdsCondition};`;
+    ${noLeaseholdsCondition}
+    LIMIT 500;`;
 
     return await sequelize.query(query, {
       replacements: [searchArea],
@@ -470,6 +473,7 @@ export const getPolygonsByIdInSearchArea = async (
 
 /**
  * Get pending polygons that intersect with the search area.
+ * Limit result to 500 polygons to avoid OOMEs.
  *
  * @param searchArea a stringified GeoJSON Polygon geometry
  * @param acceptedOnly whether to only return accepted pending polygons (default to all)
@@ -483,7 +487,8 @@ export const getPendingPolygonsInSearchArea = async (
   const query = `SELECT *
     FROM pending_inspire_polygons
     WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-    ${acceptedCondition};`;
+    ${acceptedCondition}
+    LIMIT 500;`;
 
   return await sequelize.query(query, {
     replacements: [searchArea],
