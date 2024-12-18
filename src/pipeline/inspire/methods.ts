@@ -10,7 +10,7 @@ import {
 import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
 
-const precisionDecimalPlaces = 10;
+const precisionDecimalPlaces = 7;
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
 const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
@@ -68,14 +68,13 @@ export const getExistingPolygons = async (
 };
 
 /**
- * We round since data from each data source has different precision.
+ * We just check equality to 7 d.p. since each data source has different precision.
  */
 const areEqualCoords = (coords1: number[], coords2: number[]) => {
+  const epsilon = Math.pow(10, -precisionDecimalPlaces);
   return (
-    coords1[0].toFixed(precisionDecimalPlaces) ===
-      coords2[0].toFixed(precisionDecimalPlaces) &&
-    coords1[1].toFixed(precisionDecimalPlaces) ===
-      coords2[1].toFixed(precisionDecimalPlaces)
+    Math.abs(coords1[0] - coords2[0]) < epsilon &&
+    Math.abs(coords1[1] - coords2[1]) < epsilon
   );
 };
 
