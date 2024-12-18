@@ -11,17 +11,24 @@ This service manages a database and an API to serve data from the land registry'
 
 ## Installing and deploying
 
-- Run the `install-remote.sh` script from your local machine to install the application e.g.:
+### First install
 
-  ```
-  bash install-remote.sh -u aubergine root@prod-2.digitalcommons.coop
-  ```
+1. Set up requirements on the remote machine you want to deply the PBS on. At DCC, we do this by running an Ansible playbook (see [technology-and-infrastructure](https://github.com/DigitalCommons/technology-and-infrastructure/tree/master))
+2. Run the `install-remote.sh` script from your local machine to install the application on the desired remote user@hostname. e.g.:
 
-  Note that this will only succeed once you have uploaded the GitHub SSH deploy key (explained in the script's output).
+```
+bash install-remote.sh -u aubergine root@prod-2.digitalcommons.coop
+```
 
-- Log into the server and, in the codebase, copy `.env.example` to `.env`.
-- Fill in `.env` with the credentials and API keys (in BitWarden or the password-store).
-- `bash scripts/deploy.sh` to run the DB migration scripts, build and serve the app with PM2
+_Note: that this will only succeed once you have uploaded its public SSH key to GitHub SSH (explained in the script's output)._
+
+3. Log into the server and, in the codebase, copy `.env.example` to `.env`.
+4. Fill in `.env` with the credentials and API keys (in BitWarden or the password-store).
+5. `bash scripts/deploy.sh` to run the DB migration scripts, build and serve the app with PM2
+
+### Subsequent updates
+
+Checkout the code that you wish to deploy then run `bash scripts/deploy.sh`.
 
 ## Useful dev commands
 
