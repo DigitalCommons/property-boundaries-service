@@ -56,3 +56,6 @@ export const getLatestInspirePublishDate = (): Date => {
 export const getLatestInspirePublishMonth = (): string => {
   return getLatestInspirePublishDate().toISOString().slice(0, 7);
 };
+
+export const roundDecimalPlaces = (num: number, decimalPlaces: number) =>
+  Math.round(num * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
