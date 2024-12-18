@@ -1,0 +1,5 @@
+- MySQL
+- tables and what they contain, how it relates to INSPIRE data
+- how/when data is updated by pipeline
+- how Borg backups (archives) work, storage box
+- how to restore a backup on prod, staging, dev

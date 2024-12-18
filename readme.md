@@ -11,24 +11,7 @@ This service manages a database and an API to serve data from the land registry'
 
 ## Installing and deploying
 
-### First install
-
-1. Set up requirements on the remote machine you want to deply the PBS on. At DCC, we do this by running an Ansible playbook (see [technology-and-infrastructure](https://github.com/DigitalCommons/technology-and-infrastructure/tree/master))
-2. Run the `install-remote.sh` script from your local machine to install the application on the desired remote user@hostname. e.g.:
-
-```
-bash install-remote.sh -u aubergine root@prod-2.digitalcommons.coop
-```
-
-_Note: that this will only succeed once you have uploaded its public SSH key to GitHub SSH (explained in the script's output)._
-
-3. Log into the server and, in the codebase, copy `.env.example` to `.env`.
-4. Fill in `.env` with the credentials and API keys (in BitWarden or the password-store).
-5. `bash scripts/deploy.sh` to run the DB migration scripts, build and serve the app with PM2
-
-### Subsequent updates
-
-Checkout the code that you wish to deploy then run `bash scripts/deploy.sh`.
+See [docs/deployment.md](docs/deployment.md).
 
 ## Useful dev commands
 
@@ -58,27 +41,3 @@ If the `updateBoundaries` param is true, the `analyseInspire` task will write th
 - login to LX as a super user (to become a super user, update your record in MySQL on the server)
 - enable the Pending Polygons data layer
 - search for the lat-lng in the LX search bar, then click on nearby properties to visualise the polygon(s) involved
-
-## TODO (roughly in priority order)
-
-- Step back and think about what we want the pipeline to achieve, and what info we want to try to save as boundaries gradually change. Prioritise and try to narrow the scope. And think about whether we need any other data sources to achieve this.
-
-- Add analytics and do profiling to find where the bottlenecks are in analysis script, so they can be optimised. The script takes far too long currently - around 30 mins per council. Tasks could maybe be parallelised using worker threads (see https://nodejs.org/api/worker_threads.html). Also decide which bits of the algorithm are most needed and remove some computation that isn't necessary. And allow pipelines to resume automatically if something goes wrong e.g. the server reboots, which is fairly likely since the pipeline is going to take a long time even if we optimise it really well (it's processing a huge amount of data!)
-
-- Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
-  polygons, then add unit tests to match this spec
-
-  - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Testing#unit-tests)
-  - Add these tests to a Github CI pipeline, like on LX backend
-  - We'll need to modularise some of the long functions in the pipeline a bit more (e.g. the `comparePolygons` function) to make unit testing easier
-  - Maybe we need to plot some different polygon scenarios that can be visualised and used for different edge cases.
-
-- Address the various 'TODO' comments around the codebase
-
-- Add some docs to `/docs` to give a high-level overview of what the pipeline is doing. But wherever possible,
-  especially for low-level details, prefer Mocha specs over written
-  documentation. Docs can be ignored but specs with unit tests can't.
-
-- Improve how the results of the analysis can be understood/visualised. It's currently a lot of data, and it's hard to know which matches to check individually.
-
-- Enable strict Typescript checking in tsconfig.json and fixup existing checking failures. Use more modern Sequelize definitions so that we get types https://sequelize.org/docs/v7/models/defining-models/
