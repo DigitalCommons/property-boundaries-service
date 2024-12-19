@@ -26,7 +26,7 @@ const analysePolygonInJSON = async (
   );
   if (feature) {
     const newCoords: number[][] = feature.geometry.coordinates[0];
-    // Our DB is in lat-long format and INSPIRE dataset is in long-lat format, so reverse them now
+    // Our DB is in lat-lng format and INSPIRE dataset is in lng-lat format, so reverse them now
     for (const vertex of newCoords) {
       vertex.reverse();
     }

@@ -18,7 +18,7 @@ import { parser } from "stream-json/Parser";
 import { pick } from "stream-json/filters/Pick";
 import { streamArray } from "stream-json/streamers/StreamArray";
 import { Feature, Polygon } from "geojson";
-import { getLatestInspirePublishMonth } from "../util";
+import { getLatestInspirePublishMonth, roundDecimalPlaces } from "../util";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -236,9 +236,14 @@ const createPendingPolygons = async () => {
       ++polygonsCount;
 
       try {
-        // Reverse since we store coords as lat-long in DB, not long-lat as in the govt INSPIRE data
+        // Reverse since we store coords as lat-lng in DB, not lng-lat as in the govt INSPIRE data
+        // Also round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and
+        // makes later geometry calculations slower
         for (const vertex of polygon.geometry.coordinates[0]) {
           vertex.reverse();
+          for (let i = 0; i < vertex.length; i++) {
+            vertex[i] = roundDecimalPlaces(vertex[i], 7);
+          }
         }
       } catch (error) {
         logger.error(
@@ -284,10 +289,14 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   const afterCouncil: string | undefined = resume
     ? (await getLastPipelineRun())?.last_council_downloaded || undefined
     : options.afterCouncil;
-  // Download the data for the first <maxCouncils> councils after afterCouncil. Default to all.
+  // Download the data for the first <maxCouncils> councils after <afterCouncil>. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
+
+  logger.info(
+    `Download ${latestInspirePublishMonth} INSPIRE data after council ${afterCouncil}`
+  );
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
   geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
