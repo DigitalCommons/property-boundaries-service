@@ -289,10 +289,14 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   const afterCouncil: string | undefined = resume
     ? (await getLastPipelineRun())?.last_council_downloaded || undefined
     : options.afterCouncil;
-  // Download the data for the first <maxCouncils> councils after afterCouncil. Default to all.
+  // Download the data for the first <maxCouncils> councils after <afterCouncil>. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
+
+  logger.info(
+    `Download ${latestInspirePublishMonth} INSPIRE data after council ${afterCouncil}`
+  );
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
   geojsonPath = path.resolve("./geojson", latestInspirePublishMonth);
