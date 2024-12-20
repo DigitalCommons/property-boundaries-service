@@ -7,7 +7,7 @@ module.exports = {
         id int NOT NULL AUTO_INCREMENT,
         poly_id int NOT NULL,
         title_no varchar(255) DEFAULT NULL,
-        geom geometry NOT NULL,
+        geom geometry NOT NULL /*!80003 SRID 4326 */,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id),

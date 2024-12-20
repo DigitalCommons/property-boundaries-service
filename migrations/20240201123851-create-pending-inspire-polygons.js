@@ -11,7 +11,7 @@ module.exports = {
       `CREATE TABLE pending_inspire_polygons (
         id int NOT NULL AUTO_INCREMENT,
         poly_id int NOT NULL,
-        geom geometry NOT NULL,
+        geom geometry NOT NULL /*!80003 SRID 4326 */,
         council varchar(255) NOT NULL,
         accepted boolean NOT NULL DEFAULT false,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
