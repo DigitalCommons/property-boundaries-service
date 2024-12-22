@@ -31,6 +31,7 @@ const userAgents = [
 let downloadPath: string;
 let geojsonPath: string;
 let councils: string[] = [];
+let anyNewDownloads = false;
 
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (
@@ -90,8 +91,6 @@ const downloadInspire = async (
       logger.info(
         `Skip downloading ${council}.zip since zipfile already exists`
       );
-      // We still want to add it to newDownloads so that we unzip and transform it
-      councils.push(council);
     } else {
       const downloadButton = await page.waitForSelector("#" + link.id);
       const downloadPromise = page.waitForEvent("download");
@@ -100,8 +99,9 @@ const downloadInspire = async (
 
       logger.info(`Downloading ${council}.zip`);
       await download.saveAs(downloadFilePath);
-      councils.push(council);
+      anyNewDownloads = true;
     }
+    councils.push(council);
   }
 
   await browser.close();
@@ -128,6 +128,11 @@ const backupInspireDownloads = async () => {
 /** Unzip an archive then delete the original archive (to save space) */
 const unzipArchive = async (council: string) => {
   const zipFile = path.resolve(`${downloadPath}/${council}.zip`);
+  if (!fs.existsSync(zipFile)) {
+    // We don't have an archive to unzip, maybe because GeoJSON has alredy been generated
+    return;
+  }
+
   const unzipDir = path.resolve(`${downloadPath}/${council}`);
   await rm(unzipDir, { recursive: true, force: true }); // Remove any existing unzipped files
   logger.info(`Unzip: ${council}.zip`);
@@ -176,6 +181,8 @@ const transformGMLToGeoJson = async (council: string) => {
     } else {
       throw new Error(`Download for ${council} didn't contain a GML file`);
     }
+  } else {
+    throw new Error(`${downloadFolderPath} is not a directory`);
   }
 };
 
@@ -194,83 +201,93 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
  * For all GeoJSONs in the geojson folder, add each polygon to pending_inspire_polygons, ready for
  * analysis, then delete the GeoJSON file (to save space).
  */
-const createPendingPolygons = async () => {
+const createPendingPolygons = async (council: string) => {
   logger.info(
-    `Inserting downloaded polygons from ${councils.length} councils into pending_inspire_polygons...`
+    `Inserting downloaded polygons from ${councils} into pending_inspire_polygons...`
   );
 
-  for (const council of councils) {
-    const geojsonFilePath = `${geojsonPath}/${council}.json`;
-    const stats = fs.statSync(geojsonFilePath);
-    const fileSizeInBytes = stats.size;
-    if (fileSizeInBytes < 1024) {
-      // Sometimes the gov supplies empty datasets (e.g. if the council has been renamed)
-      logger.warn(
-        `${council}.json is only ${fileSizeInBytes} bytes so doesn't contain any data, skipping...`
-      );
-      continue;
-    }
+  const geojsonFilePath = `${geojsonPath}/${council}.json`;
+  const stats = fs.statSync(geojsonFilePath);
+  const fileSizeInBytes = stats.size;
+  if (fileSizeInBytes < 1024) {
+    // Sometimes the gov supplies empty datasets (e.g. if the council has been renamed)
+    logger.warn(
+      `${council}.json is only ${fileSizeInBytes} bytes so doesn't contain any data, skipping...`
+    );
+    return;
+  }
 
-    let polygonsCount = 0;
-    const polygonsToCreate = [];
+  let polygonsCount = 0;
+  const polygonsToCreate = [];
 
-    // Stream JSON rather than reading and parsing whole file, to avoid OOME
-    const pipeline = chain([
-      fs.createReadStream(geojsonFilePath),
-      parser(),
-      pick({ filter: "features", once: true }),
-      streamArray(),
-    ]);
+  // Stream JSON rather than reading and parsing whole file, to avoid OOME
+  const pipeline = chain([
+    fs.createReadStream(geojsonFilePath),
+    parser(),
+    pick({ filter: "features", once: true }),
+    streamArray(),
+  ]);
 
-    // Insert into DB in chunks rather than individually, to reduce DB operations, but use small
-    // enough chunks so that we don't hit MySQL max packet limit
-    const chunkSize = 10000;
+  // Insert into DB in chunks rather than individually, to reduce DB operations, but use small
+  // enough chunks so that we don't hit MySQL max packet limit
+  const chunkSize = 10000;
 
-    for await (const data of pipeline) {
-      const polygon: Feature<Polygon> = data.value;
-      ++polygonsCount;
+  for await (const data of pipeline) {
+    const polygon: Feature<Polygon> = data.value;
+    ++polygonsCount;
 
-      try {
-        // Reverse since we store coords as lat-lng in DB, not lng-lat as in the govt INSPIRE data
-        // Also round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and
-        // makes later geometry calculations slower
-        for (const vertex of polygon.geometry.coordinates[0]) {
-          vertex.reverse();
-          for (let i = 0; i < vertex.length; i++) {
+    try {
+      // Reverse since we store coords as lat-lng in DB, not lng-lat as in the govt INSPIRE data
+      // Also round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and
+      // makes later geometry calculations slower
+      for (const vertex of polygon.geometry.coordinates[0]) {
+        vertex.reverse();
+        for (let i = 0; i < vertex.length; i++) {
+          if (typeof vertex[i] === "number") {
             vertex[i] = roundDecimalPlaces(vertex[i], 7);
+          } else {
+            throw new Error(
+              `Coordinates ${vertex} is not valid, Polygon: ${polygon}`
+            );
           }
         }
-      } catch (error) {
+      }
+    } catch (error) {
+      if (polygon.geometry.type !== "Polygon") {
+        // TODO: add support for MultiPolygons and GeometryCollections
+        logger.debug(
+          `We don't support geometry type ${polygon.geometry.type} yet, skip this polygon`
+        );
+      } else {
         logger.error(
           { error, polygon },
           `Error reversing polygon coordinates, skip this bad polygon`
         );
-        continue;
       }
-
-      polygonsToCreate.push(polygon);
-
-      if (polygonsToCreate.length >= chunkSize) {
-        const chunk = polygonsToCreate.splice(0, chunkSize);
-        await bulkCreatePendingPolygons(chunk, council);
-      }
+      continue;
     }
 
-    // Final chunk
-    await bulkCreatePendingPolygons(polygonsToCreate, council);
+    polygonsToCreate.push(polygon);
 
-    // Sanity check that we parsed some data
-    if (polygonsCount < 100) {
-      throw new Error(
-        `We parsed only ${polygonsCount} polygons in ${council}. We expect more than this`
-      );
+    if (polygonsToCreate.length >= chunkSize) {
+      const chunk = polygonsToCreate.splice(0, chunkSize);
+      await bulkCreatePendingPolygons(chunk, council);
     }
-    logger.info(`Number of polygons added from ${council}: ${polygonsCount}`);
-
-    await setPipelineLastCouncilDownloaded(council);
-    await rm(geojsonFilePath, { force: true });
   }
-  logger.info("Created all pending INSPIRE polygons in DB");
+
+  // Final chunk
+  await bulkCreatePendingPolygons(polygonsToCreate, council);
+
+  // Sanity check that we parsed some data
+  if (polygonsCount < 100) {
+    throw new Error(
+      `We parsed only ${polygonsCount} polygons in ${council}. We expect more than this`
+    );
+  }
+  logger.info(`Number of polygons added from ${council}: ${polygonsCount}`);
+
+  await setPipelineLastCouncilDownloaded(council);
+  await rm(geojsonFilePath, { force: true });
 };
 
 /**
@@ -331,7 +348,7 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   await downloadInspire(maxCouncils, afterCouncil);
 
   // If new files were downloaded, back them up
-  if (councils.length > 0) {
+  if (anyNewDownloads) {
     await backupInspireDownloads();
   }
 
@@ -339,9 +356,11 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   for (const council of councils) {
     await unzipArchive(council);
     await transformGMLToGeoJson(council);
+    // Insert new polygons in database as pending, ready for analysis
+    await createPendingPolygons(council);
   }
-  logger.info("Finished transforming GML files");
 
-  // Insert new polygons in database as pending, ready for analysis
-  await createPendingPolygons();
+  logger.info(
+    "Download, transformed, and created all pending INSPIRE polygons in DB"
+  );
 };

@@ -517,7 +517,7 @@ export const analyseAllPendingPolygons = async (
 
     if (totalNumPolygonsAnalysed % 5000 === 0) {
       logger.info(
-        `Analysing polygon ${totalNumPolygonsAnalysed} of ${polygon.council}`
+        `Analysing polygon ${totalNumPolygonsAnalysed} (from ${polygon.council})`
       );
     }
     polygon = await getNextPendingPolygon(polygon.id + 1);
