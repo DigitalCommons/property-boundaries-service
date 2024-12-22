@@ -203,7 +203,7 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
  */
 const createPendingPolygons = async (council: string) => {
   logger.info(
-    `Inserting downloaded polygons from ${councils} into pending_inspire_polygons...`
+    `Inserting downloaded polygons from ${council} into pending_inspire_polygons...`
   );
 
   const geojsonFilePath = `${geojsonPath}/${council}.json`;
