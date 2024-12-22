@@ -7,7 +7,7 @@
     "build": "rm -rf dist && tsc",
     "serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=4096'",
     "staging:serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=2048 --heap-prof --diagnostic-dir=logs'",
-    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=3072' nodemon -e js src/app.ts",
+    "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/inspire/plot.js",
     "test": "env-cmd -f .env.test"

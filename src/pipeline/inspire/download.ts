@@ -195,11 +195,6 @@ const ogr2ogr = async (inputPath: string, outputPath: string) => {
  * analysis, then delete the GeoJSON file (to save space).
  */
 const createPendingPolygons = async () => {
-  const councils = fs
-    .readdirSync(geojsonPath)
-    .filter((f) => f.includes(".json"))
-    .map((filename) => filename.replace(".json", ""));
-
   logger.info(
     `Inserting downloaded polygons from ${councils.length} councils into pending_inspire_polygons...`
   );
