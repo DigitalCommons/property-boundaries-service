@@ -13,13 +13,28 @@ export const setRunningPipelineKey = (key: string) => {
   pipelineKey = key;
 };
 
-export const notifyMatrix = async (message: string) => {
+/**
+ * @param isHtml set to true if the message is in HTML, otherwise as assume it's plain text
+ */
+export const notifyMatrix = async (
+  message: string,
+  isHtml: boolean = false
+) => {
   const matrixWebhookUrl = process.env.MATRIX_WEBHOOK_URL;
   if (matrixWebhookUrl) {
-    await axios.post(matrixWebhookUrl, {
-      msgtype: "m.text",
-      body: `[${hostname()}] [property_boundaries] ${message}`,
-    });
+    if (isHtml) {
+      await axios.post(matrixWebhookUrl, {
+        msgtype: "m.text",
+        body: "",
+        format: "org.matrix.custom.html",
+        formatted_body: `<p>[${hostname()}] [property_boundaries]</p> ${message}`,
+      });
+    } else {
+      await axios.post(matrixWebhookUrl, {
+        msgtype: "m.text",
+        body: `[${hostname()}] [property_boundaries] ${message}`,
+      });
+    }
   }
 };
 

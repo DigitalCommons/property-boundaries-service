@@ -148,7 +148,8 @@ const runPipeline = async (options: PipelineOptions) => {
     console.log(msg);
 
     await notifyMatrix(
-      `✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. Time elapsed: ${timeElapsedString}\n\`\`\`\n${summaryTable}\n\`\`\``
+      `<p>✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. Time elapsed: ${timeElapsedString}</p>\n<pre>${summaryTable}</pre>`,
+      true
     );
   } catch (err) {
     running = false;
