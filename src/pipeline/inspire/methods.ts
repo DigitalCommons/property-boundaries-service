@@ -17,6 +17,11 @@ const percentageIntersectThreshold = 98; // Threshold at which we assume polygon
 const absoluteDifferenceThresholdM2 = 100; // Symmetric difference of polygons must be lower than this threshold for us to consider them the same
 const zeroAreaThreshold = 2; // Polygons less than 2 m2 are ignored as artifacts when calculating segment/merge
 
+/**
+ * Note that we have simplified the comparePolygons method below, so we only detect the first 4
+ * types of match, and the rest are marked as a fail.
+ * TODO: detect the other types of match too
+ */
 export enum Match {
   /** Old and new polys have same vertices (to above precision decimal places) */
   Exact,
@@ -24,6 +29,11 @@ export enum Match {
   ExactOffset,
   /** Different vertices but with an overlap that meets the percentage intersect threshold */
   HighOverlap,
+  /** The polygon moved and matches with its associated title's new property address */
+  Moved,
+  //
+  // ############# The following types are not currently detected ################
+  //
   /** Polygon is in same place but it has expanded/shrunk and boundaries have sligtly shifted with
    * adjacent polys */
   BoundariesShifted,
@@ -38,8 +48,6 @@ export enum Match {
   SegmentedIncomplete,
   /** There was a combination of old boundaries merging and some segmentation into new boundaries */
   MergedAndSegmented,
-  /** The polygon moved and matches with its associated title's property address */
-  Moved,
   /** Didn't meet any of the above matching criteria */
   Fail,
 }
@@ -210,7 +218,7 @@ export const comparePolygons = async (
   titleAddress: string | undefined = undefined
 ): Promise<{
   match: Match;
-  percentageIntersect: number;
+  percentageIntersect?: number;
   offsetStats?: OffsetStats;
   newSegmentIds?: number[];
   oldMergedIds?: number[];
@@ -243,85 +251,104 @@ export const comparePolygons = async (
     coords[0] - suggestedLatLongOffset[0],
     coords[1] - suggestedLatLongOffset[1],
   ]);
-  const { absoluteDifferenceM2, percentageIntersect } = calculateOverlap(
-    oldCoords,
-    newCoords
-  );
+  let percentageIntersect: number;
 
-  // The absolute threshold test is for very, very big polygons
-  if (
-    absoluteDifferenceM2 < absoluteDifferenceThresholdM2 &&
-    percentageIntersect > percentageIntersectThreshold
-  ) {
-    return {
-      match: Match.HighOverlap,
-      percentageIntersect,
-      offsetStats,
-    };
-  }
+  try {
+    const overlap = calculateOverlap(oldCoords, newCoords);
+    percentageIntersect = overlap.percentageIntersect;
 
-  if (percentageIntersect === 0) {
-    logger.debug(
-      {
-        oldInspireId,
-        newInspireId,
-        oldLatLong: oldCoords[0],
-        newLatLong: newCoords[0],
+    // The absolute threshold test is for very, very big polygons
+    if (
+      overlap.absoluteDifferenceM2 < absoluteDifferenceThresholdM2 &&
+      percentageIntersect > percentageIntersectThreshold
+    ) {
+      return {
+        match: Match.HighOverlap,
         percentageIntersect,
-      },
-      "polygon moved to a new location"
-    );
+        offsetStats,
+      };
+    }
 
-    if (titleAddress) {
-      logger.debug(`Title address is ${titleAddress}`);
-      let results = [];
-      // Try geocoding the matching title address
-      try {
-        results = await geocoder.geocode(`${titleAddress}, UK`);
-      } catch (err) {
-        logger.error(err, "Failed to geocode title address");
-      }
+    if (percentageIntersect === 0) {
+      logger.debug(
+        {
+          oldInspireId,
+          newInspireId,
+          oldLatLong: oldCoords[0],
+          newLatLong: newCoords[0],
+          percentageIntersect,
+        },
+        "polygon moved to a new location"
+      );
 
-      if (results.length > 0) {
-        // Check against each of the geocoded results and find closest match
-        const points = results.map((result) =>
-          turf.point([result.latitude, result.longitude])
-        );
-        const newPoly = turf.polygon([newCoords]);
-        const metersFromAddress = Math.min(
-          ...points.map(
-            (point) =>
-              turf.distance(point, turf.center(newPoly), {
-                units: "kilometers",
-              }) * 1000
-          )
-        );
+      if (titleAddress) {
+        logger.debug(`Title address is ${titleAddress}`);
+        let results = [];
+        // Try geocoding the matching title address
+        try {
+          results = await geocoder.geocode(`${titleAddress}, UK`);
+        } catch (err) {
+          logger.error(err, "Failed to geocode title address");
+        }
 
-        // If new polygon lies within 50m of a geocoded location, accept it as a moved boundary
-        if (metersFromAddress < 50) {
-          logger.debug(
-            {
-              oldInspireId,
-              newInspireId,
-            },
-            `Poly moved and its center is ${metersFromAddress} m from its associated title address, so accept match`
+        if (results.length > 0) {
+          // Check against each of the geocoded results and find closest match
+          const points = results.map((result) =>
+            turf.point([result.latitude, result.longitude])
           );
-          return {
-            match: Match.Moved,
-            percentageIntersect,
-            offsetStats,
-          };
-        } else {
-          logger.debug(
-            {
-              oldInspireId,
-              newInspireId,
-            },
-            `Poly moved and its center is ${metersFromAddress} m from its associated title address, so match failed`
+          const newPoly = turf.polygon([newCoords]);
+          const metersFromAddress = Math.min(
+            ...points.map(
+              (point) =>
+                turf.distance(point, turf.center(newPoly), {
+                  units: "kilometers",
+                }) * 1000
+            )
           );
+
+          // If new polygon lies within 50m of a geocoded location, accept it as a moved boundary
+          if (metersFromAddress < 50) {
+            logger.debug(
+              {
+                oldInspireId,
+                newInspireId,
+              },
+              `Poly moved and its center is ${metersFromAddress} m from its associated title address, so accept match`
+            );
+            return {
+              match: Match.Moved,
+              percentageIntersect,
+              offsetStats,
+            };
+          } else {
+            logger.debug(
+              {
+                oldInspireId,
+                newInspireId,
+              },
+              `Poly moved and its center is ${metersFromAddress} m from its associated title address, so match failed`
+            );
+          }
         }
       }
     }
+  } catch (error) {
+    logger.error(
+      error,
+      `We hit an error comparing polygons: old ID ${oldInspireId}, new ID ${newInspireId}`
+    );
+
+    // Re-throw this error whilst we're debugging the pipeline so we don't miss errors. Remove this
+    // later, since we don't want to stop the whole pipeline for one error (and maybe integrate with
+    // Glitchtip for better error tracking)
+    throw error;
+
+    return {
+      match: Match.Fail,
+      percentageIntersect,
+      offsetStats,
+      newSegmentIds: [],
+    };
   }
 
   // Skip the rest of the analysis for now, until we work out how to optimise the code
