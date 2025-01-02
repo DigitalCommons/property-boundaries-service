@@ -44,7 +44,7 @@
   "dependencies": {
     "@hapi/hapi": "^21.3.2",
     "@playwright/browser-chromium": "^1.40.1",
-    "@turf/turf": "^7.0.0",
+    "@turf/turf": "^7.2.0",
     "axios": "^1.4.0",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.3.1",
