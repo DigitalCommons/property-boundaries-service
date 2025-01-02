@@ -334,8 +334,14 @@ export const comparePolygons = async (
     }
   } catch (error) {
     logger.error(
-      error,
-      `We hit an error comparing polygons: old ID ${oldInspireId}, new ID ${newInspireId}`
+      {
+        error,
+        oldInspireId,
+        newInspireId,
+        oldCoordsPlusOffset: oldCoords,
+        newCoords,
+      },
+      `We hit an error comparing polygons`
     );
 
     // Re-throw this error whilst we're debugging the pipeline so we don't miss errors. Remove this
