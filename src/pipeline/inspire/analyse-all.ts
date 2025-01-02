@@ -93,8 +93,6 @@ let previousLatLongOffsets: {
 
 /** Reset all the objects we are using to track polygon matches */
 const resetAnalysis = async () => {
-  await resetPolygonsPendingDeletion();
-
   allStats = {
     percentageIntersects: {},
     offsetMeans: {},
@@ -500,6 +498,9 @@ export const analyseAllPendingPolygons = async (
   const updateBoundaries: boolean = options.updateBoundaries === "true";
 
   await resetAnalysis();
+  if (!resume) {
+    await resetPolygonsPendingDeletion();
+  }
 
   if (options.maxPolygons) {
     logger.info(`Analyse first ${maxPolygons} polygons`);
