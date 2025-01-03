@@ -237,11 +237,9 @@ const createPendingPolygons = async (council: string) => {
     ++polygonsCount;
 
     try {
-      // Reverse since we store coords as lat-lng in DB, not lng-lat as in the govt INSPIRE data
-      // Also round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and
-      // makes later geometry calculations slower
+      // Round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and makes
+      // later geometry calculations slower
       for (const vertex of polygon.geometry.coordinates[0]) {
-        vertex.reverse();
         for (let i = 0; i < vertex.length; i++) {
           if (typeof vertex[i] === "number") {
             vertex[i] = roundDecimalPlaces(vertex[i], 7);

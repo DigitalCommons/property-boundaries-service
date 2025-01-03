@@ -205,12 +205,7 @@ const getBoundariesDummy = async (request: Request): Promise<any> => {
     )
     .map((feature) => ({
       poly_id: feature.properties.INSPIREID,
-      geom: {
-        ...feature.geometry,
-        coordinates: [
-          feature.geometry.coordinates[0].map((c) => c.toReversed()),
-        ],
-      },
+      geom: feature.geometry,
     }));
   return polygons;
 };
