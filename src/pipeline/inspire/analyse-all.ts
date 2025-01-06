@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import {
   Match,
-  getExistingPolygons,
+  getExistingInspirePolygons,
   comparePolygons,
   findOldContainingOrContainedPoly,
   coordsOverlapWithExistingPoly,
@@ -212,7 +212,9 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
     return;
   }
 
-  const existingPolygon: any = (await getExistingPolygons([inspireId]))[0];
+  const existingPolygon: any = (
+    await getExistingInspirePolygons([inspireId])
+  )[0];
 
   if (existingPolygon) {
     const oldCoords: number[][] = existingPolygon.geom.coordinates[0];

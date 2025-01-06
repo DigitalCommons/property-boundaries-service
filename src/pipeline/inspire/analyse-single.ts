@@ -1,7 +1,7 @@
 import path from "path";
 import { readdirSync } from "fs";
 import { readFile } from "fs/promises";
-import { Match, getExistingPolygons, comparePolygons } from "./methods";
+import { Match, getExistingInspirePolygons, comparePolygons } from "./methods";
 
 // Analyse a single polygon with the following INSPIRE ID (or just take any if undefined)
 const ID = undefined;
@@ -26,7 +26,7 @@ const analysePolygonInJSON = async (
   );
   if (feature) {
     const newCoords: number[][] = feature.geometry.coordinates[0];
-    const existingPolygon: any = (await getExistingPolygons([id]))[0];
+    const existingPolygon: any = (await getExistingInspirePolygons([id]))[0];
 
     if (existingPolygon) {
       const oldCoords = existingPolygon.geom.coordinates[0];

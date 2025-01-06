@@ -67,7 +67,7 @@ let geocoder: NodeGeocoder.Geocoder;
  * - intersect with the given search area polygon
  * @return array of polygons
  */
-export const getExistingPolygons = async (
+export const getExistingInspirePolygons = async (
   poly_ids?: number[],
   searchArea?: Polygon | MultiPolygon
 ) => {
@@ -378,7 +378,7 @@ export const comparePolygons = async (
     units: "kilometers",
   });
   // search existing polygons that intersect with this buffered poly
-  const oldAdjacentPolys = await getExistingPolygons(
+  const oldAdjacentPolys = await getExistingInspirePolygons(
     undefined,
     oldPolyWithBuffer.geometry
   );
@@ -462,7 +462,10 @@ export const comparePolygons = async (
 
           // Match against old polygons in the existing database
           const matchedPolys: any = (
-            await getExistingPolygons(undefined, shrunkPolygonGained.geometry)
+            await getExistingInspirePolygons(
+              undefined,
+              shrunkPolygonGained.geometry
+            )
           ).filter(
             (poly: any) =>
               poly.poly_id !== oldInspireId &&
@@ -623,9 +626,10 @@ export const comparePolygons = async (
           );
 
         if (matchedPolys.length > 0) {
-          const polysThatAlreadyExisted: any[] = await getExistingPolygons(
-            matchedPolys.map((poly) => poly.poly_id)
-          );
+          const polysThatAlreadyExisted: any[] =
+            await getExistingInspirePolygons(
+              matchedPolys.map((poly) => poly.poly_id)
+            );
           const polyIdsThatAlreadyExisted = polysThatAlreadyExisted.map(
             (poly) => poly.poly_id
           );
@@ -871,7 +875,7 @@ export const coordsOverlapWithExistingPoly = async (
   coords: number[][]
 ): Promise<boolean> => {
   const poly = turf.polygon([coords]);
-  const matchedPolys: any[] = await getExistingPolygons(
+  const matchedPolys: any[] = await getExistingInspirePolygons(
     undefined,
     poly.geometry
   );
@@ -894,7 +898,7 @@ export const findOldContainingOrContainedPoly = async (
   titleAddress: string;
 }> => {
   const poly = turf.polygon([coords]);
-  const matchedPolys: any[] = await getExistingPolygons(
+  const matchedPolys: any[] = await getExistingInspirePolygons(
     undefined,
     poly.geometry
   );
