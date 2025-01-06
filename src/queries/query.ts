@@ -432,7 +432,7 @@ export const getPolygonsByIdInSearchArea = async (
       return [];
     }
 
-    const query = `SELECT *
+    const query = `SELECT land_ownerships.*, land_ownership_polygons.*
     FROM land_ownership_polygons
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
@@ -451,7 +451,7 @@ export const getPolygonsByIdInSearchArea = async (
     : "";
   const uniquePolyIds = new Set<number>(poly_ids);
 
-  const query = `SELECT *
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
     FROM land_ownership_polygons
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
@@ -597,13 +597,13 @@ export const deleteAllPolygonsPendingDeletion = async () => {
 };
 
 /**
- * Find property polygons that intersect within the give search area.
+ * Find property polygons that intersect within the given search area.
  *
  * @param searchArea a Polygon in WKT format
  * @returns an array of polygons, with ownership info for each polygon if it exists
  */
 export const getPolygonsByArea = async (searchArea: string) => {
-  const query = `SELECT *
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
     FROM land_ownership_polygons
     LEFT JOIN land_ownerships
     ON land_ownership_polygons.title_no = land_ownerships.title_no
