@@ -18,7 +18,7 @@ import { parser } from "stream-json/Parser";
 import { pick } from "stream-json/filters/Pick";
 import { streamArray } from "stream-json/streamers/StreamArray";
 import { Feature, Polygon } from "geojson";
-import { getLatestInspirePublishMonth, roundDecimalPlaces } from "../util";
+import { getLatestInspirePublishMonth } from "../util";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -169,7 +169,7 @@ const transformGMLToGeoJson = async (council: string) => {
       const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
 
       try {
-        await ogr2ogr(gmlFile, geojsonFilePath);
+        // await ogr2ogr(gmlFile, geojsonFilePath);
         logger.info(`Written ${council}.json successfully`);
       } catch (err) {
         logger.error(err, `Transforming ${council}.gml error`);
@@ -187,14 +187,42 @@ const transformGMLToGeoJson = async (council: string) => {
 };
 
 /**
- * Wrapper for the GDAL ogr2ogr tool, to convert an input GML file into GeoJSON with the EPSG:4326
- * projection (the standard GPS projection used by GeoJSON and in our DB).
+ * Run the script to transform and insert data from a council's GML file into the
+ * pending_inspire_polygons DB table.
  */
-const ogr2ogr = async (inputPath: string, outputPath: string) => {
-  const command = `ogr2ogr -f GeoJSON -lco RFC7946=YES -skipfailures -t_srs EPSG:4326 ${outputPath} ${inputPath}`;
-  await promisify(exec)(command, {
-    maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
-  });
+const gmlToPendingInspirePolygons = async (council: string) => {
+  const downloadFolderPath = `${downloadPath}/${council}`;
+  const stat = await lstat(downloadFolderPath);
+
+  if (stat.isDirectory()) {
+    const files = await readdir(downloadFolderPath);
+    if (files.includes("Land_Registry_Cadastral_Parcels.gml")) {
+      logger.info(`Transform GML and insert into DB: ${council}`);
+      const gmlFile = `${downloadFolderPath}/Land_Registry_Cadastral_Parcels.gml`;
+
+      const { stdout, stderr } = await promisify(exec)(
+        `bash scripts/gml-to-pending-inspire-polygons.sh ${gmlFile} ${council}`,
+        {
+          maxBuffer: 1024 * 1024 * 1024, // 1 GB should be enough to handle any council
+        }
+      );
+      logger.info(
+        `raw gml-to-pending-inspire-polygons script stdout: ${stdout}`
+      );
+      logger.info(
+        `raw gml-to-pending-inspire-polygons script stderr: ${stderr}`
+      );
+
+      await setPipelineLastCouncilDownloaded(council);
+
+      // Remove download folder to save space
+      await rm(downloadFolderPath, { recursive: true, force: true });
+    } else {
+      throw new Error(`Download for ${council} didn't contain a GML file`);
+    }
+  } else {
+    throw new Error(`${downloadFolderPath} is not a directory`);
+  }
 };
 
 /**
@@ -236,35 +264,6 @@ const createPendingPolygons = async (council: string) => {
     const polygon: Feature<Polygon> = data.value;
     ++polygonsCount;
 
-    try {
-      // Round to 7 d.p. (around 1 cm distance) since any more preciesion is unnecessary and makes
-      // later geometry calculations slower
-      for (const vertex of polygon.geometry.coordinates[0]) {
-        for (let i = 0; i < vertex.length; i++) {
-          if (typeof vertex[i] === "number") {
-            vertex[i] = roundDecimalPlaces(vertex[i], 7);
-          } else {
-            throw new Error(
-              `Coordinates ${vertex} is not valid, Polygon: ${polygon}`
-            );
-          }
-        }
-      }
-    } catch (error) {
-      if (polygon.geometry.type !== "Polygon") {
-        // TODO: add support for MultiPolygons and GeometryCollections
-        logger.debug(
-          `We don't support geometry type ${polygon.geometry.type} yet, skip this polygon`
-        );
-      } else {
-        logger.error(
-          { error, polygon },
-          `Error reversing polygon coordinates, skip this bad polygon`
-        );
-      }
-      continue;
-    }
-
     polygonsToCreate.push(polygon);
 
     if (polygonsToCreate.length >= chunkSize) {
@@ -305,7 +304,9 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   const latestInspirePublishMonth = getLatestInspirePublishMonth();
 
   logger.info(
-    `Download ${latestInspirePublishMonth} INSPIRE data after council ${afterCouncil}`
+    `Download ${latestInspirePublishMonth} INSPIRE data ` + afterCouncil
+      ? `after council ${afterCouncil}`
+      : "for all councils"
   );
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
@@ -353,12 +354,13 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   // Unzip and transform all new downloads
   for (const council of councils) {
     await unzipArchive(council);
-    await transformGMLToGeoJson(council);
-    // Insert new polygons in database as pending, ready for analysis
-    await createPendingPolygons(council);
+    // await transformGMLToGeoJson(council);
+    // // Insert new polygons in database as pending, ready for analysis
+    // await createPendingPolygons(council);
+    await gmlToPendingInspirePolygons(council);
   }
 
   logger.info(
-    "Download, transformed, and created all pending INSPIRE polygons in DB"
+    "Downloaded, transformed, and created all pending INSPIRE polygons in DB"
   );
 };
