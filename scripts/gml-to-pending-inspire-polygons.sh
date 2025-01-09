@@ -8,11 +8,12 @@
 # with the EPSG:4326 projection (the standard GPS projection used by GeoJSON and in our DB), using
 # the GDAL ogrinfo and ogr2ogr tools.
 
+set -x
 set -e
 
 # Remove the schemaLocation attribute from the GML file, since GDAL tries to load it for some reason
 # and it takes a long time
-sed -i .backup -n '0,/ xsi:schemaLocation="[^"]*"/ s///' "$1"
+sed -i -e '0,/ xsi:schemaLocation="[^"]*"/ s///' "$1"
 
 # Delete temp sqlite file if it exists
 rm -f temp.sqlite
