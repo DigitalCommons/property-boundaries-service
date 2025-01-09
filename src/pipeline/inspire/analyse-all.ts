@@ -23,7 +23,7 @@ import {
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
 import { logger } from "../logger";
-import { getRunningPipelineKey } from "../util";
+import { getRunningPipelineKey, roundDecimalPlaces } from "../util";
 
 const analysisFolder = path.resolve("./analysis");
 
@@ -219,6 +219,13 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
   if (existingPolygon) {
     const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
     const newCoords: number[][] = geom.coordinates[0];
+
+    // Round each coordinate to 8 d.p. since higher precision can cause issues with turf calculations
+    // TODO: save rounded coords in the database to avoid this step (easiest way to do this requires GDAL 3.9+)
+    for (const coord of [...oldCoords, ...newCoords]) {
+      coord[0] = roundDecimalPlaces(coord[0], 8);
+      coord[1] = roundDecimalPlaces(coord[1], 8);
+    }
 
     // Get address of matching title (if exists)
     const titleAddress = existingPolygon.property_address || undefined;
