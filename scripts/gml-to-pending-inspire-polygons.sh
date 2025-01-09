@@ -22,8 +22,8 @@ rm -f temp.sqlite
 ogr2ogr -f SQLite -skipfailures -nln polygons temp.sqlite $1
 
 # Add a council column
-ogrinfo temp.sqlite -sql "ALTER TABLE polygons ADD COLUMN council varchar(255)" --debug ON
-ogrinfo temp.sqlite -sql "UPDATE polygons SET council = \"$2\"" --debug ON
+ogrinfo temp.sqlite -sql "ALTER TABLE polygons ADD COLUMN council varchar(255)"
+ogrinfo temp.sqlite -sql "UPDATE polygons SET council = \"$2\""
 
 # Delete existing pending polygons for this council, in case we are re-running after a failure
 mysql -u $DB_USER -p$DB_PASSWORD $DB_NAME -e "DELETE FROM pending_inspire_polygons WHERE council = \"$2\""
