@@ -9,8 +9,6 @@ import {
   getPolygonsByProprietorName,
   getPolygonsByIdInSearchArea,
 } from "../queries/query";
-import path from "path";
-import fs from "fs";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
 
 type GetPolygonsInBoxRequest = Request & {
@@ -165,49 +163,6 @@ const runPipeline = async (
     : "Pipeline already running";
   console.log(msg);
   return h.response(`${msg}\n`);
-};
-
-/** Handler for dev testing our newly generated INSPIRE GeoJSONs */
-const getBoundariesDummy = async (request: Request): Promise<any> => {
-  // Get dummy info from a specific council
-  const data = JSON.parse(
-    fs.readFileSync(
-      path.resolve(`./geojson/Adur_District_Council.json`),
-      "utf8"
-    )
-  );
-  console.log(
-    "Last polygon in dataset:",
-    data.features.slice(-1)[0].geometry.coordinates[0]
-  );
-
-  // CHANGE THESE:
-  const id_we_want = 34853603;
-  const numSurroundingPolys = 2000;
-
-  let index = data.features.findIndex(
-    (feature) => feature.properties.INSPIREID === id_we_want
-  );
-  if (index === -1) {
-    console.log("ID doesn't exist, so just show first", numSurroundingPolys);
-    index = Math.round(numSurroundingPolys / 2) - 1;
-  }
-  const firstNearbyPolygonIndex = Math.max(
-    0,
-    index - Math.round(numSurroundingPolys / 2)
-  );
-
-  // Transform into what LX expects
-  const polygons = data.features
-    .slice(
-      firstNearbyPolygonIndex,
-      firstNearbyPolygonIndex + numSurroundingPolys + 1
-    )
-    .map((feature) => ({
-      poly_id: feature.properties.INSPIREID,
-      geom: feature.geometry,
-    }));
-  return polygons;
 };
 
 const getBoundariesRoute: ServerRoute = {
