@@ -25,6 +25,9 @@ ogr2ogr -f SQLite -skipfailures -nln polygons temp.sqlite $1
 ogrinfo temp.sqlite -sql "ALTER TABLE polygons ADD COLUMN council varchar(255)" --debug ON
 ogrinfo temp.sqlite -sql "UPDATE polygons SET council = \"$2\"" --debug ON
 
+# Delete existing pending polygons for this council, in case we are re-running after a failure
+mysql -u $DB_USER -p$DB_PASSWORD $DB_NAME -e "DELETE FROM pending_inspire_polygons WHERE council = \"$2\""
+
 # Import the data into the pending_inspire_polygons table
 # Use GROUP BY to remove duplicate features in dataset with the same poly_id
 # TODO: add -xyRes "0.0000001 deg" to round to 7.dp, but this is only supported in GDAL 3.9+
