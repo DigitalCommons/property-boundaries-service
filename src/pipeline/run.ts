@@ -1,6 +1,7 @@
 import "dotenv/config";
 import {
   getLastPipelineRun,
+  setPipelineLastCouncilDownloaded,
   setPipelineLastTask,
   startPipelineRun,
 } from "../queries/query";
@@ -107,6 +108,11 @@ const runPipeline = async (options: PipelineOptions) => {
       }
       logger.info(
         `Resuming pipeline run from task ${startAtTask}, old key: ${latestPipelineRun.unique_key}`
+      );
+      // set last_council_downloaded to the last council we downloaded in the previous run, since
+      // this will still be in teh pending_inspire_polygons table
+      await setPipelineLastCouncilDownloaded(
+        latestPipelineRun.last_council_downloaded
       );
     } else {
       taskOptions.resume = "false";
