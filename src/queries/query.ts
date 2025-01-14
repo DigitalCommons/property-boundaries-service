@@ -244,7 +244,14 @@ export type PendingPolygon = {
   council: string;
 };
 
-/** Return the next pending polygon with id at least equal to minId, or null if none exist.  */
+/**
+ * Return the next pending polygon with id at least equal to minId, or null if none exist.
+ *
+ * Note: Before returning the polygon, delete other polygons from the table that have the same
+ * poly_id, to avoid reprocessing the same data later. Duplicates show up in the data when the same
+ * polygon lies on a boundary between multiple councils. We don't just make poly_id a unique key,
+ * since this causes issues in the earlier download step when inserting data from each council.
+ */
 export const getNextPendingPolygon = async (
   minId: number
 ): Promise<PendingPolygon> => {
@@ -252,6 +259,13 @@ export const getNextPendingPolygon = async (
     where: { id: { [Op.gte]: minId } },
     raw: true,
   });
+
+  if (polygon) {
+    // Delete other polygons with the same poly_id that have id greater than the current polygon
+    await PendingPolygonModel.destroy({
+      where: { poly_id: polygon.poly_id, id: { [Op.gt]: polygon.id } },
+    });
+  }
 
   return polygon
     ? {

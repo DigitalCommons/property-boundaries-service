@@ -18,7 +18,7 @@ module.exports = {
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         SPATIAL KEY geom (geom),
-        UNIQUE KEY poly_id (poly_id)
+        KEY poly_id (poly_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
   },

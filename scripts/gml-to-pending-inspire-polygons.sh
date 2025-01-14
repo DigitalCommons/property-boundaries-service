@@ -29,11 +29,11 @@ ogrinfo temp.sqlite -sql "UPDATE polygons SET council = \"$2\""
 mysql -u $DB_USER -p$DB_PASSWORD $DB_NAME -e "DELETE FROM pending_inspire_polygons WHERE council = \"$2\""
 
 # Import the data into the pending_inspire_polygons table
-# Use GROUP BY to remove duplicate features in dataset with the same poly_id
+# Use GROUP BY to remove duplicate features in dataset with the same poly_id [removed, may need to re-add if an issue]
 # TODO: add -xyRes "0.0000001 deg" to round to 7.dp, but this is only supported in GDAL 3.9+
 ogr2ogr -f MySQL -append -skipfailures -nln pending_inspire_polygons -t_srs EPSG:4326 \
   "MySQL:$DB_NAME,user=$DB_USER,password=$DB_PASSWORD" temp.sqlite -unsetFid \
-  -sql 'SELECT INSPIREID AS poly_id, geometry AS geom, council FROM polygons GROUP BY poly_id'
+  -sql 'SELECT INSPIREID AS poly_id, geometry AS geom, council FROM polygons'
 
 # Delete the temp sqlite file
 rm temp.sqlite
