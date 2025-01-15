@@ -6,3 +6,4 @@ analysis
 logs/*
 .env
 .DS_Store
+temp.sqlite
