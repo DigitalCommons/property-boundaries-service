@@ -8,8 +8,14 @@
 # with the EPSG:4326 projection (the standard GPS projection used by GeoJSON and in our DB), using
 # the GDAL ogrinfo and ogr2ogr tools.
 
-set -x
 set -e
+set -x
+
+# Some INSPIRE council GML files have no features, so we need to check for this
+if grep -q 'numberMatched="0"' "$1"; then
+  echo "No features in $1 , exiting"
+  exit 0
+fi
 
 # Remove the schemaLocation attribute from the GML file, since GDAL tries to load it for some reason
 # and it takes a long time
