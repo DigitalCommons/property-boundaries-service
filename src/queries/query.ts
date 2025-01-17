@@ -201,11 +201,11 @@ LandOwnershipModel.belongsTo(PolygonModel, {
 });
 
 export const deleteAllPendingPolygons = async () => {
-  await PendingPolygonModel.truncate();
+  await PendingPolygonModel.truncate({ restartIdentity: true });
 };
 
 export const resetPolygonsPendingDeletion = async () => {
-  await PendingDeletionModel.truncate();
+  await PendingDeletionModel.truncate({ restartIdentity: true });
 };
 
 export const bulkCreatePendingPolygons = async (
@@ -607,7 +607,7 @@ export const deleteAllPolygonsPendingDeletion = async () => {
     type: QueryTypes.DELETE,
   });
 
-  return await PendingDeletionModel.truncate();
+  return await PendingDeletionModel.truncate({ restartIdentity: true });
 };
 
 /**
