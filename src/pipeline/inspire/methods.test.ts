@@ -344,7 +344,7 @@ describe("comparePolygons", () => {
     expect(result.percentageIntersect).to.equal(100);
   });
 
-  it("should return Match.ExactOffset when oldCoords and newCoords are offset by suggestedLatLongOffset", async () => {
+  it("should return Match.ExactOffset when oldCoords and newCoords are offset by suggestedLngLatOffset", async () => {
     const oldCoords = [
       [0, 0],
       [1, 1],
@@ -357,14 +357,14 @@ describe("comparePolygons", () => {
       [3, 3],
       [1, 1],
     ];
-    const suggestedLatLongOffset = [1, 1];
+    const suggestedLngLatOffset = [1, 1];
 
     const result = await comparePolygons(
       1,
       2,
       oldCoords,
       newCoords,
-      suggestedLatLongOffset
+      suggestedLngLatOffset
     );
 
     expect(result.match).to.equal(Match.ExactOffset);

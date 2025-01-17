@@ -50,7 +50,7 @@ type MergeAndSegmentInstance = {
   type: string;
   oldMergedIds?: number[];
   newSegmentIds?: number[];
-  latLong: number[];
+  lngLat: number[];
   percentageIntersect: number;
 };
 
@@ -61,13 +61,13 @@ type FailedMatchInfo = {
   council: string;
   newInspireId?: boolean;
   sameNumberVertices?: boolean;
+  lngMean?: number;
   latMean?: number;
-  longMean?: number;
+  lngStd?: number;
   latStd?: number;
-  longStd?: number;
   percentageIntersect?: number;
-  oldLatLong?: number[];
-  newLatLong: number[];
+  oldLngLat?: number[];
+  newLngLat: number[];
   oldMergedIds?: number[];
   newSegmentIds?: number[];
 };
@@ -77,7 +77,7 @@ let allFailedMatchesInfo: FailedMatchInfo[];
 type InspireIdChange = {
   oldInspireId: number;
   newInspireId: number;
-  latLong: number[];
+  lngLat: number[];
   oldTitleNo?: string;
 };
 
@@ -87,7 +87,7 @@ let allInspireIdChanges: InspireIdChange[];
 // polygons in the dataset (which is the order they were inserted into the pending polygons table)
 // tend to be in close geographical proximity so we can use this offset as a suggestion for cases
 // where we are unable to calcualte the offset
-let previousLatLongOffsets: {
+let previousLngLatOffsets: {
   [council: string]: number[];
 };
 
@@ -119,7 +119,7 @@ const resetAnalysis = async () => {
   allMergeAndSegmentInstances = [];
   allFailedMatchesInfo = [];
   allInspireIdChanges = [];
-  previousLatLongOffsets = {};
+  previousLngLatOffsets = {};
 };
 
 /**
@@ -242,7 +242,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
       inspireId,
       oldCoords,
       newCoords,
-      previousLatLongOffsets[council] || [0, 0],
+      previousLngLatOffsets[council] || [0, 0],
       titleAddress
     );
 
@@ -253,13 +253,13 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
     //   // If offset could be calculated
     //   allStats.offsetMeans[council].push(
     //     Math.max(
-    //       // Choose max of either long or lat i.e. the worst case
+    //       // Choose max of either lng or lat i.e. the worst case
     //       Math.abs(offsetStats.latMean),
-    //       Math.abs(offsetStats.longMean)
+    //       Math.abs(offsetStats.lngMean)
     //     )
     //   );
     //   allStats.offsetStds[council].push(
-    //     Math.max(offsetStats.latStd, offsetStats.longStd)
+    //     Math.max(offsetStats.latStd, offsetStats.lngStd)
     //   );
     // }
 
@@ -269,9 +269,9 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
         break;
       case Match.ExactOffset:
         allIds.exactOffsetIds.add(inspireId);
-        previousLatLongOffsets[council] = [
-          offsetStats.latMean,
-          offsetStats.longMean,
+        previousLngLatOffsets[council] = [
+          roundDecimalPlaces(offsetStats.lngMean, 8),
+          roundDecimalPlaces(offsetStats.latMean, 8),
         ];
         break;
       case Match.HighOverlap:
@@ -308,8 +308,8 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
           council,
           ...offsetStats,
           percentageIntersect,
-          oldLatLong: oldCoords[0],
-          newLatLong: newCoords[0],
+          oldLngLat: oldCoords[0],
+          newLngLat: newCoords[0],
           oldMergedIds,
           newSegmentIds,
         });
@@ -333,7 +333,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
           type: Match[match],
           oldMergedIds,
           newSegmentIds,
-          latLong: newCoords[0],
+          lngLat: newCoords[0],
           percentageIntersect,
         });
         newSegmentIds?.forEach((id) => {
@@ -362,12 +362,12 @@ const analyseNewInspireId = async (inspireId: number) => {
 
   const polygon: PendingPolygon = await getPendingPolygon(inspireId);
   const newCoords: number[][] = polygon.geom.coordinates[0];
-  const latLongOffset = previousLatLongOffsets[polygon.council] || [0, 0];
+  const lngLatOffset = previousLngLatOffsets[polygon.council] || [0, 0];
 
   // Remove suggested offset from new polygon, to improve matching against existing polygons
   const newCoordsMinusOffset = newCoords.map((coords) => [
-    coords[0] - latLongOffset[0],
-    coords[1] - latLongOffset[1],
+    coords[0] - lngLatOffset[0],
+    coords[1] - lngLatOffset[1],
   ]);
 
   const coordsOverlapWithExisting =
@@ -377,6 +377,11 @@ const analyseNewInspireId = async (inspireId: number) => {
     await acceptPendingPolygon(inspireId);
     return;
   }
+
+  // Skip the rest for now. INSPIRE IDs shouldn't totally change in the Land Registry so this
+  // happening is an edge case. We should do more investigation and add tests before re-adding this.
+  await rejectPendingPolygon(inspireId);
+  return;
 
   const oldPoly = await findOldContainingOrContainedPoly(newCoordsMinusOffset);
 
@@ -389,7 +394,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       inspireId,
       council: polygon.council,
       newInspireId: true,
-      newLatLong: newCoords[0],
+      newLngLat: newCoords[0],
     });
     await rejectPendingPolygon(inspireId);
     return;
@@ -402,7 +407,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       inspireId,
       oldPoly.coords,
       newCoords,
-      latLongOffset
+      lngLatOffset
     );
 
   switch (match) {
@@ -414,7 +419,7 @@ const analyseNewInspireId = async (inspireId: number) => {
         {
           oldInspireId: oldPoly.inspireId,
           newInspireId: inspireId,
-          latLong: newCoords[0],
+          lngLat: newCoords[0],
           percentageIntersect,
         },
         `INSPIRE ID of polygon has changed`
@@ -422,7 +427,7 @@ const analyseNewInspireId = async (inspireId: number) => {
       allInspireIdChanges.push({
         oldInspireId: oldPoly.inspireId,
         newInspireId: inspireId,
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         oldTitleNo: oldPoly.titleNo,
       });
       allIds.newBoundaryIds.delete(inspireId);
@@ -442,7 +447,7 @@ const analyseNewInspireId = async (inspireId: number) => {
         type: Match[match],
         oldMergedIds,
         newSegmentIds: [...newSegmentIds, inspireId],
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       });
       [...newSegmentIds, inspireId].forEach((id) => {
@@ -467,7 +472,7 @@ const analyseNewInspireId = async (inspireId: number) => {
         inspireId,
         council: polygon.council,
         newInspireId: true,
-        newLatLong: newCoords[0],
+        newLngLat: newCoords[0],
       });
       break;
   }
@@ -581,7 +586,7 @@ export const analyseAllPendingPolygons = async (
     const count = ids.size;
     finalDataCounts[matchType] = {
       count,
-      "%": Math.round((10000 * count) / finalDataPolygonCount) / 100, // round to 2 d.p.
+      "%": roundDecimalPlaces(count / finalDataPolygonCount / 100, 2),
     };
   }
   finalDataCounts["Total"] = { count: finalDataPolygonCount, "%": 100 };

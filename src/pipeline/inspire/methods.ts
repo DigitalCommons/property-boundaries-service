@@ -10,7 +10,7 @@ import {
 import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
 
-const precisionDecimalPlaces = 7;
+const precisionDecimalPlaces = 8;
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
 const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
@@ -32,7 +32,7 @@ export enum Match {
   /** The polygon moved and matches with its associated title's new property address */
   Moved,
   //
-  // ############# The following types are not currently detected ################
+  // #### The following types are not currently detected since we skip this part of the analysis ####
   //
   /** Polygon is in same place but it has expanded/shrunk and boundaries have sligtly shifted with
    * adjacent polys */
@@ -76,7 +76,7 @@ export const getExistingInspirePolygons = async (
 };
 
 /**
- * We just check equality to 7 d.p. since each data source has different precision.
+ * We just check equality to 8 d.p. in case each data source has different precision.
  */
 const areEqualCoords = (coords1: number[], coords2: number[]) => {
   const epsilon = Math.pow(10, -precisionDecimalPlaces);
@@ -137,10 +137,10 @@ const calculateOverlap = (
 export type OffsetStats = {
   offsetMatch: boolean;
   sameNumberVertices: boolean;
+  lngMean?: number;
+  lngStd?: number;
   latMean?: number;
   latStd?: number;
-  longMean?: number;
-  longStd?: number;
 };
 
 /** Return whether the polygons match (with a small fixed vertices offset), and offset stats */
@@ -153,33 +153,33 @@ const compareOffset = (
     return { offsetMatch: false, sameNumberVertices: false };
   }
 
+  const lngOffsets: number[] = [];
   const latOffsets: number[] = [];
-  const longOffsets: number[] = [];
   poly2coords
     .slice(0, -1)
     .forEach((coords, i) => [
-      latOffsets.push(coords[0] - poly1coords[i][0]),
-      longOffsets.push(coords[1] - poly1coords[i][1]),
+      lngOffsets.push(coords[0] - poly1coords[i][0]),
+      latOffsets.push(coords[1] - poly1coords[i][1]),
     ]);
 
+  const lngMean = stats.mean(lngOffsets);
+  const lngStd = stats.stdev(lngOffsets);
   const latMean = stats.mean(latOffsets);
   const latStd = stats.stdev(latOffsets);
-  const longMean = stats.mean(longOffsets);
-  const longStd = stats.stdev(longOffsets);
 
   const offsetMatch =
+    lngMean < offsetMeanThreshold &&
     latMean < offsetMeanThreshold &&
-    longMean < offsetMeanThreshold &&
-    latStd < offsetStdThreshold &&
-    longStd < offsetStdThreshold;
+    lngStd < offsetStdThreshold &&
+    latStd < offsetStdThreshold;
 
   return {
     offsetMatch,
     sameNumberVertices: true,
+    lngMean,
+    lngStd,
     latMean,
     latStd,
-    longMean,
-    longStd,
   };
 };
 
@@ -203,7 +203,7 @@ const polygonContains = (
  *
  * TODO: split some of this function into smaller functions. It's too long and hard to understand.
  *
- * @param suggestedLatLongOffset an offset to try, if we are unable to calculate one for this case
+ * @param suggestedLngLatOffset an offset to try, if we are unable to calculate one for this case
  *        e.g. the offset of a nearby polygon in the INSPIRE dataset
  * @param titleAddress address of matching title (if it exists)
  * @returns the type of match, percentage interesect (after any offsetting), offset statistics, and
@@ -214,7 +214,7 @@ export const comparePolygons = async (
   newInspireId: number,
   oldCoords: number[][],
   newCoords: number[][],
-  suggestedLatLongOffset: number[] = [0, 0],
+  suggestedLngLatOffset: number[] = [0, 0],
   titleAddress: string | undefined = undefined
 ): Promise<{
   match: Match;
@@ -244,12 +244,12 @@ export const comparePolygons = async (
   // their overlap
   const oldCoordsWithoutOffset = oldCoords;
   oldCoords = oldCoords.map((coords) => [
-    coords[0] + suggestedLatLongOffset[0],
-    coords[1] + suggestedLatLongOffset[1],
+    coords[0] + suggestedLngLatOffset[0],
+    coords[1] + suggestedLngLatOffset[1],
   ]);
   const newCoordsMinusOffset = newCoords.map((coords) => [
-    coords[0] - suggestedLatLongOffset[0],
-    coords[1] - suggestedLatLongOffset[1],
+    coords[0] - suggestedLngLatOffset[0],
+    coords[1] - suggestedLngLatOffset[1],
   ]);
   let percentageIntersect: number;
 
@@ -274,8 +274,8 @@ export const comparePolygons = async (
         {
           oldInspireId,
           newInspireId,
-          oldLatLong: oldCoords[0],
-          newLatLong: newCoords[0],
+          oldLngLat: oldCoords[0],
+          newLngLat: newCoords[0],
           percentageIntersect,
         },
         "polygon moved to a new location"
@@ -530,7 +530,7 @@ export const comparePolygons = async (
                     oldInspireId,
                     newInspireId,
                     matchedId: matchedPoly.poly_id,
-                    latLong: newCoords[0],
+                    lngLat: newCoords[0],
                     percentageIntersect,
                   },
                   "Old matched poly is not completely contained within the new poly, marking as a failed match"
@@ -542,7 +542,7 @@ export const comparePolygons = async (
                   oldInspireId,
                   newInspireId,
                   matchedId: matchedPoly.poly_id,
-                  latLong: newCoords[0],
+                  lngLat: newCoords[0],
                   percentageIntersect,
                 },
                 "Inspire ID of merged territory has moved somewhere else, marking as a failed match"
@@ -674,7 +674,7 @@ export const comparePolygons = async (
                     oldInspireId,
                     newInspireId,
                     matchedInspireId: matchedPoly.poly_id,
-                    latLong: newCoords[0],
+                    lngLat: newCoords[0],
                     percentageIntersect,
                   },
                   "matched polygon is not fully contained within the old poly"
@@ -689,8 +689,8 @@ export const comparePolygons = async (
                   oldInspireId,
                   newInspireId,
                   matchedInspireId: matchedPoly.poly_id,
-                  latLong: newCoords[0],
-                  matchedOldLatLong: polysThatAlreadyExisted.find(
+                  lngLat: newCoords[0],
+                  matchedOldLngLat: polysThatAlreadyExisted.find(
                     (poly) => poly.poly_id === matchedPoly.poly_id
                   ).geom.coordinates[0][0],
                   percentageIntersect,
@@ -735,7 +735,7 @@ export const comparePolygons = async (
         newInspireId,
         oldMergedIds: Array.from(oldMergedIds),
         newSegmentIds: Array.from(newSegmentIds),
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "merge and segment"
@@ -755,7 +755,7 @@ export const comparePolygons = async (
         oldInspireId,
         newInspireId,
         oldMergedIds: Array.from(oldMergedIds),
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "incomplete merge"
@@ -775,7 +775,7 @@ export const comparePolygons = async (
         oldInspireId,
         newInspireId,
         newSegmentIds: Array.from(newSegmentIds),
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "incomplete segmentation"
@@ -795,7 +795,7 @@ export const comparePolygons = async (
         oldInspireId,
         newInspireId,
         oldMergedIds: Array.from(oldMergedIds),
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "complete merge"
@@ -815,7 +815,7 @@ export const comparePolygons = async (
         oldInspireId,
         newInspireId,
         newSegmentIds: Array.from(newSegmentIds),
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "complete segmentation"
@@ -837,7 +837,7 @@ export const comparePolygons = async (
       {
         oldInspireId,
         newInspireId,
-        latLong: newCoords[0],
+        lngLat: newCoords[0],
         percentageIntersect,
       },
       "boundaries shifted"
@@ -855,7 +855,7 @@ export const comparePolygons = async (
       newInspireId,
       oldMergedIds,
       newSegmentIds,
-      latLong: newCoords[0],
+      lngLat: newCoords[0],
     },
     "We shouldn't hit this"
   );
