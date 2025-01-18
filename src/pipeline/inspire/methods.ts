@@ -339,6 +339,7 @@ export const comparePolygons = async (
         oldInspireId,
         newInspireId,
         oldCoordsPlusOffset: oldCoords,
+        lngLatOffset: suggestedLngLatOffset,
         newCoords,
       },
       `We hit an error comparing polygons`
