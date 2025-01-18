@@ -14,6 +14,7 @@ import {
   getLastAcceptedPendingPolygonId,
   getNextPendingPolygon,
   getPendingPolygon,
+  getPendingPolygonCount,
   insertAllAcceptedPendingPolygons,
   markPolygonDeletion,
   rejectPendingPolygon,
@@ -519,22 +520,25 @@ export const analyseAllPendingPolygons = async (
   if (options.maxPolygons) {
     logger.info(`Analyse first ${maxPolygons} polygons`);
   }
-  let totalNumPolygonsAnalysed = 0;
 
   // Analyse each row in pending_inspire_polygons. If we are resuming, start after the last accepted
   // polygon, otherwise start from the first row.
   const startingId = resume ? (await getLastAcceptedPendingPolygonId()) + 1 : 1;
+  // Check how many polygons were already analysed (if we are resuming a pipeline)
+  const polygonsAnalysedPreviously = await getPendingPolygonCount(startingId);
+  const totalPendingPolygons = await getPendingPolygonCount();
   let polygon: PendingPolygon = await getNextPendingPolygon(startingId);
+  let numPolygonsAnalysed = 0;
 
-  while (polygon && totalNumPolygonsAnalysed < maxPolygons) {
+  while (polygon && numPolygonsAnalysed < maxPolygons) {
     await analysePolygon(polygon);
-    totalNumPolygonsAnalysed += 1;
+    numPolygonsAnalysed += 1;
 
-    if (totalNumPolygonsAnalysed % 5000 === 0) {
+    if ((polygonsAnalysedPreviously + numPolygonsAnalysed) % 5000 === 0) {
       logger.info(
-        `Analysing polygon ${startingId + totalNumPolygonsAnalysed} (from ${
-          polygon.council
-        })`
+        `Analysed polygon ${
+          polygonsAnalysedPreviously + numPolygonsAnalysed
+        } of ${totalPendingPolygons} (from ${polygon.council})`
       );
     }
     polygon = await getNextPendingPolygon(polygon.id + 1);
@@ -594,9 +598,9 @@ export const analyseAllPendingPolygons = async (
   finalDataCounts["Total"] = { count: finalDataPolygonCount, "%": 100 };
   logger.info(finalDataCounts);
 
-  if (finalDataPolygonCount !== totalNumPolygonsAnalysed) {
+  if (finalDataPolygonCount !== numPolygonsAnalysed) {
     throw new Error(
-      `Unexpected number of polygons: ${totalNumPolygonsAnalysed} analysed, but ${finalDataPolygonCount} in final count`
+      `Unexpected number of polygons: ${numPolygonsAnalysed} analysed, but ${finalDataPolygonCount} in final count`
     );
   }
 

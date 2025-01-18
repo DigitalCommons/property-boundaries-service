@@ -756,3 +756,15 @@ export const getLastAcceptedPendingPolygonId = async (): Promise<number> => {
   });
   return polygon ? polygon.id : -1;
 };
+
+/**
+ * Returns the total pending inspire polygon count up to the row with @param upToId, or the whole
+ * table if not specified.
+ */
+export const getPendingPolygonCount = async (
+  upToId?: number
+): Promise<number> => {
+  return await PendingPolygonModel.count({
+    where: upToId === undefined ? undefined : { id: { [Op.lt]: upToId } },
+  });
+};
