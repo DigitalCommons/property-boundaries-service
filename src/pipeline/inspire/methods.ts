@@ -9,8 +9,8 @@ import {
 } from "../../queries/query";
 import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
+import { roundDecimalPlaces } from "../util";
 
-const precisionDecimalPlaces = 8;
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
 const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
@@ -79,7 +79,7 @@ export const getExistingInspirePolygons = async (
  * We just check equality to 8 d.p. in case each data source has different precision.
  */
 const areEqualCoords = (coords1: number[], coords2: number[]) => {
-  const epsilon = Math.pow(10, -precisionDecimalPlaces);
+  const epsilon = Math.pow(10, -8);
   return (
     Math.abs(coords1[0] - coords2[0]) < epsilon &&
     Math.abs(coords1[1] - coords2[1]) < epsilon
@@ -241,15 +241,17 @@ export const comparePolygons = async (
   }
 
   // They're not an exact offset match, but let's try offsetting by the suggested offset and assess
-  // their overlap
+  // their overlap.
   const oldCoordsWithoutOffset = oldCoords;
   oldCoords = oldCoords.map((coords) => [
-    coords[0] + suggestedLngLatOffset[0],
-    coords[1] + suggestedLngLatOffset[1],
+    // We round each to 8 d.p., which shouldn't be necessary since all values in the calculation are
+    // already rounded, but we need to avoid floating point errors which will cause issues with turf
+    roundDecimalPlaces(coords[0] + suggestedLngLatOffset[0], 8),
+    roundDecimalPlaces(coords[1] + suggestedLngLatOffset[1], 8),
   ]);
   const newCoordsMinusOffset = newCoords.map((coords) => [
-    coords[0] - suggestedLngLatOffset[0],
-    coords[1] - suggestedLngLatOffset[1],
+    roundDecimalPlaces(coords[0] - suggestedLngLatOffset[0], 8),
+    roundDecimalPlaces(coords[1] - suggestedLngLatOffset[1], 8),
   ]);
   let percentageIntersect: number;
 
