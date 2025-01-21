@@ -536,9 +536,11 @@ export const analyseAllPendingPolygons = async (
 
     if ((polygonsAnalysedPreviously + numPolygonsAnalysed) % 5000 === 0) {
       logger.info(
-        `Analysed polygon ${
+        `Analysed polygon ${(
           polygonsAnalysedPreviously + numPolygonsAnalysed
-        } of ${totalPendingPolygons} (from ${polygon.council})`
+        ).toLocaleString("en-US")} of ${totalPendingPolygons.toLocaleString(
+          "en-US"
+        )} (from ${polygon.council})`
       );
     }
     polygon = await getNextPendingPolygon(polygon.id + 1);
@@ -591,16 +593,23 @@ export const analyseAllPendingPolygons = async (
   for (const [matchType, ids] of Object.entries(allIds)) {
     const count = ids.size;
     finalDataCounts[matchType] = {
-      count,
+      count: count.toLocaleString("en-US"),
       "%": roundDecimalPlaces(count / finalDataPolygonCount / 100, 2),
     };
   }
-  finalDataCounts["Total"] = { count: finalDataPolygonCount, "%": 100 };
+  finalDataCounts["Total"] = {
+    count: finalDataPolygonCount.toLocaleString("en-US"),
+    "%": 100,
+  };
   logger.info(finalDataCounts);
 
   if (finalDataPolygonCount !== numPolygonsAnalysed) {
     throw new Error(
-      `Unexpected number of polygons: ${numPolygonsAnalysed} analysed, but ${finalDataPolygonCount} in final count`
+      `Unexpected number of polygons: ${numPolygonsAnalysed.toLocaleString(
+        "en-US"
+      )} analysed, but ${finalDataPolygonCount.toLocaleString(
+        "en-US"
+      )} in final count`
     );
   }
 
