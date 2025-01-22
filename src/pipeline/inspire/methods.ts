@@ -11,6 +11,7 @@ import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
 import { roundDecimalPlaces } from "../util";
 
+export const precisionDP = 7; // round coords to this many decimal places, since the distance is negligible and it avoids issues with turf
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
 const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
@@ -76,10 +77,10 @@ export const getExistingInspirePolygons = async (
 };
 
 /**
- * We just check equality to 8 d.p. in case each data source has different precision.
+ * Check equality of each coordinate lng-lat value within a small epsilon (precisionDP)
  */
 const areEqualCoords = (coords1: number[], coords2: number[]) => {
-  const epsilon = Math.pow(10, -8);
+  const epsilon = Math.pow(10, -precisionDP);
   return (
     Math.abs(coords1[0] - coords2[0]) < epsilon &&
     Math.abs(coords1[1] - coords2[1]) < epsilon
@@ -244,14 +245,14 @@ export const comparePolygons = async (
   // their overlap.
   const oldCoordsWithoutOffset = oldCoords;
   oldCoords = oldCoords.map((coords) => [
-    // We round each to 8 d.p., which shouldn't be necessary since all values in the calculation are
-    // already rounded, but we need to avoid floating point errors which will cause issues with turf
-    roundDecimalPlaces(coords[0] + suggestedLngLatOffset[0], 8),
-    roundDecimalPlaces(coords[1] + suggestedLngLatOffset[1], 8),
+    // We round each coordinate, even all values in the calculation are already rounded, since we
+    // may hit floating point errors which will cause issues with turf
+    roundDecimalPlaces(coords[0] + suggestedLngLatOffset[0], precisionDP),
+    roundDecimalPlaces(coords[1] + suggestedLngLatOffset[1], precisionDP),
   ]);
   const newCoordsMinusOffset = newCoords.map((coords) => [
-    roundDecimalPlaces(coords[0] - suggestedLngLatOffset[0], 8),
-    roundDecimalPlaces(coords[1] - suggestedLngLatOffset[1], 8),
+    roundDecimalPlaces(coords[0] - suggestedLngLatOffset[0], precisionDP),
+    roundDecimalPlaces(coords[1] - suggestedLngLatOffset[1], precisionDP),
   ]);
   let percentageIntersect: number;
 
