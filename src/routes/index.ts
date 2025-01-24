@@ -8,6 +8,8 @@ import {
   getPendingPolygonsInSearchArea,
   getPolygonsByProprietorName,
   getPolygonsByIdInSearchArea,
+  getLocalAuthorityPolygonsInSearchArea,
+  getChurchOfEnglandPolygonsInSearchArea,
 } from "../queries/query";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
 
@@ -17,6 +19,7 @@ type GetPolygonsInBoxRequest = Request & {
     sw_lat: number;
     ne_lng: number;
     ne_lat: number;
+    type?: string;
     acceptedOnly?: string;
     secret: string;
   };
@@ -27,39 +30,7 @@ const getPolygonsInBox = async (
   request: GetPolygonsInBoxRequest,
   h: ResponseToolkit
 ): Promise<ResponseObject> => {
-  const { sw_lng, sw_lat, ne_lng, ne_lat, secret } = request.query;
-
-  if (!secret || secret !== process.env.SECRET) {
-    return h.response("missing or incorrect secret").code(403);
-  }
-
-  if (!sw_lng || !sw_lat || !ne_lng || !ne_lat) {
-    return h.response("bounds are not valid").code(400);
-  }
-
-  const searchArea = JSON.stringify({
-    type: "Polygon",
-    coordinates: [
-      [
-        [+sw_lng, +sw_lat],
-        [+ne_lng, +sw_lat],
-        [+ne_lng, +ne_lat],
-        [+sw_lng, +ne_lat],
-        [+sw_lng, +sw_lat],
-      ],
-    ],
-  });
-
-  const polygons = await getPolygonsByIdInSearchArea(undefined, searchArea);
-
-  return h.response(polygons).code(200);
-};
-
-const getPendingPolygonsInBox = async (
-  request: GetPolygonsInBoxRequest,
-  h: ResponseToolkit
-): Promise<ResponseObject> => {
-  const { sw_lng, sw_lat, ne_lng, ne_lat, acceptedOnly, secret } =
+  const { sw_lng, sw_lat, ne_lng, ne_lat, type, acceptedOnly, secret } =
     request.query;
 
   if (!secret || secret !== process.env.SECRET) {
@@ -83,10 +54,32 @@ const getPendingPolygonsInBox = async (
     ],
   });
 
-  const polygons = await getPendingPolygonsInSearchArea(
-    searchArea,
-    acceptedOnly === "true"
-  );
+  let polygons: any[];
+
+  switch (type) {
+    case "all":
+    case undefined:
+      polygons = await getPolygonsByIdInSearchArea(undefined, searchArea);
+      break;
+    case "localAuthority":
+      polygons = await getLocalAuthorityPolygonsInSearchArea(searchArea);
+      break;
+    case "churchOfEngland":
+      polygons = await getChurchOfEnglandPolygonsInSearchArea(searchArea);
+      break;
+    case "pending":
+      polygons = await getPendingPolygonsInSearchArea(
+        searchArea,
+        acceptedOnly === "true"
+      );
+      // Add "-pending" to the end of each poly_id to avoid id conflicts with normal polygons
+      polygons.forEach((poly) => {
+        poly.poly_id = `${poly.poly_id}-pending`;
+      });
+      break;
+    default:
+      return h.response("unknown ownership type").code(400);
+  }
 
   return h.response(polygons).code(200);
 };
@@ -174,15 +167,6 @@ const getBoundariesRoute: ServerRoute = {
   },
 };
 
-const getPendingBoundariesRoute: ServerRoute = {
-  method: "GET",
-  path: "/pending/boundaries",
-  handler: getPendingPolygonsInBox,
-  options: {
-    auth: false,
-  },
-};
-
 const searchRoute: ServerRoute = {
   method: "GET",
   path: "/search",
@@ -215,7 +199,6 @@ const runPipelineRoute: ServerRoute = {
 
 const routes = [
   getBoundariesRoute,
-  getPendingBoundariesRoute,
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,

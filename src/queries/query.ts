@@ -486,6 +486,70 @@ export const getPolygonsByIdInSearchArea = async (
 };
 
 /**
+ * Get polygons owned (or partly owned) by local authorities that intersect with the search area.
+ * Limit result to 5000 polygons to avoid OOMEs.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ */
+export const getLocalAuthorityPolygonsInSearchArea = async (
+  searchArea: string
+) => {
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
+  FROM land_ownership_polygons
+  LEFT JOIN land_ownerships
+  ON land_ownership_polygons.title_no = land_ownerships.title_no
+  WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
+  AND (proprietor_category_1 = 'Local Authority'
+    OR proprietor_category_2 = 'Local Authority'
+    OR proprietor_category_3 = 'Local Authority'
+    OR proprietor_category_4 = 'Local Authority')
+  LIMIT 5000;`;
+
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
+ * Get polygons owned (or partly owned) by the Church of England that intersect with the search area.
+ * Limit result to 5000 polygons to avoid OOMEs.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ */
+export const getChurchOfEnglandPolygonsInSearchArea = async (
+  searchArea: string
+) => {
+  // This may grow to a list of proprietors that we identify later
+  const churchOfEnglandProprietorNames = [
+    "The Church Commissioners for England",
+  ];
+
+  const churchOfEnglandCondition = churchOfEnglandProprietorNames
+    .map(
+      (name) => `AND (
+    proprietor_name_1 = '${name}'
+      OR proprietor_name_2 = '${name}'
+      OR proprietor_name_3 = '${name}'
+      OR proprietor_name_4 = '${name}')`
+    )
+    .join(" ");
+
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
+  FROM land_ownership_polygons
+  LEFT JOIN land_ownerships
+  ON land_ownership_polygons.title_no = land_ownerships.title_no
+  WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
+  ${churchOfEnglandCondition}
+  LIMIT 5000;`;
+
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
  * Get pending polygons that intersect with the search area.
  * Limit result to 5000 polygons to avoid OOMEs.
  *
