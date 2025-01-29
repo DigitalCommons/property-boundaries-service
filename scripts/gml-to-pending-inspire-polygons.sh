@@ -36,7 +36,7 @@ mysql -u $DB_USER -p$DB_PASSWORD $DB_NAME -e "DELETE FROM pending_inspire_polygo
 
 # Import the data into the pending_inspire_polygons table
 # Use GROUP BY to remove duplicate features in dataset with the same poly_id [removed, may need to re-add if an issue]
-# TODO: add -xyRes "0.0000001 deg" to round to 7.dp, but this is only supported in GDAL 3.9+
+# TODO: add -xyRes "0.0000001 deg" to round to 6 d.p., but this is only supported in GDAL 3.9+
 ogr2ogr -f MySQL -append -skipfailures -nln pending_inspire_polygons -t_srs EPSG:4326 \
   "MySQL:$DB_NAME,user=$DB_USER,password=$DB_PASSWORD" temp.sqlite -unsetFid \
   -sql 'SELECT INSPIREID AS poly_id, geometry AS geom, council FROM polygons'

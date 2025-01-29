@@ -10,49 +10,13 @@ import {
 } from "../../queries/query";
 import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
-import { roundDecimalPlaces } from "../util";
 
-export const precisionDP = 7; // round coords to this many decimal places, since the distance is negligible and it avoids issues with turf
+export const precisionDP = 6; // round coords to this many decimal places, since the distance is negligible and it avoids issues with turf
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
 const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
 const absoluteDifferenceThresholdM2 = 100; // Symmetric difference of polygons must be lower than this threshold for us to consider them the same
 const zeroAreaThreshold = 2; // Polygons less than 2 m2 are ignored as artifacts when calculating segment/merge
-
-/**
- * Note that we have simplified the comparePolygons method below, so we only detect the first 4
- * types of match, and the rest are marked as a fail.
- * TODO: detect the other types of match too
- */
-export enum Match {
-  /** Old and new polys have same vertices (to above precision decimal places) */
-  Exact,
-  /** Same vertices, each offset by the same lat and long (within distance and std thresholds) */
-  ExactOffset,
-  /** Different vertices but with an overlap that meets the percentage intersect threshold */
-  HighOverlap,
-  /** The polygon moved and matches with its associated title's new property address */
-  Moved,
-  //
-  // #### The following types are not currently detected since we skip this part of the analysis ####
-  //
-  /** Polygon is in same place but it has expanded/shrunk and boundaries have sligtly shifted with
-   * adjacent polys */
-  BoundariesShifted,
-  /** Old polygon merged exactly with at least 1 old polygon, which we have identified */
-  Merged,
-  /** Old polygon merged with at least 1 old polygon, but we can't match *some* of the new boundary
-   *  to an old polygon */
-  MergedIncomplete,
-  /** Old polygon was segmented into multiple new polygons, which we have identified */
-  Segmented,
-  /** Old polygon segmented but we can't find (all of) the other segments */
-  SegmentedIncomplete,
-  /** There was a combination of old boundaries merging and some segmentation into new boundaries */
-  MergedAndSegmented,
-  /** Didn't meet any of the above matching criteria */
-  Fail,
-}
 
 const options: NodeGeocoder.Options = {
   provider: "mapbox",
@@ -109,8 +73,10 @@ const calculateOverlap = (
 } => {
   // TODO: Add analytics to find where bottlenecks are in analysis script
   // use https://github.com/xaviergonz/js-angusj-clipper instead of turf to improve speed?
-  const poly1 = turf.polygon([poly1coords]);
-  const poly2 = turf.polygon([poly2coords]);
+
+  // Truncate each coord to 6 d.p. since higher precision can cause issues with turf calculations
+  const poly1 = turf.truncate(turf.polygon([poly1coords]));
+  const poly2 = turf.truncate(turf.polygon([poly2coords]));
 
   const areaPoly1 = turf.area(poly1);
   const areaPoly2 = turf.area(poly2);
@@ -193,7 +159,9 @@ const polygonContains = (
   poly: Feature<Polygon>,
   subPoly: Feature<Polygon>
 ): boolean => {
-  const intersect = turf.intersect(turf.featureCollection([poly, subPoly]));
+  const intersect = turf.intersect(
+    turf.truncate(turf.featureCollection([poly, subPoly]))
+  );
   if (!intersect) return false;
 
   const percentageIntersect = (turf.area(intersect) * 100) / turf.area(subPoly);
@@ -246,14 +214,12 @@ export const comparePolygons = async (
   // their overlap.
   const oldCoordsWithoutOffset = oldCoords;
   oldCoords = oldCoords.map((coords) => [
-    // We round each coordinate, even all values in the calculation are already rounded, since we
-    // may hit floating point errors which will cause issues with turf
-    roundDecimalPlaces(coords[0] + suggestedLngLatOffset[0], precisionDP),
-    roundDecimalPlaces(coords[1] + suggestedLngLatOffset[1], precisionDP),
+    coords[0] + suggestedLngLatOffset[0],
+    coords[1] + suggestedLngLatOffset[1],
   ]);
   const newCoordsMinusOffset = newCoords.map((coords) => [
-    roundDecimalPlaces(coords[0] - suggestedLngLatOffset[0], precisionDP),
-    roundDecimalPlaces(coords[1] - suggestedLngLatOffset[1], precisionDP),
+    coords[0] - suggestedLngLatOffset[0],
+    coords[1] - suggestedLngLatOffset[1],
   ]);
   let percentageIntersect: number;
 
@@ -372,10 +338,15 @@ export const comparePolygons = async (
 
   // TODO: move all this to separate segment/merge function?
 
-  const oldPoly = turf.polygon([oldCoords]);
-  const oldPolyWithoutOffset = turf.polygon([oldCoordsWithoutOffset]);
-  const newPoly = turf.polygon([newCoords]);
-  const newPolyMinusOffset = turf.polygon([newCoordsMinusOffset]);
+  // Truncate each coord to 6 d.p. since higher precision can cause issues with turf calculations
+  const oldPoly = turf.truncate(turf.polygon([oldCoords]));
+  const oldPolyWithoutOffset = turf.truncate(
+    turf.polygon([oldCoordsWithoutOffset])
+  );
+  const newPoly = turf.truncate(turf.polygon([newCoords]));
+  const newPolyMinusOffset = turf.truncate(
+    turf.polygon([newCoordsMinusOffset])
+  );
 
   // Get polyons that are adjacent to this polygon in our old and new data. Don't use offset since
   // we are matching against existing polygons in the original data.
