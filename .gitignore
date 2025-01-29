@@ -7,3 +7,6 @@ logs/*
 .env
 .DS_Store
 temp.sqlite
+
+# mkdocs
+site
