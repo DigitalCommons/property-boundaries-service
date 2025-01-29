@@ -1,4 +1,4 @@
-import { Sequelize, DataTypes, QueryTypes, Op } from "sequelize";
+import { Sequelize, DataTypes, QueryTypes, Op, WhereOptions } from "sequelize";
 import { Feature, Polygon } from "geojson";
 import { customAlphabet } from "nanoid";
 import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
@@ -77,6 +77,7 @@ export const PendingPolygonModel = sequelize.define(
       defaultValue: false,
       type: DataTypes.BOOLEAN,
     },
+    match_type: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
   },
@@ -200,11 +201,61 @@ LandOwnershipModel.belongsTo(PolygonModel, {
   targetKey: "title_no",
 });
 
+/**
+ * These are the types of match_type in the pending_inspire_polygons table.
+ *
+ * Note that we have simplified the comparePolygons method in methods.ts, so we only detect the
+ * first 4 types of match, and the rest are marked as a fail.
+ */
+export enum Match {
+  /** Old and new polys have same vertices (to above precision decimal places) */
+  Exact = "exact",
+  /** Same vertices, each offset by the same lat and long (within distance and std thresholds) */
+  ExactOffset = "exactOffset",
+  /** Different vertices but with an overlap that meets the percentage intersect threshold */
+  HighOverlap = "highOverlap",
+  /** The polygon moved and matches with its associated title's new property address */
+  Moved = "moved",
+  /** The INSPIRE ID is new and distrinct from any existing polygon bounaries */
+  NewBoundary = "newBoundary",
+  //
+  //#### The following types are not currently detected since we skip this part of the analysis ####
+  //
+  /** Polygon is in same place but it has expanded/shrunk and boundaries have sligtly shifted with
+   * adjacent polys */
+  BoundariesShifted = "boundariesShifted",
+  /** Old polygon merged exactly with at least 1 old polygon, which we have identified */
+  Merged = "merged",
+  /** Old polygon merged with at least 1 old polygon, but we can't match *some* of the new boundary
+   *  to an old polygon */
+  MergedIncomplete = "mergedIncomplete",
+  /** Old polygon was segmented into multiple new polygons, which we have identified */
+  Segmented = "segmented",
+  /** Old polygon segmented but we can't find (all of) the other segments */
+  SegmentedIncomplete = "segmentedIncomplete",
+  /** There was a combination of old boundaries merging and some segmentation into new boundaries */
+  MergedAndSegmented = "mergedAndSegmented",
+  /** The INSPIRE ID is new and the boundary is part of an old boundary that was segmented */
+  NewSegment = "newSegment",
+  /** Didn't meet any of the above matching criteria */
+  Fail = "fail",
+}
+
 export const deleteAllPendingPolygons = async () => {
   await PendingPolygonModel.truncate({ restartIdentity: true });
 };
 
-export const resetPolygonsPendingDeletion = async () => {
+/**
+ * Mark all pending polygons as not accepted, and remove all polygons pending deletion.
+ */
+export const resetAllPendingPolygons = async () => {
+  await sequelize.query(
+    `UPDATE pending_inspire_polygons SET accepted = false, match_type = NULL`,
+    {
+      type: QueryTypes.UPDATE,
+      benchmark: true,
+    }
+  );
   await PendingDeletionModel.truncate({ restartIdentity: true });
 };
 
@@ -606,11 +657,11 @@ export const pendingPolygonExists = async (
 };
 
 /**
- * Mark pending polygon as accepted.
+ * Mark pending polygon as accepted, with a specific match type.
  */
-export const acceptPendingPolygon = async (poly_id: number) => {
+export const acceptPendingPolygon = async (poly_id: number, match: Match) => {
   await PendingPolygonModel.update(
-    { accepted: true },
+    { accepted: true, match_type: match },
     {
       where: {
         poly_id,
@@ -620,11 +671,11 @@ export const acceptPendingPolygon = async (poly_id: number) => {
 };
 
 /**
- * Ensure pending polygon is marked as not accepted.
+ * Ensure pending polygon is marked as "fail" and not accepted.
  */
 export const rejectPendingPolygon = async (poly_id: number) => {
   await PendingPolygonModel.update(
-    { accepted: false },
+    { accepted: false, match_type: Match.Fail },
     {
       where: {
         poly_id,
@@ -822,13 +873,21 @@ export const getLastAcceptedPendingPolygonId = async (): Promise<number> => {
 };
 
 /**
- * Returns the total pending inspire polygon count up to the row with @param upToId, or the whole
- * table if not specified.
+ * Returns the total pending inspire polygon count
+ *  - up to the row with @param upToId (if specified), AND
+ *  - with match_type equal to @param matchType (if specified),
+ * or the whole table if neither options specified.
  */
 export const getPendingPolygonCount = async (
-  upToId?: number
+  upToId?: number,
+  matchType?: Match
 ): Promise<number> => {
-  return await PendingPolygonModel.count({
-    where: upToId === undefined ? undefined : { id: { [Op.lt]: upToId } },
-  });
+  const where: WhereOptions = {};
+  if (upToId !== undefined) {
+    where.id = { [Op.lt]: upToId };
+  }
+  if (matchType !== undefined) {
+    where.match_type = matchType;
+  }
+  return await PendingPolygonModel.count({ where });
 };

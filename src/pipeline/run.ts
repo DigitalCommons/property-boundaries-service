@@ -23,6 +23,7 @@ type TaskOptions = {
   afterCouncil?: string; // Only process councils after this one, alphabetically
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process
+  recordStats?: string; // If 'true', record detailed stats about each polygon match and save in stats.json
   updateBoundaries?: string; // If 'true', update the boundaries in the main DB table after analysis
   resume?: string; // If 'true', resume from where we left off in the previous run
 };

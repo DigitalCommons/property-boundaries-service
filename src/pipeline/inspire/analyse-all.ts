@@ -1,14 +1,13 @@
 import path from "path";
 import fs from "fs";
 import {
-  Match,
   getExistingInspirePolygons,
   comparePolygons,
   findOldContainingOrContainedPoly,
   coordsOverlapWithExistingPoly,
-  precisionDP,
 } from "./methods";
 import {
+  Match,
   PendingPolygon,
   acceptPendingPolygon,
   deleteAllPolygonsPendingDeletion,
@@ -19,7 +18,7 @@ import {
   insertAllAcceptedPendingPolygons,
   markPolygonDeletion,
   rejectPendingPolygon,
-  resetPolygonsPendingDeletion,
+  resetAllPendingPolygons,
   setPipelineLatestInspireData,
 } from "../../queries/query";
 import moment from "moment-timezone";
@@ -30,7 +29,7 @@ import { getRunningPipelineKey, roundDecimalPlaces } from "../util";
 const analysisFolder = path.resolve("./analysis");
 
 export type IdCollection = {
-  [idType: string]: Set<number>;
+  [matchType in Match]?: Set<number>;
 };
 
 export type StatsForEachCouncil = {
@@ -41,15 +40,20 @@ export type StatsCollection = {
   [statType: string]: StatsForEachCouncil;
 };
 
+let recordStats = false;
+
 // Stats which we will be calculating
 let allStats: StatsCollection;
 
+// TODO: remove these in-memory lists and just use pending_inspire_polygons database directly. Check
+// how much slower it is if we do this - probably worth it to avoid bugs due to having 2 sources of
+// truth. Also, means we can resume pipeline without any inconsistency of algorithm's results
 let allIds: IdCollection;
 
 type MergeAndSegmentInstance = {
   inspireId: number;
   council: string;
-  type: string;
+  match: Match;
   oldMergedIds?: number[];
   newSegmentIds?: number[];
   lngLat: number[];
@@ -101,22 +105,10 @@ const resetAnalysis = async () => {
     offsetStds: {},
   };
 
-  allIds = {
-    exactMatchIds: new Set(),
-    exactOffsetIds: new Set(),
-    highOverlapIds: new Set(),
-    boundariesShiftedIds: new Set(),
-    mergedIds: new Set(),
-    mergedIncompleteIds: new Set(),
-    segmentedIds: new Set(),
-    segmentedIncompleteIds: new Set(),
-    mergedAndSegmentedIds: new Set(),
-    newSegmentIds: new Set(),
-    movedIds: new Set(),
-    failedMatchIds: new Set(),
-    changedInspireIds: new Set(),
-    newBoundaryIds: new Set(),
-  };
+  // Get types from the Match enum
+  allIds = Object.fromEntries(
+    Object.values(Match).map((key) => [key, new Set()])
+  );
 
   allMergeAndSegmentInstances = [];
   allFailedMatchesInfo = [];
@@ -133,57 +125,40 @@ const processMatch = async (
   oldMergedIds?: number[],
   newSegmentIds?: number[]
 ) => {
+  // See 'Match' enum for descriptions of each match type
   switch (match) {
-    /** Old and new polys have same vertices (to above precision decimal places) */
     case Match.Exact:
-      await acceptPendingPolygon(inspireId);
-      break;
-    /** Same vertices, each offset by the same lat and long (within distance and std thresholds) */
     case Match.ExactOffset:
-      await acceptPendingPolygon(inspireId);
-      break;
-    /** Different vertices but with an overlap that meets the percentage intersect threshold */
     case Match.HighOverlap:
-      await acceptPendingPolygon(inspireId);
-      break;
-    /** Polygon is in same place but it has expanded/shrunk and boundaries have sligtly shifted with
-     * adjacent polys */
+    case Match.Moved:
     case Match.BoundariesShifted:
-      await acceptPendingPolygon(inspireId);
+      await acceptPendingPolygon(inspireId, match);
       break;
-    /** Old polygon merged exactly with at least 1 old polygon, which we have identified */
     case Match.Merged:
-    /** Old polygon merged with at least 1 old polygon, but we can't match *some* of the new
-     *  boundary to an old polygon */
     case Match.MergedIncomplete:
-    /** Old polygon was segmented into multiple new polygons, which we have identified */
     case Match.Segmented:
-    /** Old polygon segmented but we can't find (all of) the other segments */
     case Match.SegmentedIncomplete:
-    /** There was a combination of old boundaries merging and some segmentation into new boundaries */
     case Match.MergedAndSegmented:
       // Accept the new coords, remove any old merged polys, and accept any new segments
-      await acceptPendingPolygon(inspireId);
+      await acceptPendingPolygon(inspireId, match);
       for (const id of oldMergedIds) {
         await markPolygonDeletion(id);
-        // TODO: check if old segments have matching title that still exists. If so, and the address
-        // is the same, we should link new polygon to this title.
+        // TODO: check if old segments have a matching title that still exists. If so, and the
+        // address is the same, we can probably link new merged polygon to this title.
       }
       for (const id of newSegmentIds) {
-        await acceptPendingPolygon(id);
+        await acceptPendingPolygon(id, Match.NewSegment);
         // TODO: can we get any other info about these new segments, that may help us link them to a
-        // new title? Or are they part of the original title?
+        // new title? Or are they sometimes part of the original title (probably not, can't see why
+        // someone would split a freehold without getting a new title)
       }
       break;
-    /** The polygon moved and matches with its associated title's property address */
-    case Match.Moved:
-      await acceptPendingPolygon(inspireId);
-      break;
-    /** Didn't meet any of the above matching criteria */
     case Match.Fail:
       // Reject for now. We will hopefully improve our algorithm and it may get processed and
       // accepted in a future run.
-      await rejectPendingPolygon(inspireId);
+      for (const id of [inspireId, ...newSegmentIds]) {
+        await rejectPendingPolygon(id);
+      }
       break;
   }
 };
@@ -192,7 +167,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
   const { poly_id: inspireId, geom, council } = polygon;
 
   // Skip if already marked as failed (e.g. a new segment of a failed match)
-  if (allIds.failedMatchIds.has(inspireId)) {
+  if (allIds.fail.has(inspireId)) {
     return;
   }
 
@@ -208,8 +183,8 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
 
   // TODO: handle instances that we have a multi-polygon e.g. poly 60674447 in Halton_Borough_Council
   if (geom.type !== "Polygon") {
-    allIds.failedMatchIds.add(inspireId);
-    allIds.newBoundaryIds.delete(inspireId); // in case we already added the ID to this set
+    allIds.fail.add(inspireId);
+    allIds.newBoundary.delete(inspireId); // in case we already added the ID to this set
     await processMatch(Match.Fail, inspireId);
     return;
   }
@@ -221,13 +196,6 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
   if (existingPolygon) {
     const oldCoords: number[][] = existingPolygon.geom.coordinates[0];
     const newCoords: number[][] = geom.coordinates[0];
-
-    // Round each coordinate since higher precision can cause issues with turf calculations
-    // TODO: save rounded coords in the database to avoid this step (easiest way to do this requires GDAL 3.9+)
-    for (const coord of [...oldCoords, ...newCoords]) {
-      coord[0] = roundDecimalPlaces(coord[0], precisionDP);
-      coord[1] = roundDecimalPlaces(coord[1], precisionDP);
-    }
 
     // Get address of matching title (if exists)
     const titleAddress = existingPolygon.property_address || undefined;
@@ -249,61 +217,46 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
     );
 
     // Record all the stats for us to analyse/plot later
-    // Commented out for now to save storage and memory
-    // allStats.percentageIntersects[council].push(percentageIntersect);
-    // if (offsetStats?.sameNumberVertices) {
-    //   // If offset could be calculated
-    //   allStats.offsetMeans[council].push(
-    //     Math.max(
-    //       // Choose max of either lng or lat i.e. the worst case
-    //       Math.abs(offsetStats.latMean),
-    //       Math.abs(offsetStats.lngMean)
-    //     )
-    //   );
-    //   allStats.offsetStds[council].push(
-    //     Math.max(offsetStats.latStd, offsetStats.lngStd)
-    //   );
-    // }
+    if (recordStats) {
+      allStats.percentageIntersects[council].push(percentageIntersect);
+      if (offsetStats?.sameNumberVertices) {
+        // If offset could be calculated
+        allStats.offsetMeans[council].push(
+          Math.max(
+            // Choose max of either lng or lat i.e. the worst case
+            Math.abs(offsetStats.latMean),
+            Math.abs(offsetStats.lngMean)
+          )
+        );
+        allStats.offsetStds[council].push(
+          Math.max(offsetStats.latStd, offsetStats.lngStd)
+        );
+      }
+    }
 
     switch (match) {
       case Match.Exact:
-        allIds.exactMatchIds.add(inspireId);
+      case Match.HighOverlap:
+      case Match.BoundariesShifted:
+      case Match.Merged:
+      case Match.MergedIncomplete:
+      case Match.Segmented:
+      case Match.SegmentedIncomplete:
+      case Match.MergedAndSegmented:
+      case Match.Moved:
+        allIds[match].add(inspireId);
         break;
       case Match.ExactOffset:
-        allIds.exactOffsetIds.add(inspireId);
+        allIds[match].add(inspireId);
         previousLngLatOffsets[council] = [
-          roundDecimalPlaces(offsetStats.lngMean, precisionDP),
-          roundDecimalPlaces(offsetStats.latMean, precisionDP),
+          offsetStats.lngMean,
+          offsetStats.latMean,
         ];
-        break;
-      case Match.HighOverlap:
-        allIds.highOverlapIds.add(inspireId);
-        break;
-      case Match.BoundariesShifted:
-        allIds.boundariesShiftedIds.add(inspireId);
-        break;
-      case Match.Merged:
-        allIds.mergedIds.add(inspireId);
-        break;
-      case Match.MergedIncomplete:
-        allIds.mergedIncompleteIds.add(inspireId);
-        break;
-      case Match.Segmented:
-        allIds.segmentedIds.add(inspireId);
-        break;
-      case Match.SegmentedIncomplete:
-        allIds.segmentedIncompleteIds.add(inspireId);
-        break;
-      case Match.MergedAndSegmented:
-        allIds.mergedAndSegmentedIds.add(inspireId);
-        break;
-      case Match.Moved:
-        allIds.movedIds.add(inspireId);
         break;
       case Match.Fail:
         [inspireId, ...newSegmentIds].forEach((id) => {
-          allIds.failedMatchIds.add(id);
-          allIds.newBoundaryIds.delete(id); // in case we already added the ID to this set
+          allIds.fail.add(id);
+          allIds.newBoundary.delete(id); // in case we already added the ID to this set
         });
         allFailedMatchesInfo.push({
           inspireId: inspireId,
@@ -332,32 +285,30 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
         allMergeAndSegmentInstances.push({
           inspireId,
           council,
-          type: Match[match],
+          match,
           oldMergedIds,
           newSegmentIds,
           lngLat: newCoords[0],
           percentageIntersect,
         });
         newSegmentIds?.forEach((id) => {
-          allIds.newSegmentIds.add(id);
-          allIds.newBoundaryIds.delete(id); // in case we already added the ID to this set
+          allIds.newSegment.add(id);
+          allIds.newBoundary.delete(id); // in case we already added the ID to this set
         });
         break;
     }
 
     await processMatch(match, inspireId, oldMergedIds, newSegmentIds);
   } else {
-    if (!allIds.newSegmentIds.has(inspireId)) {
-      allIds.newBoundaryIds.add(inspireId);
+    if (!allIds.newSegment.has(inspireId)) {
+      allIds.newBoundary.add(inspireId);
+      await analyseNewInspireId(inspireId);
     }
   }
 };
 
 const analyseNewInspireId = async (inspireId: number) => {
-  if (
-    allIds.failedMatchIds.has(inspireId) ||
-    !allIds.newBoundaryIds.has(inspireId)
-  ) {
+  if (allIds.fail.has(inspireId) || !allIds.newBoundary.has(inspireId)) {
     // Already processed this new INSPIRE ID
     return;
   }
@@ -376,13 +327,13 @@ const analyseNewInspireId = async (inspireId: number) => {
     await coordsOverlapWithExistingPoly(newCoordsMinusOffset);
   if (!coordsOverlapWithExisting) {
     // Can just accept this new poly since it doensn't have any conflicts
-    await acceptPendingPolygon(inspireId);
+    await acceptPendingPolygon(inspireId, Match.NewBoundary);
     return;
   }
 
   // Skip the rest for now. INSPIRE IDs shouldn't totally change in the Land Registry so this
   // happening is an edge case. We should do more investigation and add tests before re-adding this.
-  await rejectPendingPolygon(inspireId);
+  await processMatch(Match.Fail, inspireId);
   return;
 
   const oldPoly = await findOldContainingOrContainedPoly(newCoordsMinusOffset);
@@ -390,8 +341,8 @@ const analyseNewInspireId = async (inspireId: number) => {
   if (!oldPoly) {
     // There is overlap (determined previously) but not a clean merge/segment, or the poly still
     // exists, so mark as a fail.
-    allIds.newBoundaryIds.delete(inspireId);
-    allIds.failedMatchIds.add(inspireId);
+    allIds.newBoundary.delete(inspireId);
+    allIds.fail.add(inspireId);
     allFailedMatchesInfo.push({
       inspireId,
       council: polygon.council,
@@ -432,9 +383,10 @@ const analyseNewInspireId = async (inspireId: number) => {
         lngLat: newCoords[0],
         oldTitleNo: oldPoly.titleNo,
       });
-      allIds.newBoundaryIds.delete(inspireId);
-      allIds.newSegmentIds.delete(inspireId);
-      allIds.changedInspireIds.add(inspireId);
+      allIds.newBoundary.delete(inspireId);
+      allIds.newSegment.delete(inspireId);
+      // TODO: Add match type?
+      // allIds.changedInspireIds.add(inspireId);
       await markPolygonDeletion(oldPoly.inspireId);
       // TODO: can/should we link the old title to the new polygon?
       break;
@@ -446,18 +398,18 @@ const analyseNewInspireId = async (inspireId: number) => {
       allMergeAndSegmentInstances.push({
         inspireId: oldPoly.inspireId,
         council: polygon.council,
-        type: Match[match],
+        match,
         oldMergedIds,
         newSegmentIds: [...newSegmentIds, inspireId],
         lngLat: newCoords[0],
         percentageIntersect,
       });
       [...newSegmentIds, inspireId].forEach((id) => {
-        if (!allIds.changedInspireIds.has(id)) {
-          allIds.newSegmentIds.add(id);
-          allIds.failedMatchIds.delete(id);
-          allIds.newBoundaryIds.delete(id); // we don't need to analyse these new INSPIRE IDs again
-        }
+        // if (!allIds.changedInspireIds.has(id)) {
+        //   allIds.newSegmentIds.add(id);
+        //   allIds.failedMatchIds.delete(id);
+        //   allIds.newBoundaryIds.delete(id); // we don't need to analyse these new INSPIRE IDs again
+        // }
       });
       break;
     case Match.Moved:
@@ -466,9 +418,9 @@ const analyseNewInspireId = async (inspireId: number) => {
       break;
     case Match.Fail:
       [inspireId, ...newSegmentIds].forEach((id) => {
-        allIds.failedMatchIds.add(id);
-        allIds.newBoundaryIds.delete(id);
-        allIds.newSegmentIds.delete(id);
+        allIds.fail.add(id);
+        allIds.newBoundary.delete(id);
+        allIds.newSegment.delete(id);
       });
       allFailedMatchesInfo.push({
         inspireId,
@@ -512,10 +464,12 @@ export const analyseAllPendingPolygons = async (
   const maxPolygons: number = options.maxPolygons || 1e9;
   // Whether to overwrite existing boundary data with pending polygons that we accept, default no.
   const updateBoundaries: boolean = options.updateBoundaries === "true";
+  // Whether to record detailed stats for each polygon match, default no.
+  recordStats = options.recordStats === "true";
 
   await resetAnalysis();
   if (!resume) {
-    await resetPolygonsPendingDeletion();
+    await resetAllPendingPolygons();
   }
 
   if (options.maxPolygons) {
@@ -524,7 +478,9 @@ export const analyseAllPendingPolygons = async (
 
   // Analyse each row in pending_inspire_polygons. If we are resuming, start after the last accepted
   // polygon, otherwise start from the first row.
-  const startingId = resume ? (await getLastAcceptedPendingPolygonId()) + 1 : 1;
+  const startingId = resume ? (await getLastAcceptedPendingPolygonId()) + 1 : 0;
+  logger.info(`Starting analyses from pending poly with id ${startingId}`);
+
   // Check how many polygons were already analysed (if we are resuming a pipeline)
   const polygonsAnalysedPreviously = await getPendingPolygonCount(startingId);
   const totalPendingPolygons = await getPendingPolygonCount();
@@ -545,12 +501,6 @@ export const analyseAllPendingPolygons = async (
       );
     }
     polygon = await getNextPendingPolygon(polygon.id + 1);
-  }
-
-  // Process the complete list of polygons with new INSPIRE IDs (which aren't part of a segmentation
-  // that we previously identified)
-  for (const inspireId of allIds.newBoundaryIds) {
-    await analyseNewInspireId(inspireId);
   }
 
   // Convert sets of IDs to arrays so they can be stored in JSON
@@ -590,18 +540,48 @@ export const analyseAllPendingPolygons = async (
   // Sanity check that all data has been analysed and print summary of results
   const finalDataPolygonCount = Object.values(allIdsArrays).flat().length;
 
+  // If we are resuming a previous full run, include separate stats for this run and all the data
+  const printWholeDataStats = resume && startingId > 1 && !options.maxPolygons;
+
   const finalDataCounts = {};
   for (const [matchType, ids] of Object.entries(allIds)) {
     const count = ids.size;
     finalDataCounts[matchType] = {
-      count: count.toLocaleString("en-US"),
-      "%": roundDecimalPlaces(count / finalDataPolygonCount / 100, 2),
+      "count (this run)": count.toLocaleString("en-US"),
+      "% (this run)": roundDecimalPlaces(
+        (count / (finalDataPolygonCount || 1)) * 100,
+        3
+      ),
     };
+
+    if (printWholeDataStats) {
+      // add counts from the database to include previous pipeline runs over the same data
+      const wholeCount = await getPendingPolygonCount(
+        undefined,
+        matchType as Match
+      );
+      finalDataCounts[matchType] = {
+        ...finalDataCounts[matchType],
+        "count (all data)": wholeCount.toLocaleString("en-US"),
+        "% (all data)": roundDecimalPlaces(
+          (wholeCount / totalPendingPolygons) * 100,
+          3
+        ),
+      };
+    }
   }
   finalDataCounts["Total"] = {
-    count: finalDataPolygonCount.toLocaleString("en-US"),
-    "%": 100,
+    "count (this run)": finalDataPolygonCount.toLocaleString("en-US"),
+    "% (this run)": 100,
   };
+
+  if (printWholeDataStats) {
+    finalDataCounts["Total"] = {
+      ...finalDataCounts["Total"],
+      "count (all data)": totalPendingPolygons.toLocaleString("en-US"),
+      "% (all data)": 100,
+    };
+  }
   logger.info(finalDataCounts);
 
   if (finalDataPolygonCount !== numPolygonsAnalysed) {
@@ -629,5 +609,5 @@ export const analyseAllPendingPolygons = async (
     }
   }
 
-  return stringTable(finalDataCounts);
+  return stringTable(finalDataCounts).replaceAll("'", " "); // remove quotes from strings
 };

@@ -10,6 +10,8 @@ module.exports = {
     );
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.sequelize.query(`DROP TABLE pipeline_runs`);
+    await queryInterface.sequelize.query(
+      `ALTER TABLE pipeline_runs DROP COLUMN last_task, DROP COLUMN last_council_downloaded`
+    );
   },
 };

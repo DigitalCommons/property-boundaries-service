@@ -3,6 +3,7 @@ import * as turf from "@turf/turf";
 import stats from "stats-lite";
 import NodeGeocoder from "node-geocoder";
 import {
+  Match,
   getPendingPolygonsInSearchArea,
   getPolygonsByIdInSearchArea,
   pendingPolygonExists,
