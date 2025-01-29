@@ -1,0 +1,10 @@
+site_name: Property Boundaries Service Docs
+site_url: https://digitalcommons.github.io/property-boundaries-service/
+repo_url: https://github.com/DigitalCommons/property-boundaries-service
+repo_name: DigitalCommons/property-boundaries-service
+theme:
+  name: material
+markdown_extensions:
+  - attr_list
+  - toc:
+      permalink: "#"

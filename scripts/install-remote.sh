@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Run this script locally, to ssh onto a remote server and run the install.sh script, to
-# install the app for the first time.
+# install the app for the first time. It also sets up a reverse proxy so the app is available at
+# (dev|staging).propertyboundaries.landexplorer.coop/api
 
 # General usage:
 # 
@@ -70,8 +71,7 @@ ssh $login_user_hostname "su -l $app_user -c 'bash install.sh $branch'"
 # Cleanup install.sh file
 ssh $login_user_hostname "rm ~$app_user/install.sh"
 
-# Set up reverse proxy so the app is available at
-# (dev|staging).propertyboundaries.landexplorer.coop/api
+# Set up reverse proxy
 # Note this requires the login user to have root or www-data permissions
 ssh $login_user_hostname "rm -f /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"
 echo -e "ProxyPass /api http://localhost:4000\nProxyPassReverse /api http://localhost:4000" | ssh $login_user_hostname -T "cat > /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"
