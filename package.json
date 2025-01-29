@@ -10,7 +10,7 @@
     "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/inspire/plot.js",
-    "test": "env-cmd -f .env.test"
+    "test": "env-cmd -f .env.test ts-mocha"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +28,7 @@
     "@types/stream-json": "^1.7.7",
     "@types/unzip-stream": "^0.3.4",
     "@types/uuid": "^9.0.8",
-    "chai": "^5.1.1",
+    "chai": "^4.3.4",
     "cross-env": "^7.0.3",
     "env-cmd": "^10.1.0",
     "mocha": "^10.4.0",

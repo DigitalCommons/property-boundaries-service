@@ -18,12 +18,11 @@ const percentageIntersectThreshold = 98; // Threshold at which we assume polygon
 const absoluteDifferenceThresholdM2 = 100; // Symmetric difference of polygons must be lower than this threshold for us to consider them the same
 const zeroAreaThreshold = 2; // Polygons less than 2 m2 are ignored as artifacts when calculating segment/merge
 
-const options: NodeGeocoder.Options = {
+const geocoderOptions: NodeGeocoder.Options = {
   provider: "mapbox",
   apiKey: process.env.MAPBOX_GEOCODER_TOKEN,
   formatter: null,
 };
-
 let geocoder: NodeGeocoder.Geocoder;
 
 /**
@@ -136,8 +135,8 @@ const compareOffset = (
   const latStd = stats.stdev(latOffsets);
 
   const offsetMatch =
-    lngMean < offsetMeanThreshold &&
-    latMean < offsetMeanThreshold &&
+    Math.abs(lngMean) < offsetMeanThreshold &&
+    Math.abs(latMean) < offsetMeanThreshold &&
     lngStd < offsetStdThreshold &&
     latStd < offsetStdThreshold;
 
@@ -193,7 +192,9 @@ export const comparePolygons = async (
   newSegmentIds?: number[];
   oldMergedIds?: number[];
 }> => {
-  geocoder = NodeGeocoder(options);
+  if (geocoderOptions.apiKey && !geocoder) {
+    geocoder = NodeGeocoder(geocoderOptions);
+  }
 
   if (areExactMatch(oldCoords, newCoords)) {
     return { match: Match.Exact, percentageIntersect: 100 };
@@ -256,7 +257,7 @@ export const comparePolygons = async (
         let results = [];
         // Try geocoding the matching title address
         try {
-          results = await geocoder.geocode(`${titleAddress}, UK`);
+          results = await geocoder?.geocode(`${titleAddress}, UK`);
         } catch (err) {
           logger.error(err, "Failed to geocode title address");
         }

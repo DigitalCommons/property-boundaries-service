@@ -321,54 +321,44 @@
 //     });
 // });
 import { expect } from "chai";
-import { comparePolygons, Match } from "./methods";
+import { comparePolygons } from "./methods";
+import { Match } from "../../queries/query";
+
+const examplePoly = [
+  [-1.4609612, 51.2205179],
+  [-1.4611946, 51.2206037],
+  [-1.4610909, 51.2204251],
+  [-1.4609612, 51.2205179],
+];
 
 describe("comparePolygons", () => {
   it("should return Match.Exact when oldCoords and newCoords are exact match", async () => {
-    const oldCoords = [
-      [0, 0],
-      [1, 1],
-      [2, 2],
-      [0, 0],
-    ];
-    const newCoords = [
-      [0, 0],
-      [1, 1],
-      [2, 2],
-      [0, 0],
-    ];
-
-    const result = await comparePolygons(1, 2, oldCoords, newCoords);
+    const result = await comparePolygons(1, 2, examplePoly, examplePoly);
 
     expect(result.match).to.equal(Match.Exact);
     expect(result.percentageIntersect).to.equal(100);
   });
 
-  it("should return Match.ExactOffset when oldCoords and newCoords are offset by suggestedLngLatOffset", async () => {
-    const oldCoords = [
-      [0, 0],
-      [1, 1],
-      [2, 2],
-      [0, 0],
-    ];
-    const newCoords = [
-      [1, 1],
-      [2, 2],
-      [3, 3],
-      [1, 1],
-    ];
-    const suggestedLngLatOffset = [1, 1];
+  it("should return Match.ExactOffset when oldCoords and newCoords are exactly offset in lng/lat, by less than 1e-4 in each direction", async () => {
+    const newCoords = examplePoly.map(([lng, lat]) => [lng + 9e-5, lat - 3e-6]);
 
-    const result = await comparePolygons(
-      1,
-      2,
-      oldCoords,
-      newCoords,
-      suggestedLngLatOffset
-    );
+    const result = await comparePolygons(1, 2, examplePoly, newCoords);
 
     expect(result.match).to.equal(Match.ExactOffset);
     expect(result.percentageIntersect).to.equal(100);
+    expect(result.offsetStats).to.exist;
+  });
+
+  it("should return Match.Fail when oldCoords and newCoords are exactly offset, but by more than 1e-4", async () => {
+    const newCoords = examplePoly.map(([lng, lat]) => [
+      lng + 1e-5,
+      lat - 1.1e-4,
+    ]);
+
+    const result = await comparePolygons(1, 2, examplePoly, newCoords);
+
+    expect(result.match).to.equal(Match.Fail);
+    expect(result.percentageIntersect).is.lessThan(100);
     expect(result.offsetStats).to.exist;
   });
 
