@@ -156,7 +156,7 @@ const processMatch = async (
     case Match.Fail:
       // Reject for now. We will hopefully improve our algorithm and it may get processed and
       // accepted in a future run.
-      for (const id of [inspireId, ...newSegmentIds]) {
+      for (const id of [inspireId, ...(newSegmentIds ?? [])]) {
         await rejectPendingPolygon(id);
       }
       break;
