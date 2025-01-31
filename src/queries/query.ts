@@ -602,6 +602,12 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
 
 /**
  * Get pending polygons that intersect with the search area.
+ *
+ * To each returned item, we add a 'tenure' property, which is set to 'Accepted' if the pending
+ * polygon is marked as accepted, and left blank otherwise. This is since the front-end colours
+ * polygons based on them having a tenure field. It's a bit of a hack to make the results visually
+ * clearer, without having to add extra logic to the front-end.
+ *
  * Limit result to 5000 polygons to avoid OOMEs.
  *
  * @param searchArea a stringified GeoJSON Polygon geometry
@@ -613,7 +619,7 @@ export const getPendingPolygonsInSearchArea = async (
   acceptedOnly = false
 ) => {
   const acceptedCondition = acceptedOnly ? "AND accepted = true" : "";
-  const query = `SELECT *
+  const query = `SELECT *, IF(accepted, 'Accepted', '') as tenure
     FROM pending_inspire_polygons
     WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
     ${acceptedCondition}
