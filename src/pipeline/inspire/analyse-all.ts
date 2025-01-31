@@ -11,7 +11,7 @@ import {
   PendingPolygon,
   acceptPendingPolygon,
   deleteAllPolygonsPendingDeletion,
-  getLastAcceptedPendingPolygonId,
+  getLastPipelineRun,
   getNextPendingPolygon,
   getPendingPolygon,
   getPendingPolygonCount,
@@ -19,6 +19,7 @@ import {
   markPolygonDeletion,
   rejectPendingPolygon,
   resetAllPendingPolygons,
+  setPipelineLastPolyAnalysed,
   setPipelineLatestInspireData,
 } from "../../queries/query";
 import moment from "moment-timezone";
@@ -476,10 +477,12 @@ export const analyseAllPendingPolygons = async (
     logger.info(`Analyse first ${maxPolygons} polygons`);
   }
 
-  // Analyse each row in pending_inspire_polygons. If we are resuming, start after the last accepted
-  // polygon, otherwise start from the first row.
-  const startingId = resume ? (await getLastAcceptedPendingPolygonId()) + 1 : 0;
-  logger.info(`Starting analyses from pending poly with id ${startingId}`);
+  // Analyse each row in pending_inspire_polygons. If we are resuming, start after the
+  // last polygon analysed, otherwise start from the first row.
+  const startingId: number = resume
+    ? ((await getLastPipelineRun())?.last_poly_analysed || 0) + 1
+    : 1;
+  logger.info(`Starting analysis from pending poly with id ${startingId}`);
 
   // Check how many polygons were already analysed (if we are resuming a pipeline)
   const polygonsAnalysedPreviously = await getPendingPolygonCount(startingId);
@@ -489,8 +492,9 @@ export const analyseAllPendingPolygons = async (
 
   while (polygon && numPolygonsAnalysed < maxPolygons) {
     await analysePolygon(polygon);
-    numPolygonsAnalysed += 1;
+    await setPipelineLastPolyAnalysed(polygon.id);
 
+    numPolygonsAnalysed += 1;
     if ((polygonsAnalysedPreviously + numPolygonsAnalysed) % 5000 === 0) {
       logger.info(
         `Analysed polygon ${(
@@ -500,6 +504,7 @@ export const analyseAllPendingPolygons = async (
         )} (from ${polygon.council})`
       );
     }
+
     polygon = await getNextPendingPolygon(polygon.id + 1);
   }
 

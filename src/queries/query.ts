@@ -184,6 +184,7 @@ export const PipelineRunModel = sequelize.define(
     latest_inspire_data: DataTypes.DATEONLY,
     last_task: DataTypes.STRING,
     last_council_downloaded: DataTypes.STRING,
+    last_poly_analysed: DataTypes.INTEGER,
   },
   {
     tableName: "pipeline_runs",
@@ -867,15 +868,17 @@ export const setPipelineLastCouncilDownloaded = async (council: string) => {
 };
 
 /**
- * Get row ID of the last polygon marked as accepted in pending_inspire_polygons, or -1 if none are
- * accepted.
+ * Set row ID of the last polygon we analysed in pending_inspire_polygons.
  */
-export const getLastAcceptedPendingPolygonId = async (): Promise<number> => {
-  const polygon: any = await PendingPolygonModel.findOne({
-    where: { accepted: true },
-    order: [["id", "DESC"]],
-  });
-  return polygon ? polygon.id : -1;
+export const setPipelineLastPolyAnalysed = async (id: number) => {
+  await PipelineRunModel.update(
+    { last_poly_analysed: id },
+    {
+      where: {
+        unique_key: getRunningPipelineKey(),
+      },
+    }
+  );
 };
 
 /**
