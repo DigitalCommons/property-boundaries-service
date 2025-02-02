@@ -1,9 +1,11 @@
 import "dotenv/config";
 import {
   getLastPipelineRun,
+  isPipelineRunning,
   setPipelineLastCouncilDownloaded,
   setPipelineLastTask,
   startPipelineRun,
+  stopPipelineRun,
 } from "../queries/query";
 import { updateOwnerships } from "./ownerships/update";
 import { downloadAndBackupInspirePolygons } from "./inspire/download";
@@ -14,10 +16,8 @@ import {
   getLatestInspirePublishDate,
   getRunningPipelineKey,
   notifyMatrix,
+  setRunningPipelineKey,
 } from "./util";
-
-/** Set flag so we don't run 2 pipelines at the same time, which would lead to file conflicts */
-let running = false;
 
 type TaskOptions = {
   afterCouncil?: string; // Only process councils after this one, alphabetically
@@ -60,78 +60,76 @@ const tasks = [
  * This is the main function to run our company ownerships + INSPIRE pipeline.
  */
 const runPipeline = async (options: PipelineOptions) => {
-  running = true;
   const startTimeMs = Date.now();
   const pipelineKey = getRunningPipelineKey();
   logger.info(
     `Run pipeline ${pipelineKey} with options: ${JSON.stringify(options)}`
   );
 
-  let { startAtTask, stopBeforeTask, ...taskOptions } = options;
-
-  let startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
-  if (startAtTaskIndex === -1) {
-    if (startAtTask) {
-      logger.error(
-        `'${startAtTask}' isn't a valid startAtTask, so just start at beginning of pipeline`
-      );
-    }
-    startAtTask = undefined;
-    startAtTaskIndex = 0;
-  }
-  let stopBeforeTaskIndex = tasks.findIndex(
-    (task) => task.name === stopBeforeTask
-  );
-  if (stopBeforeTaskIndex === -1) {
-    if (stopBeforeTask) {
-      logger.error(
-        `'${stopBeforeTask}' isn't a valid stopBeforeTask, so just continue to the end of the pipeline`
-      );
-    }
-    stopBeforeTask = undefined;
-    stopBeforeTaskIndex = tasks.length;
-  }
-
-  if (taskOptions.resume === "true") {
-    // Can only resume if the latest pipeline run date is more recent than the latest INSPIRE
-    // publish date
-    const latestPipelineRun = await getLastPipelineRun();
+  try {
     const latestInspirePublishDate = getLatestInspirePublishDate();
-    if (
-      latestPipelineRun?.startedAt &&
-      new Date(latestPipelineRun.startedAt) > latestInspirePublishDate
-    ) {
-      startAtTask = (await getLastPipelineRun())?.last_task;
-      startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
-      if (startAtTaskIndex === -1) {
-        // Shouldn't hit this but just in case something went wrong with DB
-        startAtTaskIndex = 0;
+    let { startAtTask, stopBeforeTask, ...taskOptions } = options;
+
+    let startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
+    if (startAtTaskIndex === -1) {
+      if (startAtTask) {
+        logger.error(
+          `'${startAtTask}' isn't a valid startAtTask, so just start at beginning of pipeline`
+        );
       }
-      logger.info(
-        `Resuming pipeline run from task ${startAtTask}, old key: ${latestPipelineRun.unique_key}`
-      );
-      // set last_council_downloaded to the last council we downloaded in the previous run, since
-      // this will still be in teh pending_inspire_polygons table
-      await setPipelineLastCouncilDownloaded(
-        latestPipelineRun.last_council_downloaded
-      );
+      startAtTask = undefined;
+      startAtTaskIndex = 0;
+    }
+    let stopBeforeTaskIndex = tasks.findIndex(
+      (task) => task.name === stopBeforeTask
+    );
+    if (stopBeforeTaskIndex === -1) {
+      if (stopBeforeTask) {
+        logger.error(
+          `'${stopBeforeTask}' isn't a valid stopBeforeTask, so just continue to the end of the pipeline`
+        );
+      }
+      stopBeforeTask = undefined;
+      stopBeforeTaskIndex = tasks.length;
+    }
+
+    if (taskOptions.resume === "true") {
+      // Can only resume if the latest pipeline run date is more recent than the latest INSPIRE
+      // publish date
+      const latestPipelineRun = await getLastPipelineRun();
+      if (
+        latestPipelineRun?.startedAt &&
+        new Date(latestPipelineRun.startedAt) > latestInspirePublishDate
+      ) {
+        startAtTask = (await getLastPipelineRun())?.last_task;
+        startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
+        if (startAtTaskIndex === -1) {
+          // Shouldn't hit this but just in case something went wrong with DB
+          startAtTaskIndex = 0;
+        }
+        logger.info(
+          `Resuming pipeline run from task ${startAtTask}, old key: ${latestPipelineRun.unique_key}`
+        );
+        // set last_council_downloaded to the last council we downloaded in the previous run, since
+        // this will still be in teh pending_inspire_polygons table
+        await setPipelineLastCouncilDownloaded(
+          latestPipelineRun.last_council_downloaded
+        );
+      } else {
+        throw new Error(
+          `Can't resume because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
+        );
+      }
     } else {
       taskOptions.resume = "false";
-      logger.warn(
-        `Can't resume because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
-      );
     }
-  } else {
-    taskOptions.resume = "false";
-  }
 
-  logger.info(
-    `Started pipeline run ${pipelineKey} at ${
-      startAtTask || "beginning"
-    }, will stop at ${stopBeforeTask || "end"}`
-  );
+    logger.info(
+      `Started pipeline run ${pipelineKey} at ${
+        startAtTask || "beginning"
+      }, will stop at ${stopBeforeTask || "end"}`
+    );
 
-  try {
     let output: string | void;
     for (const task of tasks.slice(startAtTaskIndex, stopBeforeTaskIndex)) {
       const msg = `Pipeline ${pipelineKey} running task: ${
@@ -147,7 +145,7 @@ const runPipeline = async (options: PipelineOptions) => {
     // Output of last task should be a summary table of the analysis, which we want to send to Matrix
     const summaryTable = output || "Error: no summary table";
 
-    running = false;
+    await stopPipelineRun();
     const timeElapsed = moment.duration(Date.now() - startTimeMs);
     const timeElapsedString = `${timeElapsed.hours()} h ${timeElapsed.minutes()} min`;
     const msg = `Pipeline ${pipelineKey} finished in ${timeElapsedString}`;
@@ -159,13 +157,13 @@ const runPipeline = async (options: PipelineOptions) => {
       true
     );
   } catch (err) {
-    running = false;
+    await stopPipelineRun();
     logger.error(err, "Pipeline failed");
-    console.error(`Pipeline ${pipelineKey} failed`, err?.message);
+    console.error(`Pipeline ${pipelineKey} failed:`, err?.message);
 
     await notifyMatrix(`🔴 Failed ownership + INSPIRE pipeline ${pipelineKey}`);
 
-    throw err;
+    // Don't re-throw error since this is an async process and the API route has already returned
   }
 };
 
@@ -177,13 +175,32 @@ const runPipeline = async (options: PipelineOptions) => {
 export const triggerPipelineRun = async (
   options: PipelineOptions
 ): Promise<string> => {
-  if (running) {
+  if (await isPipelineRunning()) {
     console.error(`Pipeline ${getRunningPipelineKey()} already running`);
     return null;
   }
 
-  const pipelineKey = await startPipelineRun();
+  const pipelineKey = await startPipelineRun(options);
   initLogger(pipelineKey);
   runPipeline(options);
   return pipelineKey;
+};
+
+/**
+ * Resume the latest pipeline run if is_running = 'true' in the DB, indicating it was interrupted by
+ * something that the app didn't catch e.g. the server was shutdown unexpectedly
+ */
+export const resumePipelineRunIfInterrupted = async () => {
+  const latestPipelineRun = await getLastPipelineRun();
+  if (latestPipelineRun?.is_running) {
+    const pipelineKey = latestPipelineRun.unique_key;
+    console.log(`Resuming interrupted pipeline run ${pipelineKey}`);
+
+    const options = latestPipelineRun.options ?? {};
+    setRunningPipelineKey(pipelineKey);
+    initLogger(pipelineKey);
+    await runPipeline({ ...options, resume: "true" });
+  } else {
+    console.log("No interrupted pipeline run to resume");
+  }
 };

@@ -2,6 +2,7 @@ import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
 import routes from "./routes/index";
+import { resumePipelineRunIfInterrupted } from "./pipeline/run";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
@@ -41,6 +42,13 @@ async function start() {
 
   console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
   server.start();
+
+  // Resume pipeline run if interrupted
+  try {
+    await resumePipelineRunIfInterrupted();
+  } catch (error) {
+    console.error("Failed to resume interrupted pipeline run:", error?.message);
+  }
 }
 
 process.on("unhandledRejection", (err) => {

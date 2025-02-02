@@ -185,6 +185,8 @@ export const PipelineRunModel = sequelize.define(
     last_task: DataTypes.STRING,
     last_council_downloaded: DataTypes.STRING,
     last_poly_analysed: DataTypes.INTEGER,
+    is_running: DataTypes.BOOLEAN,
+    options: DataTypes.JSON,
   },
   {
     tableName: "pipeline_runs",
@@ -777,13 +779,36 @@ export const getPolygonsByProprietorName = async (name: string) => {
 };
 
 /** Create an entry in the pipeline_runs table, store and return its unique key */
-export const startPipelineRun = async (): Promise<string> => {
+export const startPipelineRun = async (options: any): Promise<string> => {
   const unique_key = nanoid();
   await PipelineRunModel.create({
     unique_key,
+    is_running: true,
+    options,
   });
   setRunningPipelineKey(unique_key);
   return unique_key;
+};
+
+/** Mark the current pipeline run as stopped */
+export const stopPipelineRun = async () => {
+  await PipelineRunModel.update(
+    { is_running: false },
+    {
+      where: {
+        unique_key: getRunningPipelineKey(),
+      },
+    }
+  );
+};
+
+/** Check if a pipeline is running */
+export const isPipelineRunning = async (): Promise<boolean> => {
+  const latestPipelineRun: any = await PipelineRunModel.findOne({
+    order: [["startedAt", "DESC"]],
+    raw: true,
+  });
+  return !!latestPipelineRun?.is_running;
 };
 
 /**
