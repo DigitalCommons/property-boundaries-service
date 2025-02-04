@@ -9,7 +9,4 @@ You can find the full documentation for the Property Boundaries Service, includi
 
 ## Useful dev commands
 
-- `npx sequelize-cli db:migrate` to run new database migration(s)
-- `npx sequelize-cli db:migrate:undo:all` to reset database migrations
-- `npm run dev:serve` to start the server responding to API requests.
-- `npm run build && npm run plot` to plot some of the analysis after a pipeline has run
+See [index.md](docs/index.md#useful-dev-commands)
