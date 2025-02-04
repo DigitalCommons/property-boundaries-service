@@ -67,7 +67,6 @@ const runPipeline = async (options: PipelineOptions) => {
   );
 
   try {
-    const latestInspirePublishDate = getLatestInspirePublishDate();
     let { startAtTask, stopBeforeTask, ...taskOptions } = options;
 
     let startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
@@ -100,7 +99,7 @@ const runPipeline = async (options: PipelineOptions) => {
       if (
         latestPipelineRun?.last_task !== "downloadInspire" ||
         (latestPipelineRun?.startedAt &&
-          new Date(latestPipelineRun.startedAt) > latestInspirePublishDate)
+          new Date(latestPipelineRun.startedAt) > getLatestInspirePublishDate())
       ) {
         startAtTask = latestPipelineRun?.last_task;
         startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
@@ -118,7 +117,9 @@ const runPipeline = async (options: PipelineOptions) => {
         );
       } else {
         throw new Error(
-          `Can't resume downloadInspire task because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
+          `Can't resume downloadInspire task because the latest pipeline run at ${
+            latestPipelineRun.startedAt
+          } was before the most recent INSPIRE publish date ${getLatestInspirePublishDate()}`
         );
       }
     } else {
