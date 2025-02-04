@@ -1,4 +1,4 @@
-# Our servers
+# DCC servers
 
 We have a dev, staging, and prod version of the PBS hosted on Hetzner servers dev-2, staging-2, and prod-2.
 
@@ -6,7 +6,7 @@ The apps are deployed to https://dev.propertyboundaries.landexplorer.coop/, http
 
 Generally, we deploy the `development` branch to dev-2, where we can test new features/fixes that are in development, and the `main` branch to staging-2 for QA... and then finally also to prod-2.
 
-See more details in [this GitHub comment](https://github.com/DigitalCommons/technology-and-infrastructure/issues/116#issuecomment-2163420776).
+See more details in [this GitHub comment](https://github.com/DigitalCommons/technology-and-infrastructure/issues/116#issuecomment-2163420776){target="\_blank"}.
 
 # Deployment Instructions
 

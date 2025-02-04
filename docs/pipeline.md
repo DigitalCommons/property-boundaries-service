@@ -127,6 +127,8 @@ It runs these tasks in sequential order:
 
 ## How to run it
 
+### Manually
+
 The pipeline can be triggered by an API request like this:
 
 ```
@@ -142,6 +144,15 @@ https://<PBS URL>/run-pipeline?secret=<secret>&startAtTask=analyseInspire&maxCou
 ```
 
 _Note: The new INSPIRE boundaries will remain in the `pending_inspire_polygons` table where they can be manually analysed (see below) and will not be written into the actual `land_ownership_polygons` table unless the `updateBoundaries` pipeline option is set to true._
+
+### Automatic runs
+
+At DCC, we have automatic scripts to hit the API described above, so that the pipeline runs automatically.
+
+They are scheduled to run after a Borg backup of the production database has been completed, which
+itself is scheduled to run on the 8th night of each month (to ensure it's after the month's INSPIRE
+data has been published on the first Sunday of the month). To avoid getting into too many details that
+are specific to DCC infrastructure, see [this GitHub issue](https://github.com/DigitalCommons/technology-and-infrastructure/issues/116#issuecomment-2163420776){target="\_blank"} for more details, and [deployment.md](./deployment.md#dcc-servers) for a rough overview of our DCC deployment.
 
 ## Analysing the pipeline output
 
