@@ -322,7 +322,7 @@
 // });
 import { expect } from "chai";
 import { comparePolygons } from "./methods";
-import { Match } from "../../queries/query";
+import { Match } from "./match";
 
 const examplePoly = [
   [-1.4609612, 51.2205179],

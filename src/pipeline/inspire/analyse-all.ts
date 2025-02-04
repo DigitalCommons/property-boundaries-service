@@ -7,7 +7,6 @@ import {
   coordsOverlapWithExistingPoly,
 } from "./methods";
 import {
-  Match,
   PendingPolygon,
   acceptPendingPolygon,
   deleteAllPolygonsPendingDeletion,
@@ -26,6 +25,7 @@ import moment from "moment-timezone";
 import stringTable from "nodestringtable";
 import { logger } from "../logger";
 import { getRunningPipelineKey, roundDecimalPlaces } from "../util";
+import { Match } from "./match";
 
 const analysisFolder = path.resolve("./analysis");
 
@@ -119,6 +119,8 @@ const resetAnalysis = async () => {
 
 /**
  * Decide what to do for each type of match e.g. whether to accept the pending polygon's coords.
+ *
+ * TODO: expand this based on the different cases we have research in docs/pipeline.md
  */
 const processMatch = async (
   match: Match,

@@ -3,13 +3,13 @@ import * as turf from "@turf/turf";
 import stats from "stats-lite";
 import NodeGeocoder from "node-geocoder";
 import {
-  Match,
   getPendingPolygonsInSearchArea,
   getPolygonsByIdInSearchArea,
   pendingPolygonExists,
 } from "../../queries/query";
 import { logger } from "../logger";
 import { Feature, Polygon, MultiPolygon } from "geojson";
+import { Match } from "./match";
 
 export const precisionDP = 6; // round coords to this many decimal places, since the distance is negligible and it avoids issues with turf
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
