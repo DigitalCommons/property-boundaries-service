@@ -94,14 +94,15 @@ const runPipeline = async (options: PipelineOptions) => {
     }
 
     if (taskOptions.resume === "true") {
-      // Can only resume if the latest pipeline run date is more recent than the latest INSPIRE
-      // publish date
+      // Can only resume downloadInspire task if the latest pipeline run date is more recent than
+      // the latest INSPIRE publish date, to ensure we have data consistency
       const latestPipelineRun = await getLastPipelineRun();
       if (
-        latestPipelineRun?.startedAt &&
-        new Date(latestPipelineRun.startedAt) > latestInspirePublishDate
+        latestPipelineRun?.last_task !== "downloadInspire" ||
+        (latestPipelineRun?.startedAt &&
+          new Date(latestPipelineRun.startedAt) > latestInspirePublishDate)
       ) {
-        startAtTask = (await getLastPipelineRun())?.last_task;
+        startAtTask = latestPipelineRun?.last_task;
         startAtTaskIndex = tasks.findIndex((task) => task.name === startAtTask);
         if (startAtTaskIndex === -1) {
           // Shouldn't hit this but just in case something went wrong with DB
@@ -117,7 +118,7 @@ const runPipeline = async (options: PipelineOptions) => {
         );
       } else {
         throw new Error(
-          `Can't resume because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
+          `Can't resume downloadInspire task because the latest pipeline run at ${latestPipelineRun.startedAt} was before the most recent INSPIRE publish date ${latestInspirePublishDate}`
         );
       }
     } else {
