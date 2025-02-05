@@ -751,13 +751,13 @@ export const startPipelineRun = async (options: any): Promise<string> => {
   return unique_key;
 };
 
-/** Mark the current pipeline run as stopped */
-export const stopPipelineRun = async () => {
+/** Mark the specified (or else current) pipeline run as stopped */
+export const stopPipelineRun = async (key?: string) => {
   await PipelineRunModel.update(
     { is_running: false },
     {
       where: {
-        unique_key: getRunningPipelineKey(),
+        unique_key: key ?? getRunningPipelineKey(),
       },
     }
   );

@@ -16,7 +16,6 @@ import {
   getLatestInspirePublishDate,
   getRunningPipelineKey,
   notifyMatrix,
-  setRunningPipelineKey,
 } from "./util";
 
 type TaskOptions = {
@@ -195,13 +194,17 @@ export const triggerPipelineRun = async (
 export const resumePipelineRunIfInterrupted = async () => {
   const latestPipelineRun = await getLastPipelineRun();
   if (latestPipelineRun?.is_running) {
-    const pipelineKey = latestPipelineRun.unique_key;
-    console.log(`Resuming interrupted pipeline run ${pipelineKey}`);
+    await stopPipelineRun(latestPipelineRun.unique_key);
 
-    const options = latestPipelineRun.options ?? {};
-    setRunningPipelineKey(pipelineKey);
+    const options = { ...latestPipelineRun.options, resume: "true" };
+    const pipelineKey = await startPipelineRun(options);
+
+    const msg = `Resuming interrupted pipeline run ${latestPipelineRun.unique_key}, new key is ${pipelineKey}`;
+    console.log(msg);
+    notifyMatrix(msg);
+
     initLogger(pipelineKey);
-    await runPipeline({ ...options, resume: "true" });
+    runPipeline(options);
   } else {
     console.log("No interrupted pipeline run to resume");
   }
