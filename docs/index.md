@@ -58,10 +58,13 @@ local machine in order to test the `analyseInspire` task locally.
 
 There's a helpful guide here on how to assess memory leaks in Node https://stackoverflow.com/a/66563755
 
-If you stop the app (`pm2 stop property-boundaries-service`) and restart it with `npm run debug:serve`,
-the app will run with the `--heapsnapshot-near-heap-limit` Node argument. This reduces the max heap
-limit for debug purposes and will try to produce 2 heap dumps when the heap usage is approaching the
-limit. You can then download these dump files to your local machine and view them in your browser's dev tools.
+If you stop the app (`pm2 stop property-boundaries-service`) and restart it with `npm run debug:serve`, the app will run with the `--heapsnapshot-signal` and `--heapsnapshot-near-heap-limit` Node
+arguments. This will try to produce a heap dump when the heap usage is approaching the limit, or it
+will write a dump whenever you send a signal, using `npm run debug:dump`. You can monitor the current heap usage with `pm2 monit`.
+When served in debug mode, the Node app also has a reduced max heap limit, so the limit is reached
+sooner, and it's more likely to be able to write the dumps.
+
+You can then download these dump files to your local machine and view them in your browser's dev tools.
 
 #### The whole database has been messed up by some bad pipeline code 😱
 

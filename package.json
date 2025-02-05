@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=4096'",
-    "debug:serve": "pm2 start dist/app.js --time --name property-boundaries-service --node-args='--max-old-space-size=512 --heapsnapshot-near-heap-limit=2 --diagnostic-dir=logs'",
+    "serve": "pm2 start \"NODE_OPTIONS='--max-old-space-size=4096' node dist/app.js\" --time --name property-boundaries-service",
+    "debug:serve": "pm2 start \"NODE_OPTIONS='--max-old-space-size=512 --heapsnapshot-signal=SIGUSR2 --heapsnapshot-near-heap-limit=1 --diagnostic-dir=logs' node dist/app.js\" --time --name property-boundaries-service",
+    "debug:dump": "kill -USR2 $(ps -eo uid,pid,cmd | grep $UID | grep 'node dist/app.js' | awk 'NR==1 {print $2}')",
     "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/inspire/plot.js",
