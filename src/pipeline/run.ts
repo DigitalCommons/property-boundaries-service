@@ -3,6 +3,7 @@ import {
   getLastPipelineRun,
   isPipelineRunning,
   setPipelineLastCouncilDownloaded,
+  setPipelineLastPolyAnalysed,
   setPipelineLastTask,
   startPipelineRun,
   stopPipelineRun,
@@ -109,11 +110,12 @@ const runPipeline = async (options: PipelineOptions) => {
         logger.info(
           `Resuming pipeline run from task ${startAtTask}, old key: ${latestPipelineRun.unique_key}`
         );
-        // set last_council_downloaded to the last council we downloaded in the previous run, since
-        // this will still be in teh pending_inspire_polygons table
+        // set last_council_downloaded and last_poly_analysed from the last pipeline run, so we
+        // don't lose where we were (e.g. if pipeline fails before we write in the next value)
         await setPipelineLastCouncilDownloaded(
           latestPipelineRun.last_council_downloaded
         );
+        await setPipelineLastPolyAnalysed(latestPipelineRun.last_poly_analysed);
       } else {
         throw new Error(
           `Can't resume downloadInspire task because the latest pipeline run at ${
