@@ -156,7 +156,7 @@ are specific to DCC infrastructure, see [this GitHub issue](https://github.com/D
 
 ## Analysing the pipeline output
 
-After the `updateOwnerships` task is complete, the new data should be visible in LX for all users.
+After the `updateOwnerships` task is complete, the new company ownership data should be visible in LX for all users.
 
 After the `downloadOwnerships` task, a LX super user can see the pending INSPIRE polygons that have been downloaded in a separate, secret data layer.
 

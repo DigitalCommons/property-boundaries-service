@@ -7,6 +7,8 @@ import { Match } from "../pipeline/inspire/match";
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
 
+const MAX_RETRIES_FOR_A_POLYGON = 2;
+
 // TODO: move this instance creation and model definitions into a separate 'models' file. Just have
 // callable queries in this file
 
@@ -186,7 +188,7 @@ export const PipelineRunModel = sequelize.define(
     last_task: DataTypes.STRING,
     last_council_downloaded: DataTypes.STRING,
     last_poly_analysed: DataTypes.INTEGER,
-    is_running: DataTypes.BOOLEAN,
+    status: DataTypes.TINYINT,
     options: DataTypes.JSON,
   },
   {
@@ -195,6 +197,12 @@ export const PipelineRunModel = sequelize.define(
     updatedAt: false,
   }
 );
+
+export enum PipelineStatus {
+  Running = 1,
+  Stopped = 0,
+  Interrupted = -1,
+}
 
 PolygonModel.hasMany(LandOwnershipModel, {
   foreignKey: "title_no",
@@ -744,32 +752,46 @@ export const startPipelineRun = async (options: any): Promise<string> => {
   const unique_key = nanoid();
   await PipelineRunModel.create({
     unique_key,
-    is_running: true,
+    status: PipelineStatus.Running,
     options,
   });
   setRunningPipelineKey(unique_key);
   return unique_key;
 };
 
-/** Mark the specified (or else current) pipeline run as stopped */
-export const stopPipelineRun = async (key?: string) => {
+/** Mark the current pipeline run as stopped */
+export const stopPipelineRun = async () => {
   await PipelineRunModel.update(
-    { is_running: false },
+    { status: PipelineStatus.Stopped },
     {
       where: {
-        unique_key: key ?? getRunningPipelineKey(),
+        unique_key: getRunningPipelineKey(),
       },
     }
   );
 };
 
-/** Check if a pipeline is running */
+/** Mark the specified pipeline run as interrupted */
+export const markPipelineRunInterrupted = async (key: string) => {
+  await PipelineRunModel.update(
+    { status: PipelineStatus.Interrupted },
+    {
+      where: {
+        unique_key: key,
+      },
+    }
+  );
+};
+
+/** Check if the current pipeline is running */
 export const isPipelineRunning = async (): Promise<boolean> => {
-  const latestPipelineRun: any = await PipelineRunModel.findOne({
-    order: [["startedAt", "DESC"]],
+  const currentPipelineRun: any = await PipelineRunModel.findOne({
+    where: {
+      unique_key: getRunningPipelineKey(),
+    },
     raw: true,
   });
-  return !!latestPipelineRun?.is_running;
+  return currentPipelineRun?.status === PipelineStatus.Running;
 };
 
 /**
@@ -823,6 +845,28 @@ export const getLastPipelineRun = async (): Promise<any> => {
     order: [["startedAt", "DESC"]],
     raw: true,
   });
+};
+
+/**
+ * Check if the last (MAX_RETRIES_FOR_A_POLYGON + 1) pipelines have all been interrupted and failed
+ * to process the same polygon. This means we've used up all retries for a polygon and should move
+ * on.
+ */
+export const hitMaxRetriesForAPolygon = async (): Promise<boolean> => {
+  const lastPipelineRuns: any[] = await PipelineRunModel.findAll({
+    where: { unique_key: { [Op.ne]: getRunningPipelineKey() } },
+    order: [["startedAt", "DESC"]],
+    limit: MAX_RETRIES_FOR_A_POLYGON + 1,
+    raw: true,
+  });
+
+  return lastPipelineRuns?.every(
+    (run) =>
+      run.status === PipelineStatus.Interrupted &&
+      run.last_task === "analyseInspire" &&
+      run.last_poly_analysed &&
+      run.last_poly_analysed === lastPipelineRuns[0].last_poly_analysed
+  );
 };
 
 /**

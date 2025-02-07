@@ -2,6 +2,8 @@ import "dotenv/config";
 import {
   getLastPipelineRun,
   isPipelineRunning,
+  markPipelineRunInterrupted,
+  PipelineStatus,
   setPipelineLastCouncilDownloaded,
   setPipelineLastPolyAnalysed,
   setPipelineLastTask,
@@ -190,13 +192,13 @@ export const triggerPipelineRun = async (
 };
 
 /**
- * Resume the latest pipeline run if is_running = 'true' in the DB, indicating it was interrupted by
- * something that the app didn't catch e.g. the server was shutdown unexpectedly
+ * Resume the latest pipeline run if it's still 'running' in the DB, indicating it was interrupted
+ * by something that the app didn't catch e.g. the server was shutdown unexpectedly
  */
 export const resumePipelineRunIfInterrupted = async () => {
   const latestPipelineRun = await getLastPipelineRun();
-  if (latestPipelineRun?.is_running) {
-    await stopPipelineRun(latestPipelineRun.unique_key);
+  if (latestPipelineRun?.status === PipelineStatus.Running) {
+    await markPipelineRunInterrupted(latestPipelineRun.unique_key);
 
     const options = { ...latestPipelineRun.options, resume: "true" };
     const pipelineKey = await startPipelineRun(options);

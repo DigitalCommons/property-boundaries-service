@@ -14,6 +14,7 @@ import {
   getNextPendingPolygon,
   getPendingPolygon,
   getPendingPolygonCount,
+  hitMaxRetriesForAPolygon,
   insertAllAcceptedPendingPolygons,
   markPolygonDeletion,
   rejectPendingPolygon,
@@ -481,9 +482,21 @@ export const analyseAllPendingPolygons = async (
 
   // Analyse each row in pending_inspire_polygons. If we are resuming, start after the
   // last polygon analysed, otherwise start from the first row.
+  // However, if the pipelines keep failing with an interruption at the same polygon and we have
+  // hit our max retries, we should skip that polygon and move on to the next one.
+  const latestPipelineRun = await getLastPipelineRun();
+  const hitMaxRetries = await hitMaxRetriesForAPolygon();
   const startingId: number = resume
-    ? ((await getLastPipelineRun())?.last_poly_analysed || 0) + 1
+    ? (latestPipelineRun?.last_poly_analysed ?? 0) + (hitMaxRetries ? 1 : 0) + 1
     : 1;
+
+  if (hitMaxRetries) {
+    logger.warn(
+      `Pipeline has hit max retries for polygon id ${
+        latestPipelineRun?.last_poly_analysed + 1
+      }, so skipping it`
+    );
+  }
   logger.info(`Starting analysis from pending poly with id ${startingId}`);
 
   // Check how many polygons were already analysed (if we are resuming a pipeline)
