@@ -14,7 +14,7 @@ import { Match } from "./match";
 export const precisionDP = 6; // round coords to this many decimal places, since the distance is negligible and it avoids issues with turf
 const offsetMeanThreshold = 1e-4; // up to ~13 meters offset. TODO: do we need this threshold if std is so low anyway?
 const offsetStdThreshold = 5e-8; // 95% of vertices offset by the same distance within 2stds = a few centimeters
-const percentageIntersectThreshold = 98; // Threshold at which we assume polygons with this intersect are the same
+const percentageIntersectThreshold = 95; // Threshold at which we assume polygons with this intersect are the same
 const absoluteDifferenceThresholdM2 = 100; // Symmetric difference of polygons must be lower than this threshold for us to consider them the same
 const zeroAreaThreshold = 2; // Polygons less than 2 m2 are ignored as artifacts when calculating segment/merge
 
@@ -265,7 +265,7 @@ export const comparePolygons = async (
         if (results.length > 0) {
           // Check against each of the geocoded results and find closest match
           const points = results.map((result) =>
-            turf.point([result.latitude, result.longitude])
+            turf.point([result.longitude, result.latitude])
           );
           const newPoly = turf.polygon([newCoords]);
           const metersFromAddress = Math.min(
