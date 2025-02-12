@@ -316,11 +316,6 @@ export const comparePolygons = async (
       `We hit an error comparing polygons`
     );
 
-    // Re-throw this error whilst we're debugging the pipeline so we don't miss errors. Remove this
-    // later, since we don't want to stop the whole pipeline for one error (and maybe integrate with
-    // Glitchtip for better error tracking)
-    throw error;
-
     return {
       match: Match.Fail,
       percentageIntersect,
