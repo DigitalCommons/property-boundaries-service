@@ -36,6 +36,9 @@ if [ ! -z "$1" ]; then
     git checkout $1
 fi
 
+# Make a logs directory, which is required for pipelines
+mkdir -p logs
+
 # Install Node and PM2
 asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
 asdf install nodejs 20.8.1
