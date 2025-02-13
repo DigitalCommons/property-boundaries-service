@@ -2,12 +2,13 @@
 
 _Remove items from this file once a GitHub issues are created for them._
 
-- Fully spec the behaviour of the pipeline, in particular the matching algorithm for INSPIRE
+- Fully spec the desired behaviour of the pipeline, in particular the matching algorithm for INSPIRE
   polygons, and add unit tests to match this spec
 
-  - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Testing#unit-tests), with a few initial UTs
-  - We'll probably need to modularise some of the long functions in the pipeline a bit more (e.g. the `comparePolygons` function) to make unit testing easier, and this will make the code more understandable too.
-  - Maybe we need to plot some different polygon scenarios that can be visualised and used for different edge cases in UTs.
+  - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Automated-Testing#unit-tests), with UTs for the currently
+    implemented matching algorithm.
+  - We'll probably need to eventually modularise some of the long functions in the pipeline (e.g. the `comparePolygons` function) to make unit testing easier, and this will make the code more understandable too.
+  - Maybe we need to plot some different polygon scenarios that can be visualised and used for different test cases in UTs.
 
 - Once we have the above spec, systematically address parts of the pipeline that we want to improve. This will involve:
 

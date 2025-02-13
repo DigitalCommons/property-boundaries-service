@@ -2,23 +2,18 @@
 import { expect } from "chai";
 // // Sinon provides mocks, spies, stubs, etc. We use them to replace and control the behaviour of code
 // // that is external to our test unit, or to verify how out test unit interfaces with external code.
-import { assert, createSandbox, fake, SinonSpy } from "sinon";
+import { createSandbox, SinonStub } from "sinon";
 import { comparePolygons as testUnit } from "./methods";
 import { Match } from "./match";
 import proxyquire from "proxyquire";
+import * as turf from "@turf/turf";
 
 // We plug all our fakes, spies, etc into the system under test using a sandbox. This makes it
 // easier to clean them up after each test.
 const sandbox = createSandbox();
 
-const fakeNodeGeocoder = sandbox.stub();
-
-// We need to stub node-geocoder, which returns the geocoder constructor directly as
-// module.exports). Sinon doesn't have a way to stub this (see what it can stub here
-// https://sinonjs.org/how-to/stub-dependency/), so we need to use proxyquire.
-const { comparePolygons } = proxyquire("./methods", {
-  "node-geocoder": fakeNodeGeocoder,
-}) as { comparePolygons: typeof testUnit };
+// Our test unit
+let comparePolygons: typeof testUnit;
 
 const examplePoly = [
   [-1.4609501, 51.2205179],
@@ -33,82 +28,202 @@ const exampleFarAwayPoly = [
   [-1.4900932, 51.1786055],
   [-1.4985482, 51.1845143],
 ];
-
-// Cleanup that run after each 'it' testcase
-afterEach(async () => {
-  // Restore all fakes that were created https://sinonjs.org/releases/latest/sandbox/
-  sandbox.restore();
-});
+const exampleFarAwayPolyCenter = turf.center(turf.polygon([exampleFarAwayPoly]))
+  .geometry.coordinates;
 
 describe("comparePolygons", () => {
-  it("should return Match.Exact when oldCoords and newCoords are exact match", async () => {
-    const result = await comparePolygons(1, 2, examplePoly, examplePoly);
+  let fakeNodeGeocoder: SinonStub;
 
-    expect(result.match).to.equal(Match.Exact);
-    expect(result.percentageIntersect).to.equal(100);
+  beforeEach(() => {
+    fakeNodeGeocoder = sandbox.stub();
+    // We need to stub node-geocoder, which returns the geocoder constructor directly as
+    // module.exports). Sinon doesn't have a way to stub this (see what it can stub here
+    // https://sinonjs.org/how-to/stub-dependency/), so we need to use proxyquire.
+    ({ comparePolygons } = proxyquire("./methods", {
+      "node-geocoder": fakeNodeGeocoder,
+    }));
   });
 
-  it("should return Match.ExactOffset when oldCoords and newCoords are exactly offset in lng/lat, by less than 1e-4 in each direction", async () => {
-    const newCoords = examplePoly.map(([lng, lat]) => [lng + 9e-5, lat - 3e-6]);
-
-    const result = await comparePolygons(1, 2, examplePoly, newCoords);
-
-    expect(result.match).to.equal(Match.ExactOffset);
-    expect(result.percentageIntersect).to.equal(100);
-    expect(result.offsetStats).to.exist;
+  afterEach(async () => {
+    // Restore all fakes that were created https://sinonjs.org/releases/latest/sandbox/
+    sandbox.restore();
   });
 
-  it("should return Match.Fail when oldCoords and newCoords are exactly offset, but by more than 1e-4", async () => {
-    const newCoords = examplePoly.map(([lng, lat]) => [
-      lng + 1e-5,
-      lat - 1.1e-4,
-    ]);
+  context("oldCoords and newCoords are exact match", () => {
+    it("should return Match.Exact", async () => {
+      const result = await comparePolygons(1, 2, examplePoly, examplePoly);
 
-    const result = await comparePolygons(1, 2, examplePoly, newCoords);
-
-    expect(result.match).to.equal(Match.Fail);
-    expect(result.percentageIntersect).is.lessThan(100);
-    expect(result.offsetStats).to.exist;
+      expect(result.match).to.equal(Match.Exact);
+      expect(result.percentageIntersect).to.equal(100);
+    });
   });
 
-  it("should return Match.HighOverlap when oldCoords and newCoords are over 98% overlapping", async () => {
-    // Move the vertices slightly, in different amounts so that it's not exactly offset
-    const newCoords = examplePoly.map(([lng, lat]) => [
-      lng + Math.random() * 2e-6,
-      lat - Math.random() * 2e-6,
-    ]);
-    newCoords[newCoords.length - 1] = newCoords[0]; // Ensure it's a valid closed polygon
+  context("oldCoords and newCoords are exactly offset", () => {
+    it("should return Match.ExactOffset when offset is less than 1e-4 in each direction lng/lat", async () => {
+      for (let i = 0; i < 10; i++) {
+        const lngOffset = Math.random() * 2e-4 - 1e-4; // Random number between -1e-4 and 1e-4
+        const latOffset = Math.random() * 2e-4 - 1e-4;
 
-    const result = await comparePolygons(1, 2, examplePoly, newCoords);
+        const newCoords = examplePoly.map(([lng, lat]) => [
+          lng + lngOffset,
+          lat + latOffset,
+        ]);
 
-    expect(result.percentageIntersect).is.lessThan(100).and.is.greaterThan(95);
-    expect(result.match).to.equal(Match.HighOverlap);
-    expect(result.offsetStats).to.exist;
-  });
+        const result = await comparePolygons(1, 2, examplePoly, newCoords);
 
-  it("should return Match.Moved when coords have moved but the new location matches with the geocoded title address", async () => {
-    // Stub the geocoder so it returns coordinates that match with exampleFarAwayPoly
-    const exampleFarAwayPolyCenter = [-1.498632, 51.180847];
-    fakeNodeGeocoder.returns({
-      geocode: (address: string) => [
-        {
-          longitude: exampleFarAwayPolyCenter[0],
-          latitude: exampleFarAwayPolyCenter[1],
-        },
-      ],
+        expect(result.match).to.equal(Match.ExactOffset);
+        expect(result.percentageIntersect).to.equal(100);
+        expect(result.offsetStats).to.exist;
+      }
     });
 
-    const result = await comparePolygons(
-      1,
-      2,
-      examplePoly,
-      exampleFarAwayPoly,
-      undefined,
-      "123 Fake St"
-    );
+    it("should return Match.Fail when offset is more than 1e-4 in each direction lng/lat", async () => {
+      for (let i = 0; i < 10; i++) {
+        // Random number with absolute value more than 1e-4 and less than 1e-3
+        const lngOffset =
+          (Math.random() * 9e-4 + 1e-4) * Math.sign(Math.random() - 0.5);
+        const latOffset =
+          (Math.random() * 9e-4 + 1e-4) * Math.sign(Math.random() - 0.5);
 
-    expect(result.match).to.equal(Match.Moved);
-    expect(result.percentageIntersect).to.equal(0);
+        const newCoords = examplePoly.map(([lng, lat]) => [
+          lng + lngOffset,
+          lat + latOffset,
+        ]);
+
+        const result = await comparePolygons(1, 2, examplePoly, newCoords);
+
+        expect(result.match).to.equal(Match.Fail);
+        expect(result.percentageIntersect).is.lessThan(100);
+        expect(result.offsetStats).to.exist;
+      }
+    });
+  });
+
+  context("oldCoords and newCoords are not exactly offset but ", () => {
+    context("oldCoords and newCoords are over 98% overlapping", () => {
+      it("should return Match.HighOverlap", async () => {
+        // Move the vertices slightly, in different amounts so that it's not exactly offset
+        const newCoords = examplePoly.map(([lng, lat]) => [
+          lng + Math.random() * 2e-6,
+          lat - Math.random() * 2e-6,
+        ]);
+        newCoords[newCoords.length - 1] = newCoords[0]; // Ensure it's a valid closed polygon
+
+        const result = await comparePolygons(1, 2, examplePoly, newCoords);
+
+        expect(result.percentageIntersect)
+          .is.lessThan(100)
+          .and.is.greaterThan(95);
+        expect(result.match).to.equal(Match.HighOverlap);
+        expect(result.offsetStats).to.exist;
+      });
+    });
+
+    context("oldCoords and newCoords are overlapping by less than 98%", () => {
+      it("should return Match.Moved when the new location is < 50m from the geocoded title address", async () => {
+        // Random coordinates that are less than 50m away from the center of exampleFarAwayPoly
+        const getRandomCoordinates = () =>
+          turf.destination(
+            exampleFarAwayPolyCenter,
+            Math.random() * 50,
+            Math.random() * 360,
+            { units: "meters" }
+          ).geometry.coordinates;
+
+        // Stub the geocoder so it returns random coordinates each time
+        fakeNodeGeocoder.returns({
+          geocode: (address: string) => {
+            const coords = getRandomCoordinates();
+            return [{ longitude: coords[0], latitude: coords[1] }];
+          },
+        });
+
+        for (let i = 0; i < 10; i++) {
+          const result = await comparePolygons(
+            1,
+            2,
+            examplePoly,
+            exampleFarAwayPoly,
+            undefined,
+            "123 Fake St"
+          );
+
+          expect(result.match).to.equal(Match.Moved);
+        }
+      });
+
+      it("should return Match.Fail when the new location is > 50m from the geocoded title address", async () => {
+        // Random coordinates that are > 50m and < 1km away from the center of exampleFarAwayPoly
+        const getRandomCoordinates = () =>
+          turf.destination(
+            exampleFarAwayPolyCenter,
+            Math.random() * 950 + 50,
+            Math.random() * 360,
+            { units: "meters" }
+          ).geometry.coordinates;
+
+        // Stub the geocoder so it returns random coordinates each time
+        fakeNodeGeocoder.returns({
+          geocode: (address: string) => {
+            const coords = getRandomCoordinates();
+            return [{ longitude: coords[0], latitude: coords[1] }];
+          },
+        });
+
+        for (let i = 0; i < 10; i++) {
+          const result = await comparePolygons(
+            1,
+            2,
+            examplePoly,
+            exampleFarAwayPoly,
+            undefined,
+            "123 Fake St"
+          );
+
+          expect(result.match).to.equal(Match.Fail);
+        }
+      });
+
+      it("should return Match.Fail when there is no associated title address", async () => {
+        fakeNodeGeocoder.returns({
+          geocode: (address: string) => [
+            {
+              longitude: exampleFarAwayPolyCenter[0],
+              latitude: exampleFarAwayPolyCenter[1],
+            },
+          ],
+        });
+
+        const result = await comparePolygons(
+          1,
+          2,
+          examplePoly,
+          exampleFarAwayPoly
+          // no title address
+        );
+
+        expect(result.match).to.equal(Match.Fail);
+      });
+
+      it("should return Match.Fail when geocoding of the title address fails", async () => {
+        fakeNodeGeocoder.returns({
+          geocode: (address: string) => {
+            throw new Error("TEST: failed geocoding");
+          },
+        });
+
+        const result = await comparePolygons(
+          1,
+          2,
+          examplePoly,
+          exampleFarAwayPoly,
+          undefined,
+          "123 Fake St"
+        );
+
+        expect(result.match).to.equal(Match.Fail);
+      });
+    });
   });
 
   // Add more test cases for other scenarios...

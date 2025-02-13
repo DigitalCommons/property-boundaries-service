@@ -269,11 +269,10 @@ export const comparePolygons = async (
           );
           const newPoly = turf.polygon([newCoords]);
           const metersFromAddress = Math.min(
-            ...points.map(
-              (point) =>
-                turf.distance(point, turf.center(newPoly), {
-                  units: "kilometers",
-                }) * 1000
+            ...points.map((point) =>
+              turf.distance(point, turf.center(newPoly), {
+                units: "meters",
+              })
             )
           );
 
