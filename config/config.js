@@ -1,5 +1,5 @@
-/** The config file for Sequelize */
 require("dotenv").config();
+
 module.exports = {
   development: {
     username: process.env.DB_USER,
@@ -10,9 +10,9 @@ module.exports = {
     seederStorage: "sequelize",
   },
   test: {
-    dialect: "sqlite::memory:",
+    dialect: "sqlite",
+    storage: ":memory:",
     seederStorage: "sequelize",
-    logging: false,
   },
   production: {
     username: process.env.DB_USER,
@@ -27,5 +27,6 @@ module.exports = {
       acquire: 30000,
       idle: 10000,
     },
+    logging: false,
   },
 };

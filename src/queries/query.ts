@@ -1,8 +1,16 @@
-import { Sequelize, DataTypes, QueryTypes, Op, WhereOptions } from "sequelize";
+import {
+  Sequelize,
+  DataTypes,
+  QueryTypes,
+  Op,
+  WhereOptions,
+  Options,
+} from "sequelize";
 import { Feature, Polygon } from "geojson";
 import { customAlphabet } from "nanoid";
 import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
 import { Match } from "../pipeline/inspire/match";
+import dbConfig from "../../config/config";
 
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
@@ -12,16 +20,11 @@ const MAX_RETRIES_FOR_A_POLYGON = 2;
 // TODO: move this instance creation and model definitions into a separate 'models' file. Just have
 // callable queries in this file
 
-export const sequelize = new Sequelize(
-  process.env.DB_NAME!,
-  process.env.DB_USER!,
-  process.env.DB_PASSWORD,
-  {
-    host: "localhost",
-    dialect: "mysql",
-    logging: false,
-  }
-);
+const { database, username, password, ...config } = dbConfig[
+  process.env.NODE_ENV || "production"
+] as Options;
+
+export const sequelize = new Sequelize(database, username, password, config);
 
 export const PolygonModel = sequelize.define(
   "Polygon",
@@ -203,15 +206,6 @@ export enum PipelineStatus {
   Stopped = 0,
   Interrupted = -1,
 }
-
-PolygonModel.hasMany(LandOwnershipModel, {
-  foreignKey: "title_no",
-  sourceKey: "title_no",
-});
-LandOwnershipModel.belongsTo(PolygonModel, {
-  foreignKey: "title_no",
-  targetKey: "title_no",
-});
 
 export const deleteAllPendingPolygons = async () => {
   await PendingPolygonModel.truncate({ restartIdentity: true });
