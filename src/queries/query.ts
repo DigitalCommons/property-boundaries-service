@@ -537,10 +537,7 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
   searchArea: string
 ) => {
   // This may grow to a list of matches that we identify later
-  const churchOfEnglandProprietorMatches = [
-    "The Church Commissioners for England",
-    "diocese",
-  ];
+  const churchOfEnglandProprietorMatches = ["church commissioners", "diocese"];
 
   const churchOfEnglandCondition = churchOfEnglandProprietorMatches
     .map(
