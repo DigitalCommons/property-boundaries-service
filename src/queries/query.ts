@@ -516,11 +516,10 @@ export const getLocalAuthorityPolygonsInSearchArea = async (
   LEFT JOIN land_ownerships
   ON land_ownership_polygons.title_no = land_ownerships.title_no
   WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-  AND (proprietor_category_1 = 'Local Authority'
-    OR proprietor_category_2 = 'Local Authority'
-    OR proprietor_category_3 = 'Local Authority'
-    OR proprietor_category_4 = 'Local Authority')
+  AND (proprietor_category_1 = 'Local Authority')
   LIMIT 5000;`;
+  // add these once we show more than 1 proprietor
+  // OR proprietor_category_2 = 'Local Authority' OR proprietor_category_3 = 'Local Authority' OR proprietor_category_4 = 'Local Authority'
 
   return await sequelize.query(query, {
     replacements: [searchArea],
@@ -545,20 +544,20 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
 
   const churchOfEnglandCondition = churchOfEnglandProprietorMatches
     .map(
-      (match) => `AND (
-    proprietor_name_1 LIKE '%${match}%'
-      OR proprietor_name_2 LIKE '%${match}%'
-      OR proprietor_name_3 LIKE '%${match}%'
-      OR proprietor_name_4 LIKE '%${match}%')`
+      (match) => `proprietor_name_1 LIKE '%${match}%'`
+      // uncomment these once we show more than 1 proprietor
+      // OR proprietor_name_2 LIKE '%${match}%'
+      // OR proprietor_name_3 LIKE '%${match}%'
+      // OR proprietor_name_4 LIKE '%${match}%'`
     )
-    .join(" ");
+    .join(" OR ");
 
   const query = `SELECT land_ownerships.*, land_ownership_polygons.*
   FROM land_ownership_polygons
   LEFT JOIN land_ownerships
   ON land_ownership_polygons.title_no = land_ownerships.title_no
   WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-  ${churchOfEnglandCondition}
+  AND (${churchOfEnglandCondition})
   LIMIT 5000;`;
 
   return await sequelize.query(query, {
