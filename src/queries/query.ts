@@ -537,18 +537,19 @@ export const getLocalAuthorityPolygonsInSearchArea = async (
 export const getChurchOfEnglandPolygonsInSearchArea = async (
   searchArea: string
 ) => {
-  // This may grow to a list of proprietors that we identify later
-  const churchOfEnglandProprietorNames = [
+  // This may grow to a list of matches that we identify later
+  const churchOfEnglandProprietorMatches = [
     "The Church Commissioners for England",
+    "diocese",
   ];
 
-  const churchOfEnglandCondition = churchOfEnglandProprietorNames
+  const churchOfEnglandCondition = churchOfEnglandProprietorMatches
     .map(
-      (name) => `AND (
-    proprietor_name_1 = '${name}'
-      OR proprietor_name_2 = '${name}'
-      OR proprietor_name_3 = '${name}'
-      OR proprietor_name_4 = '${name}')`
+      (match) => `AND (
+    proprietor_name_1 LIKE '%${match}%'
+      OR proprietor_name_2 LIKE '%${match}%'
+      OR proprietor_name_3 LIKE '%${match}%'
+      OR proprietor_name_4 LIKE '%${match}%')`
     )
     .join(" ");
 
