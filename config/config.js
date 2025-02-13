@@ -9,11 +9,6 @@ module.exports = {
     dialect: "mysql",
     seederStorage: "sequelize",
   },
-  test: {
-    dialect: "sqlite",
-    storage: ":memory:",
-    seederStorage: "sequelize",
-  },
   production: {
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,

@@ -20,9 +20,9 @@ const MAX_RETRIES_FOR_A_POLYGON = 2;
 // TODO: move this instance creation and model definitions into a separate 'models' file. Just have
 // callable queries in this file
 
-const { database, username, password, ...config } = dbConfig[
-  process.env.NODE_ENV || "production"
-] as Options;
+const { database, username, password, ...config } = (dbConfig[
+  process.env.NODE_ENV
+] ?? dbConfig.production) as Options;
 
 export const sequelize = new Sequelize(database, username, password, config);
 
