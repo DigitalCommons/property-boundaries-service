@@ -134,10 +134,20 @@ async function search(request: Request): Promise<any> {
   return polygons;
 }
 
+type Modify<T, R> = Omit<T, keyof R> & R;
+
 type RunPipelineRequest = Request & {
   query: {
     secret: string;
-  } & PipelineOptions;
+  } & Modify<
+    PipelineOptions,
+    {
+      // query params are parsed by as strings, we need to convert them to booleans ourselves
+      resume?: string;
+      updateBoundaries?: string;
+      recordStats?: string;
+    }
+  >;
 };
 
 const runPipeline = async (
@@ -145,12 +155,18 @@ const runPipeline = async (
   h: ResponseToolkit
 ): Promise<ResponseObject> => {
   const { secret, ...options } = request.query;
+  console.log(options);
 
   if (!secret || secret !== process.env.SECRET) {
     return h.response("missing or incorrect secret").code(403);
   }
 
-  const uniqueKey = await triggerPipelineRun(options);
+  const uniqueKey = await triggerPipelineRun({
+    ...options,
+    resume: options.resume === "true",
+    updateBoundaries: options.updateBoundaries === "true",
+    recordStats: options.recordStats === "true",
+  });
   const msg = uniqueKey
     ? `Pipeline ${uniqueKey} has started`
     : "Pipeline already running";

@@ -463,13 +463,11 @@ const analyseNewInspireId = async (inspireId: number) => {
 export const analyseAllPendingPolygons = async (
   options: any
 ): Promise<string> => {
-  const resume = options.resume === "true";
+  const resume = options.resume;
   // Max number of pending polygons we will analyse, default to all
   const maxPolygons: number = options.maxPolygons || 1e9;
-  // Whether to overwrite existing boundary data with pending polygons that we accept, default no.
-  const updateBoundaries: boolean = options.updateBoundaries === "true";
-  // Whether to record detailed stats for each polygon match, default no.
-  recordStats = options.recordStats === "true";
+  // Whether to record detailed stats for each polygon match.
+  recordStats = options.recordStats;
 
   await resetAnalysis();
   if (!resume) {
@@ -620,7 +618,7 @@ export const analyseAllPendingPolygons = async (
     );
   }
 
-  if (updateBoundaries) {
+  if (options.updateBoundaries) {
     logger.info("Updating main land_ownership_polygons table");
     await deleteAllPolygonsPendingDeletion();
     await insertAllAcceptedPendingPolygons();

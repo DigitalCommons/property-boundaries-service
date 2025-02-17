@@ -194,8 +194,7 @@ const gmlToPendingInspirePolygons = async (council: string) => {
  * 'pending_inspire_polygons' table in the DB, ready for analysis.
  */
 export const downloadAndBackupInspirePolygons = async (options: any) => {
-  const resume = options.resume === "true";
-  const afterCouncil: string | undefined = resume
+  const afterCouncil: string | undefined = options.resume
     ? (await getLastPipelineRun())?.last_council_downloaded || undefined
     : options.afterCouncil;
   // Download the data for the first <maxCouncils> councils after <afterCouncil>. Default to all.
@@ -223,7 +222,7 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
     });
   }
 
-  if (!resume) {
+  if (!options.resume) {
     // delete pending polygons in the database before we start downloading new data, to ensure there
     // is disk space
     logger.info("Deleting all pending polygons in the database");

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
+import qs from "qs";
 import routes from "./routes/index";
 import { resumePipelineRunIfInterrupted } from "./pipeline/run";
 
@@ -8,6 +9,7 @@ export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
   host: "0.0.0.0",
   debug: { log: ["error"], request: ["error"] },
+  query: { parser: (query) => qs.parse(query) },
 });
 
 function index(request: Request): string {

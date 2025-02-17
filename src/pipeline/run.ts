@@ -25,16 +25,15 @@ type TaskOptions = {
   afterCouncil?: string; // Only process councils after this one, alphabetically
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process
-  recordStats?: string; // If 'true', record detailed stats about each polygon match and save in stats.json
-  updateBoundaries?: string; // If 'true', update the boundaries in the main DB table after analysis
-  resume?: string; // If 'true', resume from where we left off in the previous run
+  recordStats: boolean; // If true, record detailed stats about each polygon match and save in stats.json
+  updateBoundaries: boolean; // If true, update the boundaries in the main DB table after analysis
+  resume: boolean; // If true, resume from where we left off in the previous run
 };
 
-// TODO: use a proper boolean type for resume, using Hapi query.parser (see https://hapi.dev/api/?v=21.3.3)
 export type PipelineOptions = {
   startAtTask?: string; // Start from this task
   stopBeforeTask?: string; // Stop before this task
-  resume?: string; // If 'true', resume from where we left off in the previous run (ignoring startAtTask)
+  resume: boolean; // If true, resume from where we left off in the previous run (ignoring startAtTask)
 } & TaskOptions;
 
 /** The pipeline runs these methods in this order */
@@ -94,7 +93,7 @@ const runPipeline = async (options: PipelineOptions) => {
       stopBeforeTaskIndex = tasks.length;
     }
 
-    if (taskOptions.resume === "true") {
+    if (taskOptions.resume) {
       // Can only resume downloadInspire task if the latest pipeline run date is more recent than
       // the latest INSPIRE publish date, to ensure we have data consistency
       const latestPipelineRun = await getLastPipelineRun();
@@ -126,7 +125,7 @@ const runPipeline = async (options: PipelineOptions) => {
         );
       }
     } else {
-      taskOptions.resume = "false";
+      taskOptions.resume = false;
     }
 
     logger.info(
