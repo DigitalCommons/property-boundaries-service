@@ -538,19 +538,25 @@ export const analyseAllPendingPolygons = async (
 
   try {
     fs.mkdirSync(analysisPath, { recursive: true });
-    fs.writeFileSync(`${analysisPath}/ids.json`, JSON.stringify(allIdsArrays));
-    fs.writeFileSync(`${analysisPath}/stats.json`, JSON.stringify(allStats));
+    fs.writeFileSync(
+      `${analysisPath}/ids.json`,
+      JSON.stringify(allIdsArrays, null, "  ")
+    );
+    fs.writeFileSync(
+      `${analysisPath}/stats.json`,
+      JSON.stringify(allStats, null, "  ")
+    );
     fs.writeFileSync(
       `${analysisPath}/merges-and-segments.json`,
-      JSON.stringify(allMergeAndSegmentInstances)
+      JSON.stringify(allMergeAndSegmentInstances, null, "  ")
     );
     fs.writeFileSync(
       `${analysisPath}/failed-matches.json`,
-      JSON.stringify(allFailedMatchesInfo)
+      JSON.stringify(allFailedMatchesInfo, null, "  ")
     );
     fs.writeFileSync(
       `${analysisPath}/inspire-id-changes.json`,
-      JSON.stringify(allInspireIdChanges)
+      JSON.stringify(allInspireIdChanges, null, "  ")
     );
   } catch (err) {
     logger.error(err, "Error writing analysis files");
