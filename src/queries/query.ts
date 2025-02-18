@@ -207,6 +207,15 @@ export enum PipelineStatus {
   Interrupted = -1,
 }
 
+PolygonModel.hasMany(LandOwnershipModel, {
+  foreignKey: "title_no",
+  sourceKey: "title_no",
+});
+LandOwnershipModel.belongsTo(PolygonModel, {
+  foreignKey: "title_no",
+  targetKey: "title_no",
+});
+
 export const deleteAllPendingPolygons = async () => {
   await PendingPolygonModel.truncate({ restartIdentity: true });
 };
