@@ -2,16 +2,16 @@
 
 # Run this script locally, to ssh onto a remote server and run the install.sh script, to
 # install the app for the first time. It also sets up a reverse proxy so the app is available at
-# (dev|staging).propertyboundaries.landexplorer.coop/api
+# https://<domain>/api
 
 # General usage:
 # 
-#       bash scripts/install-remote.sh [-u <app user>] [-b <branch, default main)>] [<ssh login user>@<hostname>]
+#       bash scripts/install-remote.sh [-u <app user>] [-b <branch, default main)>] [-d <domain>] [<ssh login user>@<hostname>]
 # 
 # Example usage, to login to root user on dev-2 (for which we have ssh access), and install the app 
 # for the aubergine user:
 # 
-#       bash scripts/install-remote.sh -u aubergine -b development root@dev-2.digitalcommons.coop
+#       bash scripts/install-remote.sh -u aubergine -b development -d propertyboundaries.landexplorer.coop root@dev-2.digitalcommons.coop
 
 set -e
 
@@ -26,6 +26,9 @@ do
             ;;
         b)
 	    branch="$OPTARG"
+            ;;
+        d)
+	    domain="$OPTARG"
             ;;
          ?)
          printf "invalid option '$OPTION', stopping\n" >&2
@@ -43,9 +46,15 @@ login_user_hostname=$1
 # remove the positional argument
 shift 1
 
-if [ -z "$app_user" ] || [ -z "$login_user_hostname" ]; then
-        echo 'Missing -u <app user> argument' >&2
-        exit 1
+if [ -z "$app_user" ] ; then
+    echo 'Missing -u <app user> argument' >&2
+    exit 1
+elif [[ -z "$login_user_hostname" ]]; then
+    echo 'Missing <ssh login user>@<hostname> argument' >&2
+    exit 1
+elif [[ -z "$domain" ]]; then
+    echo 'Missing -d <domain> argument' >&2
+    exit 1
 fi
 
 if [ -n "$*" ]; then
@@ -73,5 +82,5 @@ ssh $login_user_hostname "rm ~$app_user/install.sh"
 
 # Set up reverse proxy
 # Note this requires the login user to have root or www-data permissions
-ssh $login_user_hostname "rm -f /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"
-echo -e "ProxyPass /api http://localhost:4000\nProxyPassReverse /api http://localhost:4000" | ssh $login_user_hostname -T "cat > /var/www/vhosts/propertyboundaries.landexplorer.coop/custom.conf"
+ssh $login_user_hostname "rm -f /var/www/vhosts/$domain/custom.conf"
+echo -e "ProxyPass /api http://localhost:4000\nProxyPassReverse /api http://localhost:4000" | ssh $login_user_hostname -T "cat > /var/www/vhosts/$domain/custom.conf"
