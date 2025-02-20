@@ -677,14 +677,24 @@ export const markPolygonDeletion = async (poly_id: number) => {
  * Insert all accepted pending polygons into the main land_ownership_polygons table
  */
 export const insertAllAcceptedPendingPolygons = async () => {
-  const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
+  // Insert in chunks so we don't hit MySQL buffer limit
+  const lastPendingPolygon: any = await PendingPolygonModel.findOne({
+    order: [["id", "DESC"]],
+    raw: true,
+  });
+
+  const chunkSize = 100000;
+  for (let i = 0; i <= lastPendingPolygon.id; i += chunkSize) {
+    const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
     SELECT p.poly_id, p.geom
     FROM pending_inspire_polygons p WHERE accepted = true
+      AND id >= ${i} AND id < ${i + chunkSize}
     ON DUPLICATE KEY UPDATE geom = p.geom;`;
 
-  return await sequelize.query(query, {
-    type: QueryTypes.INSERT,
-  });
+    await sequelize.query(query, {
+      type: QueryTypes.INSERT,
+    });
+  }
 };
 
 /**
