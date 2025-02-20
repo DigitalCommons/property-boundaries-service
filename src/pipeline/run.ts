@@ -157,7 +157,11 @@ const runPipeline = async (options: PipelineOptions) => {
     console.log(msg);
 
     await notifyMatrix(
-      `<p>✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. Time elapsed: ${timeElapsedString}</p>\n<pre>${summaryTable}</pre>`,
+      `<p>✅ Successful ownership + INSPIRE pipeline ${pipelineKey}. ${
+        taskOptions.updateBoundaries
+          ? "Updates are written into the main DB table and visible in production layers."
+          : "Updates are visible in the pending polygons layer."
+      } Time elapsed: ${timeElapsedString}</p>\n<pre>${summaryTable}</pre>`,
       true
     );
   } catch (err) {
