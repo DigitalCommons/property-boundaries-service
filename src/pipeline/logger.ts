@@ -20,6 +20,7 @@ export const initLogger = (pipelineKey?: string) => {
           ? 1 // log to stdout
           : `logs/${new Date().toISOString().split(".")[0]}_${pipelineKey}.log`,
       sync: true,
+      mode: 0o600, // read/write by app user only
     })
   );
 
