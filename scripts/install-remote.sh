@@ -2,7 +2,8 @@
 
 # Run this script locally, to ssh onto a remote server and run the install.sh script, to
 # install the app for the first time. It also sets up a reverse proxy so the app is available at
-# https://<domain>/api
+# https://<domain>/api, and ensures GDAL has the correct grid shift file for the app's pipeline
+# functionality.
 
 # General usage:
 # 
@@ -84,3 +85,8 @@ ssh $login_user_hostname "rm ~$app_user/install.sh"
 # Note this requires the login user to have root or www-data permissions
 ssh $login_user_hostname "rm -f /var/www/vhosts/$domain/custom.conf"
 echo -e "ProxyPass /api http://localhost:4000\nProxyPassReverse /api http://localhost:4000" | ssh $login_user_hostname -T "cat > /var/www/vhosts/$domain/custom.conf"
+
+# For GDAL to apply an accurate transformation from EPSG:27700 (the format of the INSPIRE data) to
+# EPSG:4326 (within < 1m), it requires the OSTN15_NTv2_OSGBtoETRS.gsb grid shift file. Copy it to
+# the remote server.
+scp scripts/OSTN15_NTv2_OSGBtoETRS.gsb $login_user_hostname:/usr/share/proj/OSTN15_NTv2_OSGBtoETRS.gsb

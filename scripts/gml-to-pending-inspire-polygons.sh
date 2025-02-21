@@ -24,9 +24,9 @@ sed -i -e '0,/ xsi:schemaLocation="[^"]*"/ s///' "$1"
 # Delete temp sqlite file if it exists
 rm -f temp.sqlite
 
-# Transform the GML data into the EPSG:4326 projection and write to a SQLite database so we can
-# manipulate the data
-ogr2ogr -f SQLite -skipfailures -nln polygons -t_srs EPSG:4326 temp.sqlite $1
+# Transform the GML data into the EPSG:4326 (WGS84) projection and write to a SQLite database so we
+# can manipulate the data
+ogr2ogr -f SQLite -skipfailures -nln polygons -t_srs "+proj=longlat +datum=WGS84 +nadgrids=@OSTN15_NTv2_OSGBtoETRS.gsb" temp.sqlite $1
 
 # Add a council column
 ogrinfo temp.sqlite -sql "ALTER TABLE polygons ADD COLUMN council varchar(255)"
