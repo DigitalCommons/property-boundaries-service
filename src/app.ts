@@ -4,6 +4,7 @@ import { Server } from "@hapi/hapi";
 import qs from "qs";
 import routes from "./routes/index";
 import { resumePipelineRunIfInterrupted } from "./pipeline/run";
+import { createUnregisteredLayer } from "./pipeline/inspire/unregistered/create-unregistered-layer";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
@@ -51,6 +52,8 @@ async function start() {
   } catch (error) {
     console.error("Failed to resume interrupted pipeline run:", error?.message);
   }
+
+  createUnregisteredLayer();
 }
 
 process.on("unhandledRejection", (err) => {

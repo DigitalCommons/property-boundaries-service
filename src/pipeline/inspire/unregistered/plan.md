@@ -1,0 +1,8 @@
+Based on Allison's method:
+
+1. Create one big multi-polygon from union of England and Wales, from ONS dataset
+1. Loop over every INSPIRE polygon in land_ownership_polygons and remove its area from the big multi-polygon.
+1. Remove roads, rail and water from the big multi-polygon, by selecting them from the OSMM polygons layer:
+   `theme IN( 'Buildings,Rail', 'Buildings,Roads Tracks And Paths', 'Heritage And Antiquities,Water', 'Land,Rail', 'Land,Rail,Structures', 'Land,Roads Tracks And Paths,Structures', 'Land,Water', 'Rail', 'Rail,Roads Tracks And Paths', 'Rail,Structures', 'Roads Tracks And Paths', 'Roads Tracks And Paths,Structures', 'Roads Tracks And Paths,Water', 'Structures,Water', 'Water', 'Water,Land', 'Water,Structures') OR descriptiv IN( 'Building,Rail', 'Building,Road Or Track', 'General Surface,Inland Water', 'General Surface,Rail,Structure', 'General Surface,Road Or Track', 'General Surface,Roadside,Structure', 'General Surface,Tidal Water' , 'Inland Water', 'Inland Water,Historic Interest', 'Inland Water,Natural Environment', 'Inland Water,Road Or Track', 'Inland Water,Structure', 'Natural Environment,Rail', 'Natural Environment,Rail,Structure', 'Natural Environment,Road Or Track', 'Natural Environment,Roadside', 'Natural Environment,Roadside,Structure', 'Rail', 'Rail,Road Or Track', 'Rail,Structure', 'Road Or Track', 'Road Or Track,General Feature', 'Road Or Track,Structure', 'Roadside', 'Roadside,Structure', 'Structure,Inland Water',  'Landform,Rail',  'Landform,Road Or Track' ) OR descript_1 IN('Swimming Pool',  'Well', 'Fountain')`.
+1. TODO: check is Fountain in descript_1?
+1. Eliminate slivers (polygon areas within the multi-polygon of less than 2m2, or using a negative buffer of ~1m?)
