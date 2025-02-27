@@ -20,8 +20,9 @@ export const createUnregisteredLayer = async () => {
     );
 
   // TODO: Import the GeoJSON file of UK country boundaries and then take union of England and Wales
-  // features For now just take a sample bbox area, which matches with the sample OSMM data (in
-  // Exeter)
+  // features (countries BFC dataset https://geoportal.statistics.gov.uk/datasets/d4f6b6bdf58a45b093c0c189bdf92e9d_0/explore)
+
+  // For now just take a sample bbox area, which matches with the sample OSMM data (in Exeter)
   const sampleArea = turf.bboxPolygon([-3.55703, 50.70152, -3.49235, 50.74353]);
   console.log("Area size m2: ", turf.area(sampleArea));
 

@@ -10,3 +10,7 @@ temp.sqlite
 
 # mkdocs
 site
+
+# temp data for unregistered layer spike.
+# TODO remove this
+*.geojson
