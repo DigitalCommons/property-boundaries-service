@@ -6,7 +6,7 @@ analysis
 logs/*
 .env
 .DS_Store
-temp.sqlite
+temp.sqlite*
 
 # mkdocs
 site

@@ -42,5 +42,5 @@ ogr2ogr -f MySQL -append -skipfailures -nln pending_inspire_polygons \
   "MySQL:$DB_NAME,user=$DB_USER,password=$DB_PASSWORD" temp.sqlite -unsetFid \
   -sql 'SELECT INSPIREID AS poly_id, geometry AS geom, council FROM polygons'
 
-# Delete the temp sqlite file
-rm temp.sqlite
+# Delete the temp sqlite file (and any associated rollback files)
+rm temp.sqlite*
