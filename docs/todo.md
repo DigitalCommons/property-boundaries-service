@@ -1,13 +1,8 @@
-# TODO (roughly in priority order)
+# TODO
+
+(Roughly in priority order)
 
 _Remove items from this file once a GitHub issues are created for them._
-
-- Split pipeline runs from the main app to reduce downtime:
-
-  There are some instances during the pipeline that we hit OOMEs due to [a bug](https://github.com/Turfjs/turf/issues/2833) in the turf dependency. This may increase in frequency when we add more complex matching code. When the app reaches the Node heap size limit, it takes a few minutes for PM2 to restart it, during which time the whole PBS is down, impacting the LX property layers. Usually, it doesn't seem to crash the whole server, just the app.
-
-    - An option would be to slit the codebase into 2 distinct apps within a monorepo, similar to `mykomap-monolith`. A lot of code, such as Sequelize queries, is shared between the pipeline and PBS though, so this would have to be in its own 'common' library that both apps depend on. Note each app woudl still need to access a common database.
-    - I think a simpler option would be to keep one app, but have slightly run configurations (and maybe build configurations, to reduce the size of the bundled code) so that the app can run in a 'service' or 'pipeline' state, with the API route to trigger the pipeline only exposed on the latter app. And then we could deploy each configuration of the app on two different app users on the DCC servers.
 
 - Fully spec the desired behaviour of the pipeline, in particular the matching algorithm for INSPIRE polygons, and add unit tests to match this spec
 
