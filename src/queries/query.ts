@@ -53,7 +53,7 @@ export const PolygonModel = sequelize.define(
   },
   {
     tableName: "land_ownership_polygons",
-  }
+  },
 );
 
 export const PendingPolygonModel = sequelize.define(
@@ -89,7 +89,7 @@ export const PendingPolygonModel = sequelize.define(
   },
   {
     tableName: "pending_inspire_polygons",
-  }
+  },
 );
 
 export const PendingDeletionModel = sequelize.define(
@@ -111,7 +111,7 @@ export const PendingDeletionModel = sequelize.define(
     tableName: "pending_polygon_deletions",
     createdAt: false,
     updatedAt: false,
-  }
+  },
 );
 
 export const LandOwnershipModel = sequelize.define(
@@ -168,7 +168,7 @@ export const LandOwnershipModel = sequelize.define(
   },
   {
     tableName: "land_ownerships",
-  }
+  },
 );
 
 export const PipelineRunModel = sequelize.define(
@@ -198,7 +198,7 @@ export const PipelineRunModel = sequelize.define(
     tableName: "pipeline_runs",
     createdAt: "startedAt",
     updatedAt: false,
-  }
+  },
 );
 
 export enum PipelineStatus {
@@ -229,7 +229,7 @@ export const resetAllPendingPolygons = async () => {
     {
       type: QueryTypes.UPDATE,
       benchmark: true,
-    }
+    },
   );
   await PendingDeletionModel.truncate({ restartIdentity: true });
 };
@@ -237,7 +237,7 @@ export const resetAllPendingPolygons = async () => {
 export const bulkCreatePendingPolygons = async (
   polygonGeojsonFeatures: Feature<Polygon>[],
   council: string,
-  logging = false
+  logging = false,
 ) => {
   const numFeatures = polygonGeojsonFeatures.length;
   const parsedPolygonValues = polygonGeojsonFeatures.map((feature) => [
@@ -268,6 +268,7 @@ export type PendingPolygon = {
   poly_id: number;
   geom: Polygon;
   council: string;
+  matchType: Match | null;
 };
 
 /**
@@ -279,7 +280,7 @@ export type PendingPolygon = {
  * since this causes issues in the earlier download step when inserting data from each council.
  */
 export const getNextPendingPolygon = async (
-  minId: number
+  minId: number,
 ): Promise<PendingPolygon> => {
   const polygon: any = await PendingPolygonModel.findOne({
     where: { id: { [Op.gte]: minId } },
@@ -299,6 +300,7 @@ export const getNextPendingPolygon = async (
         poly_id: polygon.poly_id,
         geom: polygon.geom,
         council: polygon.council,
+        matchType: polygon.match_type,
       }
     : null;
 };
@@ -306,7 +308,7 @@ export const getNextPendingPolygon = async (
 export const createOrUpdateLandOwnership = async (
   ownership,
   overseas: boolean,
-  logging = false
+  logging = false,
 ) => {
   await bulkCreateOrUpdateLandOwnerships([ownership], overseas, logging);
 };
@@ -322,7 +324,7 @@ export const createOrUpdateLandOwnership = async (
 export const bulkCreateOrUpdateLandOwnerships = async (
   ownerships: any[],
   overseas: boolean,
-  logging = false
+  logging = false,
 ) => {
   const parsedOwnerships = ownerships.map((ownership) => ({
     title_no: ownership["Title Number"],
@@ -416,7 +418,7 @@ export const bulkCreateOrUpdateLandOwnerships = async (
 
 export const bulkDeleteLandOwnerships = async (
   titleNumbers: string[],
-  logging = false
+  logging = false,
 ) => {
   await LandOwnershipModel.destroy({
     logging: logging ? console.log : false,
@@ -458,7 +460,7 @@ export async function getLandOwnership(title_no: string) {
 export const getPolygonsByIdInSearchArea = async (
   poly_ids?: number[],
   searchArea?: string,
-  includeLeasholds = true
+  includeLeasholds = true,
 ) => {
   const noLeaseholdsCondition =
     includeLeasholds === false
@@ -518,7 +520,7 @@ export const getPolygonsByIdInSearchArea = async (
  * @param searchArea a stringified GeoJSON Polygon geometry
  */
 export const getLocalAuthorityPolygonsInSearchArea = async (
-  searchArea: string
+  searchArea: string,
 ) => {
   const query = `SELECT land_ownerships.*, land_ownership_polygons.*
   FROM land_ownership_polygons
@@ -543,14 +545,14 @@ export const getLocalAuthorityPolygonsInSearchArea = async (
  * @param searchArea a stringified GeoJSON Polygon geometry
  */
 export const getChurchOfEnglandPolygonsInSearchArea = async (
-  searchArea: string
+  searchArea: string,
 ) => {
   // This may grow to a list of matches that we identify later
   const churchOfEnglandProprietorMatches = ["church commissioners", "diocese"];
 
   const churchOfEnglandCondition = churchOfEnglandProprietorMatches
     .map(
-      (match) => `proprietor_name_1 LIKE '%${match}%'`
+      (match) => `proprietor_name_1 LIKE '%${match}%'`,
       // uncomment these once we show more than 1 proprietor
       // OR proprietor_name_2 LIKE '%${match}%'
       // OR proprietor_name_3 LIKE '%${match}%'
@@ -588,7 +590,7 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
  */
 export const getPendingPolygonsInSearchArea = async (
   searchArea: string,
-  acceptedOnly = false
+  acceptedOnly = false,
 ) => {
   const acceptedCondition = acceptedOnly ? "AND accepted = true" : "";
   const query = `SELECT *, IF(accepted, 'Accepted', '') as tenure
@@ -607,7 +609,7 @@ export const getPendingPolygonsInSearchArea = async (
  * Return pending polygon with poly_id if it exists, or null.
  */
 export const getPendingPolygon = async (
-  poly_id: number
+  poly_id: number,
 ): Promise<PendingPolygon> => {
   const polygon: any = await PendingPolygonModel.findOne({
     where: { poly_id },
@@ -620,6 +622,7 @@ export const getPendingPolygon = async (
         poly_id: polygon.poly_id,
         geom: polygon.geom,
         council: polygon.council,
+        matchType: polygon.match_type,
       }
     : null;
 };
@@ -628,9 +631,9 @@ export const getPendingPolygon = async (
  * Check whether a pending polygon with the given poly_id exists.
  */
 export const pendingPolygonExists = async (
-  poly_id: number
+  poly_id: number,
 ): Promise<boolean> => {
-  const polygon = await PendingPolygonModel.findOne({ where: { poly_id } });
+  const polygon = await getPendingPolygon(poly_id);
   return polygon !== null;
 };
 
@@ -644,7 +647,7 @@ export const acceptPendingPolygon = async (poly_id: number, match: Match) => {
       where: {
         poly_id,
       },
-    }
+    },
   );
 };
 
@@ -658,7 +661,7 @@ export const rejectPendingPolygon = async (poly_id: number) => {
       where: {
         poly_id,
       },
-    }
+    },
   );
 };
 
@@ -777,7 +780,7 @@ export const stopPipelineRun = async () => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -789,7 +792,7 @@ export const markPipelineRunInterrupted = async (key: string) => {
       where: {
         unique_key: key,
       },
-    }
+    },
   );
 };
 
@@ -815,7 +818,7 @@ export const setPipelineLatestOwnershipData = async (date: string) => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -842,7 +845,7 @@ export const setPipelineLatestInspireData = async (date: string) => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -875,7 +878,7 @@ export const hitMaxRetriesForAPolygon = async (): Promise<boolean> => {
       run.status === PipelineStatus.Interrupted &&
       run.last_task === "analyseInspire" &&
       run.last_poly_analysed &&
-      run.last_poly_analysed === lastPipelineRuns[0].last_poly_analysed
+      run.last_poly_analysed === lastPipelineRuns[0].last_poly_analysed,
   );
 };
 
@@ -889,7 +892,7 @@ export const setPipelineLastTask = async (task: string) => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -903,7 +906,7 @@ export const setPipelineLastCouncilDownloaded = async (council: string) => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -917,7 +920,7 @@ export const setPipelineLastPolyAnalysed = async (id: number) => {
       where: {
         unique_key: getRunningPipelineKey(),
       },
-    }
+    },
   );
 };
 
@@ -929,7 +932,7 @@ export const setPipelineLastPolyAnalysed = async (id: number) => {
  */
 export const getPendingPolygonCount = async (
   upToId?: number,
-  matchType?: Match
+  matchType?: Match,
 ): Promise<number> => {
   const where: WhereOptions = {};
   if (upToId !== undefined) {
