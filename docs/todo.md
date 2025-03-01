@@ -6,23 +6,22 @@ _Remove items from this file once a GitHub issues are created for them._
 
   There are some instances during the pipeline that we hit OOMEs due to [a bug](https://github.com/Turfjs/turf/issues/2833) in the turf dependency. This may increase in frequency when we add more complex matching code. When the app reaches the Node heap size limit, it takes a few minutes for PM2 to restart it, during which time the whole PBS is down, impacting the LX property layers. Usually, it doesn't seem to crash the whole server, just the app.
 
-  - An option would be to slit the codebase into 2 distinct apps within a monorepo, similar to `mykomap-monolith`. A lot of code, such as Sequelize queries, is shared between the pipeline and PBS though, so this would have to be in its own 'common' library that both apps depend on. Note each app woudl still need to access a common database.
-  - I think a simpler option would be to keep one app, but have slightly run configurations (and maybe build configurations, to reduce the size of the bundled code) so that the app can run in a 'service' or 'pipeline' state, with the API route to trigger the pipeline only exposed on the latter app. And then we could deploy each configuration of the app on two different app users on the DCC servers.
+    - An option would be to slit the codebase into 2 distinct apps within a monorepo, similar to `mykomap-monolith`. A lot of code, such as Sequelize queries, is shared between the pipeline and PBS though, so this would have to be in its own 'common' library that both apps depend on. Note each app woudl still need to access a common database.
+    - I think a simpler option would be to keep one app, but have slightly run configurations (and maybe build configurations, to reduce the size of the bundled code) so that the app can run in a 'service' or 'pipeline' state, with the API route to trigger the pipeline only exposed on the latter app. And then we could deploy each configuration of the app on two different app users on the DCC servers.
 
-- Fully spec the desired behaviour of the pipeline, in particular the matching algorithm for INSPIRE
-  polygons, and add unit tests to match this spec
+- Fully spec the desired behaviour of the pipeline, in particular the matching algorithm for INSPIRE polygons, and add unit tests to match this spec
 
-  - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Automated-Testing#unit-tests), with UTs for the currently
+    - Mocha is set up for this. I made a methods.test.ts file, using GitHub Copilot, inspired by the [Land Explorer backend](https://github.com/DigitalCommons/land-explorer-front-end/wiki/Automated-Testing#unit-tests), with UTs for the currently
     implemented matching algorithm.
-  - We'll probably need to eventually modularise some of the long functions in the pipeline (e.g. the `comparePolygons` function) to make unit testing easier, and this will make the code more understandable too.
-  - Maybe we need to plot some different polygon scenarios that can be visualised and used for different test cases in UTs.
+    - We'll probably need to eventually modularise some of the long functions in the pipeline (e.g. the `comparePolygons` function) to make unit testing easier, and this will make the code more understandable too.
+    - Maybe we need to plot some different polygon scenarios that can be visualised and used for different test cases in UTs.
 
 - Once we have the above spec, systematically address parts of the pipeline that we want to improve. This will involve:
 
-  1. manually looking at the most common failed matches
-  1. adding to the research of cases in [pipeline.md](./pipeline.md#different-cases-of-data-changing) and identifying gaps in our algorithm
-  1. stepping back to think about who will be using the app and which matches are most valuable for us to prioritise in order to preserve
-     as much useful data as we can. Think about whether we need any other data sources to achieve this
+    1. manually looking at the most common failed matches
+    1. adding to the research of cases in [pipeline.md](./pipeline.md#different-cases-of-data-changing) and identifying gaps in our algorithm
+    1. stepping back to think about who will be using the app and which matches are most valuable for us to prioritise in order to preserve
+        as much useful data as we can. Think about whether we need any other data sources to achieve this
 
 - Add analytics and do profiling to find where the bottlenecks are in analysis script, so they can be optimised. For each council, the script currently takes about 5 mins to download and transform the data and 5 mins to do a simply analysis of all the polygons (skipping more complicated analysis of segmentations/merges). Tasks could maybe be parallelised using worker threads (see https://nodejs.org/api/worker_threads.html). Also decide which bits of the algorithm are most needed and remove some computation that isn't necessary. And allow pipelines to resume automatically if something goes wrong e.g. the server reboots, which is fairly likely since the pipeline is going to take a long time even if we optimise it really well (it's processing a huge amount of data!). We could maybe use Glitchtip (which we use for MM) for error and performamce tracking.
 

@@ -9,7 +9,7 @@ All of the pipeline-related code lives in the `src/pipeline` directory.
 
 ## Overview of the data
 
-We store data in 2 databse tables:
+We store data in 2 database tables:
 
 - `land_ownerships` -
   each row in this table links a 'title' (i.e. a title deed for a single property in the Land Registry)
@@ -48,42 +48,42 @@ Here is a list of cases (W.I.P.):
 
 - The ownership of a title changes in one of the company ownership datasets
 
-  - Since a Title Number is unique to that property, we can assume that any polygons linked to that
+    - Since a Title Number is unique to that property, we can assume that any polygons linked to that
     title are now owned by the new company.
 
 - A title is removed from the company ownership datasets.
 
-  - This indicates that the title has been sold to a private individual. If the title had linked
+    - This indicates that the title has been sold to a private individual. If the title had linked
     polygon(s) which are unchanged, we can keep the link to the title number. There's a chance it
     will be sold to a company in the future, so more ownership info will be visible again.
-  - _OR_ if it was a freehold, the lease may have been closed by a [merger](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if the company also owns the freehold. We don't have
+    - _OR_ if it was a freehold, the lease may have been closed by a [merger](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if the company also owns the freehold. We don't have
     enough info to tell if this happened, but may be able to use the [Registered Leases](https://use-land-property-data.service.gov.uk/datasets/leases/tech-spec) or [Price Paid Data](https://www.gov.uk/guidance/about-the-price-paid-data) datasets
     in the future to help with this.
 
 - An INSPIRE polygon's boundary changes very slightly
 
-  - This indicates that there has been a new survey by the local authority and any freehold title
+    - This indicates that there has been a new survey by the local authority and any freehold title
     will still be linked to that property, so we can go ahead and alter the polygon's coordinates in our
     database.
-  - Since INSPIRE doesn't include leasehold polygons, we should maybe also alter polygons linked
+    - Since INSPIRE doesn't include leasehold polygons, we should maybe also alter polygons linked
     to leaseholds within the same boundary, especially ones that cover exact the same area (**TODO**)
 
 - An INSPIRE polygon's boundary moves a larger distance
 
-  - This is unexpected, since usually a new INSPIRE ID would just be made. We should examine these
+    - This is unexpected, since usually a new INSPIRE ID would just be made. We should examine these
     instances manually (**TODO**). If the polygon has an associated company-owned title, we can geocode the title's
     address and check whether the new location matches.
 
 - An INSPIRE polygon splits into two or more parts
 
-  - When freehold titles are split, the owner will usually be selling off a portion of the property
+    - When freehold titles are split, the owner will usually be selling off a portion of the property
     (otherwise it usually makes more sense for them to split into leaseholds). More info [here](https://lawdit.co.uk/readingroom/splitting-your-propertys-freehold-title) and [here](https://customerhelp.landregistry.gov.uk/forums/register-and-title-plan/f7bd9ec5-cc7c-ef11-a4e5-6045bdfc7a75). The portion that they keep will retain the old Title Number
     and the new segment of land will be assigned a new Title Number. So maybe when this happens, we
     can check for new company-owned titles with the same or adjacent address and link them (**TODO**).
 
 - Two or more INSPIRE polygons merge
 
-  - Freeholds can be [amalgamated](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if they're owned by the same proprietor. Usually, the largest property's Title Number will be chosen for the new amalgamated title - see section 14.7.1 of [this guide](https://rosdev.atlassian.net/wiki/spaces/79RM/pages/76155396/L14+Amalgamation+and+Absorption+Guide). We can try to cross-reference with the company-owned titles data to see if this is the case. If the titles were company-owned, we'll hopefully see
+    - Freeholds can be [amalgamated](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if they're owned by the same proprietor. Usually, the largest property's Title Number will be chosen for the new amalgamated title - see section 14.7.1 of [this guide](https://rosdev.atlassian.net/wiki/spaces/79RM/pages/76155396/L14+Amalgamation+and+Absorption+Guide). We can try to cross-reference with the company-owned titles data to see if this is the case. If the titles were company-owned, we'll hopefully see
     that all amalgamated titles apart from one are removed from the dataset, and that the old ones had the same proprietor (**TODO**).
 
 ## Stages of the pipeline
@@ -93,37 +93,37 @@ run.ts](https://github.com/DigitalCommons/property-boundaries-service/blob/devel
 
 It runs these tasks in sequential order:
 
-1. `ownerships`: This task updates the `land_ownerships` table (see above), using the latest company
-   ownership data. This stage is quite fast and non-destructive, since the government API provides all
-   historical data since Nov 2017, so the new data is always written straight into the DB.
+1.  `ownerships`: This task updates the `land_ownerships` table (see above), using the latest company
+    ownership data. This stage is quite fast and non-destructive, since the government API provides all
+    historical data since Nov 2017, so the new data is always written straight into the DB.
 
-1. `downloadInspire`: This task
+1.  `downloadInspire`: This task
 
-   1. downloads the latest INSPIRE data
-   1. backs up this data to our Hetzner storage box
-   1. unzips the downloaded GML data then, using GDAL, transforms it to the standard EPSG:4326
-      coordinate system and inserts all polygons into the `pending_inspire_polygons` DB table
+    1. downloads the latest INSPIRE data
+    1. backs up this data to our Hetzner storage box
+    1. unzips the downloaded GML data then, using GDAL, transforms it to the standard EPSG:4326
+       coordinate system and inserts all polygons into the `pending_inspire_polygons` DB table
 
-1. `analyseInspire`: This task has the following steps
+1.  `analyseInspire`: This task has the following steps
 
-   1. Loop one-by-one through the `pending_inspire_polygons`.
+    1.  Loop one-by-one through the `pending_inspire_polygons`.
 
-      - If the poly_id already exists in our `land_ownership_polygons` table, we compare the old and
-        new polys and try to classify a match. i.e. one of the scenarios in the [above section](#different-cases-of-data-changing).
+        - If the poly_id already exists in our `land_ownership_polygons` table, we compare the old and new polys and try to classify a match. i.e. one of the scenarios in the [above section](#different-cases-of-data-changing).
         In some cases, the algorithm fails to classify the match, maybe because the polyon changed in an unexpected
         way. You can see descriptions of the match types implemented so far in [`match.ts`](https://github.com/DigitalCommons/property-boundaries-service/blob/development/src/pipeline/inspire/match.ts){target="\_blank"}.
-      - If the poly_id is new, we check that it's not overlapping with an existing polygon in our DB. We have some
+
+        - If the poly_id is new, we check that it's not overlapping with an existing polygon in our DB. We have some
         rough 'amalgamation' detection code but haven't implemented it yet.
 
-      _Note: The plan is to improve these algorithms over time, based on manual review of our pipeline's
-      results and research of different scenarios (in the above section). So it will eventually identify
-      and classify more scenarios, rather than just marking them as failed matches._
+        _Note: The plan is to improve these algorithms over time, based on manual review of our pipeline's
+        results and research of different scenarios (in the above section). So it will eventually identify
+        and classify more scenarios, rather than just marking them as failed matches._
 
-   1. Depending on how the match is classified, we mark pending polygons as 'accepted' or
-      'rejected', and maybe mark existing polygons to be deleted.
-   1. If the `updateBoundaries` pipeline option was set to true, write all accepted
-      `pending_inspire_polygons` into `land_ownership_polygons` (overwriting existing geometry data)
-      and delete all polygons listed in `pending_polygon_deletions`.
+    1.  Depending on how the match is classified, we mark pending polygons as 'accepted' or
+        'rejected', and maybe mark existing polygons to be deleted.
+    1.  If the `updateBoundaries` pipeline option was set to true, write all accepted
+        `pending_inspire_polygons` into `land_ownership_polygons` (overwriting existing geometry data)
+        and delete all polygons listed in `pending_polygon_deletions`.
 
 ## How to run it
 
