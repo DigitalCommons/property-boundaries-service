@@ -15,7 +15,7 @@ import dbConfig from "../../config/config";
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
 
-const MAX_RETRIES_FOR_A_POLYGON = 2;
+const MAX_RETRIES_FOR_A_POLYGON = 1;
 
 // TODO: move this instance creation and model definitions into a separate 'models' file. Just have
 // callable queries in this file
