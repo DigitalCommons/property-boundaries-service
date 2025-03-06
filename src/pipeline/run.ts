@@ -1,6 +1,7 @@
 import "dotenv/config";
 import {
   getLastPipelineRun,
+  getPipelineStartTimeIncludingInterruptions,
   isPipelineRunning,
   markPipelineRunInterrupted,
   PipelineStatus,
@@ -150,8 +151,11 @@ const runPipeline = async (options: PipelineOptions) => {
     const summaryTable = output || "Error: no summary table";
 
     await stopPipelineRun();
-    const timeElapsed = moment.duration(Date.now() - startTimeMs);
-    const timeElapsedString = `${timeElapsed.hours()} h ${timeElapsed.minutes()} min`;
+    const timeElapsedThisRun = moment.duration(Date.now() - startTimeMs);
+    const timeElapsedTotal = moment.duration(
+      Date.now() - (await getPipelineStartTimeIncludingInterruptions()),
+    );
+    const timeElapsedString = `${timeElapsedThisRun.hours()} h ${timeElapsedThisRun.minutes()} min (this run), ${timeElapsedTotal.hours()} h ${timeElapsedTotal.minutes()} min (total)`;
     const msg = `Pipeline ${pipelineKey} finished in ${timeElapsedString}`;
     logger.info(msg);
     console.log(msg);

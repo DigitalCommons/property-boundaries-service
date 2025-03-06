@@ -687,7 +687,7 @@ export const insertAllAcceptedPendingPolygons = async () => {
   });
 
   const chunkSize = 100000;
-  for (let i = 0; i <= lastPendingPolygon.id; i += chunkSize) {
+  for (let i = 0; i <= (lastPendingPolygon?.id ?? 0); i += chunkSize) {
     const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
     SELECT p.poly_id, p.geom
     FROM pending_inspire_polygons p WHERE accepted = true
@@ -881,6 +881,26 @@ export const hitMaxRetriesForAPolygon = async (): Promise<boolean> => {
       run.last_poly_analysed === lastPipelineRuns[0].last_poly_analysed,
   );
 };
+
+/**
+ * Get the start time of the pipeline run that was originally triggered i.e. before interruptions
+ * that were automatically resumed. Return as time in EPOCH milliseconds.
+ */
+export const getPipelineStartTimeIncludingInterruptions =
+  async (): Promise<number> => {
+    const pipelineRunsDesc: any[] = await PipelineRunModel.findAll({
+      order: [["startedAt", "DESC"]],
+      raw: true,
+    });
+
+    const indexOfLastCompletedRun = pipelineRunsDesc
+      .slice(1)
+      .findIndex((run) => run?.status !== PipelineStatus.Interrupted);
+
+    return new Date(
+      pipelineRunsDesc[Math.max(indexOfLastCompletedRun, 0)].startedAt,
+    ).getTime();
+  };
 
 /**
  * Set last task that has been reached in a pipeline run.
