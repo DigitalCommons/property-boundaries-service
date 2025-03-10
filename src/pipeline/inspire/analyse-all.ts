@@ -462,22 +462,22 @@ export const analyseAllPendingPolygons = async (
 
   // Check how many polygons were already analysed (if we are resuming a pipeline)
   const polygonsAnalysedPreviously = await getPendingPolygonCount(startingId);
-  const totalPendingPolygons = await getPendingPolygonCount();
+  let totalPendingPolygons = await getPendingPolygonCount();
   let polygon: PendingPolygon = await getNextPendingPolygon(startingId);
-  let numPolygonsAnalysed = 0;
+  let numPolygonsAnalysed = polygonsAnalysedPreviously;
 
   while (polygon && numPolygonsAnalysed < maxPolygons) {
     await analysePolygon(polygon);
     await setPipelineLastPolyAnalysed(polygon.id);
 
     numPolygonsAnalysed += 1;
-    if ((polygonsAnalysedPreviously + numPolygonsAnalysed) % 5000 === 0) {
+    if (numPolygonsAnalysed % 5000 === 0) {
       logger.info(
-        `Analysed polygon ${(
-          polygonsAnalysedPreviously + numPolygonsAnalysed
-        ).toLocaleString("en-US")} of ${totalPendingPolygons.toLocaleString(
+        `Analysed polygon ${numPolygonsAnalysed.toLocaleString(
           "en-US",
-        )} (from ${polygon.council})`,
+        )} of ${totalPendingPolygons.toLocaleString("en-US")} (from ${
+          polygon.council
+        })`,
       );
     }
 
@@ -514,9 +514,19 @@ export const analyseAllPendingPolygons = async (
     throw err;
   }
 
+  // Recalculate total pending polygons since we have now removed duplicates
+  totalPendingPolygons = await getPendingPolygonCount();
+
+  // Sanity check that all data has been analysed
+  if (numPolygonsAnalysed !== totalPendingPolygons) {
+    logger.error(
+      `Not all pending polygons were analysed. Analysed ${numPolygonsAnalysed} of ${totalPendingPolygons}. This shouldn't happen!`,
+    );
+  }
+
   // Print summary of results
   const finalDataCounts = {};
-  for (const matchType of Object.values(Match)) {
+  for (const matchType of [...Object.values(Match), null]) {
     const count = await getPendingPolygonCount(undefined, matchType as Match);
     finalDataCounts[matchType] = {
       count: count.toLocaleString("en-US"),
