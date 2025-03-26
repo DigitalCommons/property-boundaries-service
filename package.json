@@ -11,7 +11,8 @@
     "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon -e js src/app.ts",
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/inspire/plot.js",
-    "test": "env-cmd -f .env.test ts-mocha"
+    "test": "env-cmd -f .env.test ts-mocha",
+    "rollback-db": "env-cmd -f .env bash scripts/rollback-db.sh"
   },
   "keywords": [],
   "author": "",
