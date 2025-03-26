@@ -152,7 +152,7 @@ At DCC, we have automatic scripts to hit the API described above, so that the pi
 They are scheduled to run after a Borg backup of the production database has been completed, which
 itself is scheduled to run on the 8th night of each month (to ensure it's after the month's INSPIRE
 data has been published on the first Sunday of the month). To avoid getting into too many details that
-are specific to DCC infrastructure, see [this GitHub issue](https://github.com/DigitalCommons/technology-and-infrastructure/issues/116#issuecomment-2163420776){target="\_blank"} for more details, and [deployment.md](./deployment.md#dcc-servers) for a rough overview of our DCC deployment.
+are specific to DCC infrastructure, see [this GitHub comment](https://github.com/DigitalCommons/technology-and-infrastructure/issues/116#issuecomment-2163420776){target="\_blank"} for more details, and [deployment.md](./deployment.md#dcc-servers) for a rough overview of our DCC deployment.
 
 ## Analysing the pipeline output
 
