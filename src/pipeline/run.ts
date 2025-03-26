@@ -151,11 +151,18 @@ const runPipeline = async (options: PipelineOptions) => {
     const summaryTable = output || "Error: no summary table";
 
     await stopPipelineRun();
+
     const timeElapsedThisRun = moment.duration(Date.now() - startTimeMs);
     const timeElapsedTotal = moment.duration(
       Date.now() - (await getPipelineStartTimeIncludingInterruptions()),
     );
-    const timeElapsedString = `${timeElapsedThisRun.hours()} h ${timeElapsedThisRun.minutes()} min (this run), ${timeElapsedTotal.hours()} h ${timeElapsedTotal.minutes()} min (total)`;
+    // Format time elapsed as h min
+    const timeElapsedString = `${Math.floor(
+      timeElapsedThisRun.asHours(),
+    )} h ${timeElapsedThisRun.minutes()} min (this run), ${Math.floor(
+      timeElapsedTotal.asHours(),
+    )} h ${timeElapsedTotal.minutes()} min (total)`;
+
     const msg = `Pipeline ${pipelineKey} finished in ${timeElapsedString}`;
     logger.info(msg);
     console.log(msg);
