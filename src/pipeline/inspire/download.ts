@@ -68,6 +68,8 @@ const downloadInspire = async (
     return inspireDownloadLinks;
   }, afterCouncil);
 
+  logger.info(`Found ${inspireDownloadLinks.length} INSPIRE download links`);
+
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const council = link.council;
     const downloadFilePath = `${downloadPath}/${council}.zip`;
@@ -78,6 +80,7 @@ const downloadInspire = async (
         `Skip downloading ${council}.zip since zipfile already exists`
       );
     } else {
+      logger.info(`Click download link for ${council}.zip`);
       const downloadButton = await page.waitForSelector("#" + link.id);
       const downloadPromise = page.waitForEvent("download");
       await downloadButton.click();
