@@ -38,7 +38,10 @@ const downloadInspire = async (
     userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
   const page = await context.newPage();
-  await page.goto(url);
+  await page.goto(url, {
+    referer: "https://use-land-property-data.service.gov.uk/datasets/inspire",
+  });
+  await page.locator(".govuk-link").first().waitFor({ timeout: 10000 });
 
   const inspireDownloadLinks = await page.evaluate((afterCouncil) => {
     const inspireDownloadLinks: any[] = [];
