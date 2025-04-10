@@ -33,13 +33,11 @@ const downloadInspire = async (
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.setExtraHTTPHeaders({
-    // Randomise userAgent and set other headers so that we are not blocked by bot filters
-    "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)],
-    "Accept-Language": "en-US,en;q=0.9",
+  const context = await browser.newContext({
+    // Randomise userAgent so that we are not blocked by bot filters
+    userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
+  const page = await context.newPage();
   await page.goto(url, {
     referer: "https://use-land-property-data.service.gov.uk/datasets/inspire",
   });
