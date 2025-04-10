@@ -12,7 +12,8 @@
     "analyse-single": "node dist/pipeline/inspire/analyse-single.js",
     "plot": "node dist/pipeline/inspire/plot.js",
     "test": "env-cmd -f .env.test ts-mocha",
-    "rollback-db": "env-cmd -f .env bash scripts/rollback-db.sh"
+    "rollback-db": "env-cmd -f .env bash scripts/rollback-db.sh",
+    "latest-logs": "less -f logs/$(ls -t logs | head -n1)"
   },
   "keywords": [],
   "author": "",
