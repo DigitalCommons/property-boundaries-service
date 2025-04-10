@@ -16,8 +16,8 @@ import { getLatestInspirePublishMonth } from "../util";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
-  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.0.110 Safari/537.36",
-  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.32.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.0.110 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.32.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.11.0.0 Safari/537.36",
 ];
 
@@ -33,11 +33,13 @@ const downloadInspire = async (
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    // Randomise userAgent so that we are not blocked by bot filters
-    userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
-  });
+  const context = await browser.newContext();
   const page = await context.newPage();
+  await page.setExtraHTTPHeaders({
+    // Randomise userAgent and set other headers so that we are not blocked by bot filters
+    "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)],
+    "Accept-Language": "en-US,en;q=0.9",
+  });
   await page.goto(url, {
     referer: "https://use-land-property-data.service.gov.uk/datasets/inspire",
   });
@@ -74,6 +76,13 @@ const downloadInspire = async (
   logger.info(`Found ${inspireDownloadLinks.length} INSPIRE download links`);
   if (inspireDownloadLinks.length === 0) {
     logger.error(`Page content: ${await page.content()}`);
+  } else {
+    // Add random delays of 1 to 2 seconds and scrolling to simulate human behavior
+    await page.waitForTimeout(Math.floor(Math.random() * 1000 + 1000));
+    await page.evaluate(() =>
+      window.scrollBy(0, window.innerHeight / (1 + Math.random())),
+    );
+    await page.waitForTimeout(Math.floor(Math.random() * 1000 + 1000));
   }
 
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
