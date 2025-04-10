@@ -86,10 +86,12 @@ const downloadInspire = async (
         `Skip downloading ${council}.zip since zipfile already exists`,
       );
     } else {
-      logger.info(`Click download link for ${council}.zip`);
       const downloadButton = await page.waitForSelector("#" + link.id);
       const downloadPromise = page.waitForEvent("download");
-      await downloadButton.click();
+
+      logger.info(`Click download link for ${council}.zip`);
+      await downloadButton.click({ force: true });
+      logger.info((await page.content()).substring(0, 50000));
       const download = await downloadPromise;
 
       logger.info(`Downloading ${council}.zip`);
