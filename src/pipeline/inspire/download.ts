@@ -28,7 +28,7 @@ let anyNewDownloads = false;
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (
   maxCouncils: number,
-  afterCouncil: string | undefined
+  afterCouncil: string | undefined,
 ) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
@@ -69,6 +69,9 @@ const downloadInspire = async (
   }, afterCouncil);
 
   logger.info(`Found ${inspireDownloadLinks.length} INSPIRE download links`);
+  if (inspireDownloadLinks.length === 0) {
+    logger.error(`Page content: ${await page.content()}`);
+  }
 
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const council = link.council;
@@ -77,7 +80,7 @@ const downloadInspire = async (
     if (fs.existsSync(downloadFilePath)) {
       // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
-        `Skip downloading ${council}.zip since zipfile already exists`
+        `Skip downloading ${council}.zip since zipfile already exists`,
       );
     } else {
       logger.info(`Click download link for ${council}.zip`);
@@ -103,7 +106,7 @@ const downloadInspire = async (
 const backupInspireDownloads = async () => {
   if (!process.env.REMOTE_BACKUP_DESTINATION_PATH) {
     logger.warn(
-      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set"
+      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set",
     );
     return;
   }
@@ -160,7 +163,7 @@ const gmlToPendingInspirePolygons = async (council: string) => {
             resolve();
           } else {
             reject(
-              `spawn exited with code ${code} when transforming GML for ${council}`
+              `spawn exited with code ${code} when transforming GML for ${council}`,
             );
           }
         });
@@ -208,7 +211,7 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   logger.info(
     `Download ${latestInspirePublishMonth} INSPIRE data ` + afterCouncil
       ? `after council ${afterCouncil}`
-      : "for all councils"
+      : "for all councils",
   );
 
   downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
@@ -249,6 +252,6 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   }
 
   logger.info(
-    "Downloaded, transformed, and created all pending INSPIRE polygons in DB"
+    "Downloaded, transformed, and created all pending INSPIRE polygons in DB",
   );
 };
