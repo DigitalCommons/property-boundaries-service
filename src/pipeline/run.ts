@@ -23,6 +23,7 @@ import {
 } from "./util";
 
 type TaskOptions = {
+  inspireDataRestore?: boolean; // If true, restore INSPIRE data from our latest backup instead of downloading it from the gov website
   afterCouncil?: string; // Only process councils after this one, alphabetically
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process

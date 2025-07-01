@@ -21,7 +21,7 @@ catch() {
 HOSTNAME=$(hostname)
 
 # Upload only the zip files (i.e. the raw files downloaded from the INSPIRE website)
-rsync -e 'ssh -p23 -o StrictHostKeyChecking=no' --recursive --prune-empty-dirs --include="*/" --include="*.zip" --exclude="*" downloads/ $REMOTE_BACKUP_DESTINATION_PATH
+rsync -e "ssh -p${REMOTE_BACKUP_SSH_PORT:-22} -o StrictHostKeyChecking=no" --recursive --prune-empty-dirs --include="*/" --include="*.zip" --exclude="*" downloads/ $REMOTE_BACKUP_DESTINATION_PATH
 
 if [ -z "$MATRIX_WEBHOOK_URL" ]; then
     echo 'Success!'
