@@ -98,7 +98,6 @@ const downloadInspire = async (
 
       logger.info(`Click download link for ${council}.zip`);
       await downloadButton.click({ force: true });
-      logger.info((await page.content()).substring(0, 50000));
       const download = await downloadPromise;
 
       logger.info(`Downloading ${council}.zip`);
