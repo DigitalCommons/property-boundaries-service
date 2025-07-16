@@ -93,7 +93,7 @@ const downloadInspire = async (
       );
     } else {
       logger.info(`Downloading ${council}.zip`);
-      await downloadZipFile(link.href, downloadFilePath);
+      await downloadZipFile(`${url}/${council}.zip`, downloadFilePath);
       anyNewDownloads = true;
     }
     councils.push(council);
