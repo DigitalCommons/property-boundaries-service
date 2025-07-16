@@ -5,6 +5,8 @@ import fs from "fs";
 import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec, spawn } from "child_process";
+import { wrapper } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 import { promisify } from "util";
 import { logger } from "../logger";
 import {
@@ -13,6 +15,7 @@ import {
   setPipelineLastCouncilDownloaded,
 } from "../../queries/query";
 import { getLatestInspirePublishMonth } from "../util";
+import axios from "axios";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
@@ -72,16 +75,12 @@ const downloadInspire = async (
   }, afterCouncil);
 
   logger.info(`Found ${inspireDownloadLinks.length} INSPIRE download links`);
+
   if (inspireDownloadLinks.length === 0) {
     logger.error(`Page content: ${await page.content()}`);
-  } else {
-    // Add random delays of 1 to 2 seconds and scrolling to simulate human behavior
-    await page.waitForTimeout(Math.floor(Math.random() * 1000 + 1000));
-    await page.evaluate(() =>
-      window.scrollBy(0, window.innerHeight / (1 + Math.random())),
-    );
-    await page.waitForTimeout(Math.floor(Math.random() * 1000 + 1000));
+    throw new Error("No INSPIRE download links found.");
   }
+  await browser.close();
 
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const council = link.council;
@@ -93,21 +92,31 @@ const downloadInspire = async (
         `Skip downloading ${council}.zip since zipfile already exists`,
       );
     } else {
-      const downloadButton = await page.waitForSelector("#" + link.id);
-      const downloadPromise = page.waitForEvent("download");
-
-      logger.info(`Click download link for ${council}.zip`);
-      await downloadButton.click({ force: true });
-      const download = await downloadPromise;
-
       logger.info(`Downloading ${council}.zip`);
-      await download.saveAs(downloadFilePath);
+      await downloadZipFile(link.href, downloadFilePath);
       anyNewDownloads = true;
     }
     councils.push(council);
   }
+};
 
-  await browser.close();
+const downloadZipFile = async (url: string, outputPath: string) => {
+  const writer = fs.createWriteStream(outputPath);
+
+  const jar = new CookieJar();
+  const response = await wrapper(axios).get(url, {
+    jar,
+    withCredentials: true,
+    maxRedirects: 2,
+    responseType: "stream",
+  });
+
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
 };
 
 /**
