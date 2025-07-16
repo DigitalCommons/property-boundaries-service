@@ -44,44 +44,52 @@ whilst preserving the link between titles and polygons where possible.**
 In order to achive the above purpose, we need to understand how & why the data might change, so that
 we can recognise these cases and know how to procede in our pipeline.
 
-Here is a list of cases (W.I.P.):
+Here is a list of cases (W.I.P.) and what we do in the pipeline for each scenario:
 
-- The ownership of a title changes in one of the company ownership datasets
+1. The ownership of a title changes in one of the company ownership datasets (UK or overseas)
 
-    - Since a Title Number is unique to that property, we can assume that any polygons linked to that
-    title are now owned by the new company.
+    - Since a Title Number is unique to that property and shouldn't change between owners, we can
+      assume that any polygons linked to that title are now owned by the new company. So we just
+      need to update the title in the `land_ownerships` table and make no changes to `land_ownership_polygons`.
 
-- A title is removed from the company ownership datasets.
+2. A freehold title is removed from the company ownership datasets
 
+    - If the title's linked INPSIRE polygon(s) have merged with an adjacent polygon, see case 7 below. Otherwise:
     - This indicates that the title has been sold to a private individual. If the title had linked
     polygon(s) which are unchanged, we can keep the link to the title number. There's a chance it
-    will be sold to a company in the future, so more ownership info will be visible again.
-    - _OR_ if it was a freehold, the lease may have been closed by a [merger](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if the company also owns the freehold. We don't have
-    enough info to tell if this happened, but may be able to use the [Registered Leases](https://use-land-property-data.service.gov.uk/datasets/leases/tech-spec) or [Price Paid Data](https://www.gov.uk/guidance/about-the-price-paid-data) datasets
-    in the future to help with this.
+    will be sold to a company in the future, so more ownership info will be visible again. So remove
+    the title from the `land_ownerships` table and make no changes to `land_ownership_polygons`.
 
-- An INSPIRE polygon's boundary changes very slightly
+3.  A leasehold title is removed from the company ownership datasets
+    - _EITHER_ the title has been sold to a private individual, in which case we can keep the link
+      between title number and polygon(s). So remove the title from the `land_ownerships` table and make no changes to `land_ownership_polygons`.
+    - _OR_ the lease may have been closed by a [merger](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if the same company also owns the freehold. We don't have
+    enough info to tell if this happened, but may be able to use the [Registered Leases](https://use-land-property-data.service.gov.uk/datasets/leases/tech-spec) or [Price Paid Data](https://www.gov.uk/guidance/about-the-price-paid-data) datasets
+    in the future to help with this. For now, just assume it was the former scenario.
+
+4. An INSPIRE polygon's boundary changes very slightly
 
     - This indicates that there has been a new survey by the local authority and any freehold title
-    will still be linked to that property, so we can go ahead and alter the polygon's coordinates in our
-    database.
-    - Since INSPIRE doesn't include leasehold polygons, we should maybe also alter polygons linked
-    to leaseholds within the same boundary, especially ones that cover exact the same area (**TODO**)
+    will still be linked to that property. Or it also occured when we improved our coordinate
+    transformation when importing the INSPIRE data. So update the coordinates in `land_ownership_polygons`.
+    - (**TODO**) Since INSPIRE doesn't include leasehold polygons, we should also alter any associated
+    leashold boundaries. This isn't implemented yet. We also need to fix the leashold boudaries that
+    were left using the old coordinate transformation.
 
-- An INSPIRE polygon's boundary moves a larger distance
+5. An INSPIRE polygon's boundary moves by a large distance
 
     - This is unexpected, since usually a new INSPIRE ID would just be made. We should examine these
     instances manually (**TODO**). If the polygon has an associated company-owned title, we can geocode the title's
     address and check whether the new location matches.
 
-- An INSPIRE polygon splits into two or more parts
+6. An INSPIRE polygon splits into two or more parts
 
     - When freehold titles are split, the owner will usually be selling off a portion of the property
     (otherwise it usually makes more sense for them to split into leaseholds). More info [here](https://lawdit.co.uk/readingroom/splitting-your-propertys-freehold-title) and [here](https://customerhelp.landregistry.gov.uk/forums/register-and-title-plan/f7bd9ec5-cc7c-ef11-a4e5-6045bdfc7a75). The portion that they keep will retain the old Title Number
     and the new segment of land will be assigned a new Title Number. So maybe when this happens, we
     can check for new company-owned titles with the same or adjacent address and link them (**TODO**).
 
-- Two or more INSPIRE polygons merge
+7. Two or more INSPIRE polygons merge
 
     - Freeholds can be [amalgamated](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if they're owned by the same proprietor. Usually, the largest property's Title Number will be chosen for the new amalgamated title - see section 14.7.1 of [this guide](https://rosdev.atlassian.net/wiki/spaces/79RM/pages/76155396/L14+Amalgamation+and+Absorption+Guide). We can try to cross-reference with the company-owned titles data to see if this is the case. If the titles were company-owned, we'll hopefully see
     that all amalgamated titles apart from one are removed from the dataset, and that the old ones had the same proprietor (**TODO**).
