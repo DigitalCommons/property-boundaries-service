@@ -94,6 +94,10 @@ Here is a list of cases (W.I.P.) and what we do in the pipeline for each scenari
     - Freeholds can be [amalgamated](https://hmlandregistry.blog.gov.uk/2024/03/27/amalgamation-or-merger-whats-the-difference/) if they're owned by the same proprietor. Usually, the largest property's Title Number will be chosen for the new amalgamated title - see section 14.7.1 of [this guide](https://rosdev.atlassian.net/wiki/spaces/79RM/pages/76155396/L14+Amalgamation+and+Absorption+Guide). We can try to cross-reference with the company-owned titles data to see if this is the case. If the titles were company-owned, we'll hopefully see
     that all amalgamated titles apart from one are removed from the dataset, and that the old ones had the same proprietor (**TODO**).
 
+### A big limitation: leaseholds
+
+See https://github.com/DigitalCommons/property-boundaries-service/issues/26
+
 ## Stages of the pipeline
 
 The main function that runs the pipeline is [`runPipeline()` in
