@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # This script downloads the latest INSPIRE data backup from our Hetzner storage box (as zip files
-# for each council). This is useful for re-running the pipeling on the latest data after the month
+# for each council). This is useful for re-running the pipeline on the latest data after the month
 # has passed, for example if the gov Land Reg website has stopped working.
 # 
 # It prints to stdout the month of the latest backup in the format YYYY-MM.
