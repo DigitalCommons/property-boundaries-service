@@ -11,7 +11,7 @@
     "debug:dump": "kill -USR2 $(ps -eo uid,pid,cmd | grep $UID | grep 'node dist/app.js' | awk 'NR==1 {print $2}')",
     "dev:serve": "cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=2048' nodemon --exec node --loader ts-node/esm -e js src/app.ts",
     "plot": "node dist/pipeline/inspire/plot.js",
-    "test": "env-cmd -f .env.test ts-mocha",
+    "test": "env-cmd -f .env.test mocha",
     "rollback-db": "env-cmd -f .env bash scripts/rollback-db.sh",
     "latest-logs": "less -f logs/$(ls -t logs | head -n1)"
   },
@@ -24,7 +24,6 @@
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.4.9",
     "@types/node-geocoder": "^4.2.6",
-    "@types/proxyquire": "^1.3.31",
     "@types/qs": "^6.9.18",
     "@types/sinon": "^17.0.3",
     "@types/stats-lite": "^2.2.2",
@@ -40,9 +39,7 @@
     "nodemon": "^3.1.0",
     "nodeplotlib": "^0.7.7",
     "prettier": "3.1.1",
-    "proxyquire": "^2.1.3",
     "sinon": "^18.0.0",
-    "ts-mocha": "^10.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   },
