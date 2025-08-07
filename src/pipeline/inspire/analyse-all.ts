@@ -154,10 +154,10 @@ const processMatch = async (
 };
 
 const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
-  const { poly_id: inspireId, geom, council, matchType } = polygon;
+  const { poly_id: inspireId, geom, council, match_type } = polygon;
 
   // Skip if already marked as failed (e.g. a new segment of a failed match)
-  if (matchType === Match.Fail) {
+  if (match_type === Match.Fail) {
     return;
   }
 
@@ -285,7 +285,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
 const analyseNewInspireId = async (inspireId: number) => {
   const polygon: PendingPolygon = await getPendingPolygon(inspireId);
 
-  if (polygon.matchType) {
+  if (polygon.match_type) {
     // We have already processed this new INSPIRE ID
     return;
   }
@@ -526,9 +526,9 @@ export const analyseAllPendingPolygons = async (
 
   // Print summary of results
   const finalDataCounts = {};
-  for (const matchType of [...Object.values(Match), null]) {
-    const count = await getPendingPolygonCount(undefined, matchType as Match);
-    finalDataCounts[matchType] = {
+  for (const match_type of [...Object.values(Match), null]) {
+    const count = await getPendingPolygonCount(undefined, match_type as Match);
+    finalDataCounts[match_type] = {
       count: count.toLocaleString("en-US"),
       "%": roundDecimalPlaces((count / totalPendingPolygons) * 100, 3),
     };

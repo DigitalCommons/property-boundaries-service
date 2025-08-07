@@ -271,7 +271,7 @@ export type PendingPolygon = {
   poly_id: number;
   geom: Polygon;
   council: string;
-  matchType: Match | null;
+  match_type: Match | null;
 };
 
 /**
@@ -950,19 +950,19 @@ export const setPipelineLastPolyAnalysed = async (id: number) => {
 /**
  * Returns the total pending inspire polygon count
  *  - up to the row with @param upToId (if specified), AND
- *  - with match_type equal to @param matchType (if specified),
+ *  - with match_type equal to @param match_type (if specified),
  * or the whole table if neither options specified.
  */
 export const getPendingPolygonCount = async (
   upToId?: number,
-  matchType?: Match,
+  match_type?: Match,
 ): Promise<number> => {
   const where: WhereOptions = {};
   if (upToId !== undefined) {
     where.id = { [Op.lt]: upToId };
   }
-  if (matchType !== undefined) {
-    where.match_type = matchType;
+  if (match_type !== undefined) {
+    where.match_type = match_type;
   }
   return await PendingPolygonModel.count({ where });
 };
