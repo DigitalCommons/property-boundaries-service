@@ -8,13 +8,13 @@ import { exec, spawn } from "child_process";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
 import { promisify } from "util";
-import { logger } from "../logger";
+import { logger } from "../logger.js";
 import {
   deleteAllPendingPolygons,
   getLastPipelineRun,
   setPipelineLastCouncilDownloaded,
-} from "../../queries/query";
-import { getLatestInspirePublishMonth } from "../util";
+} from "../../queries/query.js";
+import { getLatestInspirePublishMonth } from "../util.js";
 import axios from "axios";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac

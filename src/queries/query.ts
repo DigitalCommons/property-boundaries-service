@@ -8,9 +8,12 @@ import {
 } from "sequelize";
 import { Feature, Polygon } from "geojson";
 import { customAlphabet } from "nanoid";
-import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
-import { Match } from "../pipeline/inspire/match";
-import dbConfig from "../../config/config";
+import {
+  getRunningPipelineKey,
+  setRunningPipelineKey,
+} from "../pipeline/util.js";
+import { Match } from "../pipeline/inspire/match.js";
+import dbConfig from "../../config/config.js";
 
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);

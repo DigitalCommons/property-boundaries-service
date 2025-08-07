@@ -5,7 +5,7 @@ import {
   comparePolygons,
   findOldContainingOrContainedPoly,
   coordsOverlapWithExistingPoly,
-} from "./methods";
+} from "./methods.js";
 import {
   PendingPolygon,
   acceptPendingPolygon,
@@ -21,12 +21,12 @@ import {
   resetAllPendingPolygons,
   setPipelineLastPolyAnalysed,
   setPipelineLatestInspireData,
-} from "../../queries/query";
+} from "../../queries/query.js";
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
-import { logger } from "../logger";
-import { getRunningPipelineKey, roundDecimalPlaces } from "../util";
-import { Match } from "./match";
+import { logger } from "../logger.js";
+import { getRunningPipelineKey, roundDecimalPlaces } from "../util.js";
+import { Match } from "./match.js";
 
 const analysisFolder = path.resolve("./analysis");
 

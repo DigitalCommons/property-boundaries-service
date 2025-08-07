@@ -10,17 +10,17 @@ import {
   setPipelineLastTask,
   startPipelineRun,
   stopPipelineRun,
-} from "../queries/query";
-import { updateOwnerships } from "./ownerships/update";
-import { downloadAndBackupInspirePolygons } from "./inspire/download";
-import { analyseAllPendingPolygons } from "./inspire/analyse-all";
-import { logger, initLogger } from "./logger";
+} from "../queries/query.js";
+import { updateOwnerships } from "./ownerships/update.js";
+import { downloadAndBackupInspirePolygons } from "./inspire/download.js";
+import { analyseAllPendingPolygons } from "./inspire/analyse-all.js";
+import { logger, initLogger } from "./logger.js";
 import moment from "moment-timezone";
 import {
   getLatestInspirePublishDate,
   getRunningPipelineKey,
   notifyMatrix,
-} from "./util";
+} from "./util.js";
 
 type TaskOptions = {
   inspireDataRestore?: boolean; // If true, restore INSPIRE data from our latest backup instead of downloading it from the gov website

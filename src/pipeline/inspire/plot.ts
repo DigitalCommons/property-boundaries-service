@@ -1,7 +1,7 @@
 import path from "path";
 import { plot, Layout } from "nodeplotlib";
 import fs from "fs";
-import { StatsCollection, StatsForEachCouncil } from "./analyse-all";
+import { StatsCollection, StatsForEachCouncil } from "./analyse-all.js";
 // import { percentile } from "stats-lite";
 
 const analysisPath = path.resolve("./analysis");

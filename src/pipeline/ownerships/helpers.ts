@@ -2,7 +2,7 @@ import "dotenv/config";
 import axios from "axios";
 import * as unzip from "unzip-stream";
 import csvParser, { CsvParser } from "csv-parser";
-import { logger } from "../logger";
+import { logger } from "../logger.js";
 
 // These are all helper functions for the 2 main functions in ./update.ts
 

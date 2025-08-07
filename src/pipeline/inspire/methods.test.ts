@@ -3,8 +3,8 @@ import { expect } from "chai";
 // // Sinon provides mocks, spies, stubs, etc. We use them to replace and control the behaviour of code
 // // that is external to our test unit, or to verify how out test unit interfaces with external code.
 import { createSandbox, SinonStub } from "sinon";
-import { comparePolygons as testUnit } from "./methods";
-import { Match } from "./match";
+import { comparePolygons as testUnit } from "./methods.js";
+import { Match } from "./match.js";
 import proxyquire from "proxyquire";
 import * as turf from "@turf/turf";
 

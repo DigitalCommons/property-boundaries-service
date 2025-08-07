@@ -10,8 +10,8 @@ import {
   getPolygonsByIdInSearchArea,
   getLocalAuthorityPolygonsInSearchArea,
   getChurchOfEnglandPolygonsInSearchArea,
-} from "../queries/query";
-import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
+} from "../queries/query.js";
+import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
 
 type GetPolygonsInBoxRequest = Request & {
   query: {
