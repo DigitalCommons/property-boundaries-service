@@ -9,13 +9,15 @@ All of the pipeline-related code lives in the `src/pipeline` directory.
 
 ## Overview of the data
 
-We store data in 2 database tables:
+We store data in 3 database tables:
 
 - `land_ownerships` -
   each row in this table links a 'title' (i.e. a title deed for a single property in the Land Registry)
   to a company that owns it. It includes the 'tenure' (leasehold or freehold), when the title was added to the Land Registry, and various details about the company.
 - `land_ownership_polygons` -
   each row in this table gives the geometry of a land boundary for a registered property. It has a `poly_id` (a.k.a. INSPIRE ID) and possibly a `title_no` to link the property to on ownership in the above table.
+- `unregistered_land` -
+  each row has the geometry of a polygon boundary for a piece of unregistered land.
 
 The pipeline obtains data from these open source datasets:
 
@@ -116,26 +118,32 @@ It runs these tasks in sequential order:
     1. unzips the downloaded GML data then, using GDAL, transforms it to the standard EPSG:4326
        coordinate system and inserts all polygons into the `pending_inspire_polygons` DB table
 
-1.  `analyseInspire`: This task has the following steps
+1. `analyseInspire`: This task does the following steps:
 
-    1.  Loop one-by-one through the `pending_inspire_polygons`.
+    1. Loop one-by-one through `pending_inspire_polygons`. Check if the poly_id already exists in our
+      `land_ownership_polygons` table.
 
-        - If the poly_id already exists in our `land_ownership_polygons` table, we compare the old and new polys and try to classify a match. i.e. one of the scenarios in the [above section](#different-cases-of-data-changing).
-        In some cases, the algorithm fails to classify the match, maybe because the polyon changed in an unexpected
-        way. You can see descriptions of the match types implemented so far in [`match.ts`](https://github.com/DigitalCommons/property-boundaries-service/blob/development/src/pipeline/inspire/match.ts){target="\_blank"}.
+        - If so, we compare the old and new polys and try to classify a match. i.e. one of the
+        scenarios in the [above section](#different-cases-of-data-changing). In some cases, the
+        algorithm fails to classify the match, maybe because the polyon changed in an unexpected
+        way. You can see descriptions of the match types implemented so far in
+        [`match.ts`](https://github.com/DigitalCommons/property-boundaries-service/blob/development/src/pipeline/inspire/match.ts){target="\_blank"}.
+        Depending on how the match is classified, we mark pending polygons as 'accepted' or
+        'rejected', and maybe mark existing polygons to be deleted.
 
-        - If the poly_id is new, we check that it's not overlapping with an existing polygon in our DB. We have some
-        rough 'amalgamation' detection code but haven't implemented it yet.
+        - If the poly_id is new, we check that it's not overlapping with an existing polygon in our
+        DB. If it isn't, we mark the new poly as accepted. We have some rough 'amalgamation'
+        detection code to cover more cases but haven't implemented it yet.
 
         _Note: The plan is to improve these algorithms over time, based on manual review of our pipeline's
         results and research of different scenarios (in the above section). So it will eventually identify
         and classify more scenarios, rather than just marking them as failed matches._
 
-    1.  Depending on how the match is classified, we mark pending polygons as 'accepted' or
-        'rejected', and maybe mark existing polygons to be deleted.
-    1.  If the `updateBoundaries` pipeline option was set to true, write all accepted
-        `pending_inspire_polygons` into `land_ownership_polygons` (overwriting existing geometry data)
-        and delete all polygons listed in `pending_polygon_deletions`.
+    1. If the `updateBoundaries` pipeline option was set to true, clip the boundaries of all new or
+       changed`pending_inspire_polygons` (registered freehold boundaries) from the
+       `unregistered_land` table, write all accepted `pending_inspire_polygons` into
+       `land_ownership_polygons` (overwriting existing geometry data) and delete all polygons listed
+       in `pending_polygon_deletions`.
 
 ## How to run it
 

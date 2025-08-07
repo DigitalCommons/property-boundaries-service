@@ -394,6 +394,105 @@ const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
     },
   );
 
+/**
+ * Take all pending_inspire_polygons that don't have match_type = exact i.e. new or changed ones.
+ * Clip their geometries from all the unregistered_land polygons that intersect with them, updating
+ * their geometries in the unregistered_land table.
+ */
+export const clipPendingPolygonsFromUnregisteredLand = async (
+  logging = false,
+) => {
+  // Loop through each pending inspire polygon
+  let count = 0;
+  let pendingPoly = await getNextPendingPolygon(0);
+
+  while (pendingPoly) {
+    // Skip exact matches
+    if (pendingPoly.match_type === Match.Exact) {
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
+
+    count++;
+    if (count % 500 === 0) {
+      console.log("Processing new/changed pending inspire polygon", count);
+    }
+
+    // Get all unregistered land polys that intersect with this pending poly
+    const intersectingUnregisteredPolys =
+      await getIntersectingUnregisteredPolys(pendingPoly.id);
+
+    if (intersectingUnregisteredPolys.length === 0) {
+      // No intersecting unregistered polygons, so skip to next pending poly
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
+
+    // For each intersecting unregistered polygon, clip the pending poly from it
+    for (const unregisteredPoly of intersectingUnregisteredPolys) {
+      // Clip the pending poly away from the unregistered polygon
+      let clippedUnregisteredPoly: Feature<Polygon | MultiPolygon>;
+
+      try {
+        clippedUnregisteredPoly = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(
+            turf.featureCollection([
+              turf.polygon(unregisteredPoly.geom.coordinates),
+              turf.polygon(pendingPoly.geom.coordinates),
+            ]),
+          ),
+        );
+      } catch (error) {
+        // sometimes this happens due to floating point precision issues with turf when the
+        // borders of polygons are long and very close to each other. In this case, truncate
+        // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
+        // fewer issues
+        console.warn(
+          `Turf difference failed with error "${error.message}", try again with 5 d.p. precision. Pending poly_id:`,
+          pendingPoly.poly_id,
+          ", Unregistered poly id:",
+          unregisteredPoly.id,
+        );
+        clippedUnregisteredPoly = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(
+            turf.featureCollection([
+              turf.polygon(unregisteredPoly.geom.coordinates),
+              turf.polygon(pendingPoly.geom.coordinates),
+            ]),
+            { precision: 5 },
+          ),
+        );
+      }
+
+      // Delete the original unregistered polygon
+      await deleteUnregisteredLandPolygon(unregisteredPoly.id);
+
+      if (clippedUnregisteredPoly) {
+        // Before inserting the new clipped geometry into the unregistered_land table, flatten it
+        // into individual polygons, and filter out slivers by only keeping those which are bigger
+        // than 20 m2 and don't disappear if we shrink the borders by 2 m
+        const flattenedClippedFeatures = turf
+          .truncate(turf.flatten(clippedUnregisteredPoly))
+          .features.filter(
+            (f) =>
+              turf.area(f) > 20 &&
+              turf.area(
+                turf.buffer(f, -2, { units: "meters" }) ?? turf.polygon([]),
+              ) > 0,
+          );
+        await bulkCreateUnregisteredLandPolygons(
+          flattenedClippedFeatures,
+          logging,
+        );
+      }
+    }
+
+    // Get the next pending polygon
+    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+  }
+};
 
 /** A subset of the fields in the model, which are used for analysis */
 export type PendingPolygon = {
