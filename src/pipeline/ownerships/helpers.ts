@@ -14,11 +14,11 @@ export const getDatasetHistory = async (overseas: boolean) => {
       headers: {
         Authorization: process.env.GOV_API_KEY,
       },
-    }
+    },
   );
   if (response.status !== 200) {
     logger.error(
-      `We failed to get ${type} dataset history, status code: ${response.status}`
+      `We failed to get ${type} dataset history, status code: ${response.status}`,
     );
     return;
   }
@@ -39,11 +39,11 @@ export const getLatestDatasets = async (overseas: boolean) => {
       headers: {
         Authorization: process.env.GOV_API_KEY,
       },
-    }
+    },
   );
   if (response.status !== 200) {
     logger.error(
-      `We failed to get the latest ${type} dataset, status code: ${response.status}`
+      `We failed to get the latest ${type} dataset, status code: ${response.status}`,
     );
     return;
   }
@@ -52,6 +52,7 @@ export const getLatestDatasets = async (overseas: boolean) => {
     // Include date of the data and map to the same format that is used elsewhere in the code
     filename: dataset.file_name,
     type,
+    file_size: dataset.file_size,
     download: `${process.env.GOV_API_URL}/datasets/${type}/${dataset.file_name}`,
     unsorted_date: new Date(response.data.result.last_updated) // convert to YYY-MM-DD
       .toISOString()
@@ -66,7 +67,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
   downloadUrl: string,
   processChunkOfRowsFunc: (chunkOfRows: any[]) => Promise<void>,
   chunkSize: number,
-  logProgress: boolean = true
+  logProgress: boolean = true,
 ) => {
   const response = await axios.get(downloadUrl, {
     responseType: "stream",
@@ -92,7 +93,7 @@ export const pipeZippedCsvFromUrlIntoFun = async (
             csvPipe.pause(); // pause the stream to avoid OOM error
             if (logProgress) {
               logger.debug(
-                `Row ${rowCount} of ${filePath}, processing chunk of size ${chunkSize}`
+                `Row ${rowCount} of ${filePath}, processing chunk of size ${chunkSize}`,
               );
             }
             const chunk = rowsToSend.splice(0, chunkSize);
