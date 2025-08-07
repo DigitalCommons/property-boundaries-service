@@ -10,6 +10,7 @@ import {
   getPolygonsByIdInSearchArea,
   getLocalAuthorityPolygonsInSearchArea,
   getChurchOfEnglandPolygonsInSearchArea,
+  getUnregisteredPolygonsInSearchArea,
 } from "../queries/query.js";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
 
@@ -66,6 +67,9 @@ const getPolygonsInBox = async (
       break;
     case "churchOfEngland":
       polygons = await getChurchOfEnglandPolygonsInSearchArea(searchArea);
+      break;
+    case "unregistered":
+      polygons = await getUnregisteredPolygonsInSearchArea(searchArea);
       break;
     case "pending":
       polygons = await getPendingPolygonsInSearchArea(searchArea, acceptedOnly);

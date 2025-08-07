@@ -774,6 +774,29 @@ export const getPendingPolygonsInSearchArea = async (
 };
 
 /**
+ * Get unregistered land boundaries that intersect with the search area.
+ *
+ * Limit result to 5000 polygons to avoid OOMEs.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ * @returns an array of polygons that match the criteria
+ */
+
+export const getUnregisteredPolygonsInSearchArea = async (
+  searchArea: string,
+) => {
+  const query = `SELECT id as poly_id, geom
+    FROM unregistered_land
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?)) 
+    LIMIT 5000;`;
+
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
  * Return pending polygon with poly_id if it exists, or null.
  */
 export const getPendingPolygon = async (
