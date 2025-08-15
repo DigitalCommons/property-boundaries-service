@@ -5,10 +5,11 @@ import {
   comparePolygons,
   findOldContainingOrContainedPoly,
   coordsOverlapWithExistingPoly,
-} from "./methods";
+} from "./methods.js";
 import {
   PendingPolygon,
   acceptPendingPolygon,
+  clipPendingPolygonsFromUnregisteredLand,
   deleteAllPolygonsPendingDeletion,
   getLastPipelineRun,
   getNextPendingPolygon,
@@ -21,12 +22,12 @@ import {
   resetAllPendingPolygons,
   setPipelineLastPolyAnalysed,
   setPipelineLatestInspireData,
-} from "../../queries/query";
+} from "../../queries/query.js";
 import moment from "moment-timezone";
 import stringTable from "nodestringtable";
-import { logger } from "../logger";
-import { getRunningPipelineKey, roundDecimalPlaces } from "../util";
-import { Match } from "./match";
+import { logger } from "../logger.js";
+import { getRunningPipelineKey, roundDecimalPlaces } from "../util.js";
+import { Match } from "./match.js";
 
 const analysisFolder = path.resolve("./analysis");
 
@@ -154,10 +155,10 @@ const processMatch = async (
 };
 
 const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
-  const { poly_id: inspireId, geom, council, matchType } = polygon;
+  const { poly_id: inspireId, geom, council, match_type } = polygon;
 
   // Skip if already marked as failed (e.g. a new segment of a failed match)
-  if (matchType === Match.Fail) {
+  if (match_type === Match.Fail) {
     return;
   }
 
@@ -285,7 +286,7 @@ const analysePolygon = async (polygon: PendingPolygon): Promise<void> => {
 const analyseNewInspireId = async (inspireId: number) => {
   const polygon: PendingPolygon = await getPendingPolygon(inspireId);
 
-  if (polygon.matchType) {
+  if (polygon.match_type) {
     // We have already processed this new INSPIRE ID
     return;
   }
@@ -407,13 +408,14 @@ const analyseNewInspireId = async (inspireId: number) => {
 };
 
 /**
- * Loop through all the pending polygons in the pending_inspire_polygons table, trying to find a
- * match with our existing polygons. If the match is successful, mark the pending polygon as
- * accepted. Then, if 'updateBoundaries' is true, copy all of the accepted pending polygons into
- * the main land_ownership_polygons table and overwrite existing geometry data.
+ * Loop through all the pending polygons in the pending_inspire_polygons table. First, try to find a
+ * match with our existing land ownership polygons. If the match is successful, mark the pending
+ * polygon as accepted. Finally, if 'updateBoundaries' is true, clip all new/changed INSPIRE poly
+ * gemoetries from the unregistered_land layer and copy all of the accepted pending polygons into
+ * the main land_ownership_polygons table, overwriting existing geometry data.
  *
- * Log a summary of the results of the analysis and store the full results in the
- * following JSONs in the analysis folder:
+ * Log a summary of the results of the analysis and store the full results in the following JSONs in
+ * the analysis folder:
  *  - ids.json contains a list of IDs for each type of polygon match
  *  - stats.json contains statistics for each polygon match, grouped by council
  *  - merges-and-segments.json contains info about merges and segmentations that were found
@@ -526,9 +528,9 @@ export const analyseAllPendingPolygons = async (
 
   // Print summary of results
   const finalDataCounts = {};
-  for (const matchType of [...Object.values(Match), null]) {
-    const count = await getPendingPolygonCount(undefined, matchType as Match);
-    finalDataCounts[matchType] = {
+  for (const match_type of [...Object.values(Match), null]) {
+    const count = await getPendingPolygonCount(undefined, match_type as Match);
+    finalDataCounts[match_type] = {
       count: count.toLocaleString("en-US"),
       "%": roundDecimalPlaces((count / totalPendingPolygons) * 100, 3),
     };
@@ -541,6 +543,11 @@ export const analyseAllPendingPolygons = async (
   logger.info(finalDataCounts);
 
   if (options.updateBoundaries) {
+    logger.info(
+      "Clip all new/changed pending polygon boundaries from unregistered_land table",
+    );
+    await clipPendingPolygonsFromUnregisteredLand();
+
     logger.info("Updating main land_ownership_polygons table");
     await deleteAllPolygonsPendingDeletion();
     await insertAllAcceptedPendingPolygons();

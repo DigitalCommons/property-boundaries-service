@@ -8,13 +8,13 @@ import { exec, spawn } from "child_process";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
 import { promisify } from "util";
-import { logger } from "../logger";
+import { logger } from "../logger.js";
 import {
   deleteAllPendingPolygons,
   getLastPipelineRun,
   setPipelineLastCouncilDownloaded,
-} from "../../queries/query";
-import { getLatestInspirePublishMonth } from "../util";
+} from "../../queries/query.js";
+import { getLatestInspirePublishMonth } from "../util.js";
 import axios from "axios";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
@@ -137,6 +137,28 @@ const backupInspireDownloads = async () => {
   logger.info(`raw INSPIRE backup script stderr: ${stderr}`);
 };
 
+/**
+ * Download the latest INSPIRE data backup from our Hetzner storage box (as zip files for each
+ * council). This is useful for re-running the pipeling on the latest data after the month has
+ * passed, for example if the gov Land Reg website has stopped working.
+ *
+ * @returns {Promise<string>} The month of the latest INSPIRE data backup
+ */
+const restoreLatestInspireBackup = async (): Promise<string> => {
+  if (!process.env.REMOTE_BACKUP_DESTINATION_PATH) {
+    logger.warn(
+      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set",
+    );
+    return null;
+  }
+  const command = "bash scripts/restore-latest-inspire-downloads.sh";
+  logger.info(`Running '${command}'`);
+  const { stdout, stderr } = await promisify(exec)(command);
+  logger.info(`raw INSPIRE restore script stdout: ${stdout}`);
+  logger.info(`raw INSPIRE restore script stderr: ${stderr}`);
+  return stdout.trim();
+};
+
 /** Unzip an archive then delete the original archive (to save space) */
 const unzipArchive = async (council: string) => {
   const zipFile = path.resolve(`${downloadPath}/${council}.zip`);
@@ -226,21 +248,17 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   // Download the data for the first <maxCouncils> councils after <afterCouncil>. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
-  const latestInspirePublishMonth = getLatestInspirePublishMonth();
+  const inspireDataMonth = options.inspireDataRestore
+    ? await restoreLatestInspireBackup()
+    : getLatestInspirePublishMonth();
 
-  logger.info(
-    `Download ${latestInspirePublishMonth} INSPIRE data ` + afterCouncil
-      ? `after council ${afterCouncil}`
-      : "for all councils",
-  );
-
-  downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
+  downloadPath = path.resolve("./downloads", inspireDataMonth);
   fs.mkdirSync(downloadPath, { recursive: true });
 
   // delete old files in the downloads folder
   const oldDownloadsFolders = fs
     .readdirSync("./downloads")
-    .filter((folderName) => folderName !== latestInspirePublishMonth);
+    .filter((folderName) => folderName !== inspireDataMonth);
   for (const folder of oldDownloadsFolders) {
     fs.rmSync(path.resolve("./downloads", folder), {
       recursive: true,
@@ -255,14 +273,29 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
     await deleteAllPendingPolygons();
   }
 
-  councils = [];
+  if (options.inspireDataRestore) {
+    // Set councils to list of filenames in the download folder
 
-  // Download INSPIRE data from govt website
-  await downloadInspire(maxCouncils, afterCouncil);
+    councils = fs
+      .readdirSync(downloadPath)
+      .filter((file) => file.endsWith(".zip"))
+      .map((file) => file.replace(".zip", ""));
+  } else {
+    logger.info(
+      `Download ${inspireDataMonth} INSPIRE data ` + afterCouncil
+        ? `after council ${afterCouncil}`
+        : "for all councils",
+    );
 
-  // If new files were downloaded, back them up
-  if (anyNewDownloads) {
-    await backupInspireDownloads();
+    councils = [];
+
+    // Download INSPIRE data from govt website
+    await downloadInspire(maxCouncils, afterCouncil);
+
+    // If new files were downloaded, back them up
+    if (anyNewDownloads) {
+      await backupInspireDownloads();
+    }
   }
 
   // Unzip and transform all new downloads

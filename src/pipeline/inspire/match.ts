@@ -1,5 +1,5 @@
 /**
- * These are the types of match_type in the pending_inspire_polygons table.
+ * These are the possible values of match_type in the pending_inspire_polygons table.
  *
  * Note that we have simplified the comparePolygons method in methods.ts, so we only detect the
  * first 4 types of match, and the rest are marked as a fail.

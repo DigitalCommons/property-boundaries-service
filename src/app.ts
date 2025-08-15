@@ -2,9 +2,9 @@ import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
 import qs from "qs";
-import routes from "./routes/index";
-import { resumePipelineRunIfInterrupted } from "./pipeline/run";
-import { logger } from "./pipeline/logger";
+import routes from "./routes/index.js";
+import { resumePipelineRunIfInterrupted } from "./pipeline/run.js";
+import { logger } from "./pipeline/logger.js";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,

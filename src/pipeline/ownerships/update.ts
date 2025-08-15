@@ -6,14 +6,14 @@ import {
   bulkCreateOrUpdateLandOwnerships,
   getLatestOwnershipDataDate,
   setPipelineLatestOwnershipData,
-} from "../../queries/query";
+} from "../../queries/query.js";
 import {
   getDatasetHistory,
   getLatestDatasets,
   pipeZippedCsvFromUrlIntoFun,
-} from "./helpers";
-import { logger } from "../logger";
-import { notifyMatrix } from "../util";
+} from "./helpers.js";
+import { logger } from "../logger.js";
+import { notifyMatrix } from "../util.js";
 
 /**
  * Ensure the land_ownerships DB table is up-to-date.

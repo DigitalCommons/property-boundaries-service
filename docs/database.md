@@ -19,6 +19,11 @@ There are the tables in our database:
   a list of INSPIRE IDs that are marked for deletion by the pipeline algorithm. Currently this is not
   used, but would be used if e.g. 2 INSPIRE polygons have merged and we want to delete one of the old
   polygons that no longer exists.
+- `unregistered_land` -
+  each row has the geometry of a polygon boundary for a piece of unregistered land
+- `england_and_wales` -
+  this is a temporary table, created once for one-time unregistered land initialisation script, so
+  doesn't have a Sequelize migration
 
 View the `migrations` folder to see their full definitions.
 

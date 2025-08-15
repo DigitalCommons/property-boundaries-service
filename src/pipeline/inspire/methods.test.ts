@@ -2,18 +2,14 @@
 import { expect } from "chai";
 // // Sinon provides mocks, spies, stubs, etc. We use them to replace and control the behaviour of code
 // // that is external to our test unit, or to verify how out test unit interfaces with external code.
-import { createSandbox, SinonStub } from "sinon";
-import { comparePolygons as testUnit } from "./methods";
-import { Match } from "./match";
-import proxyquire from "proxyquire";
+import { createSandbox } from "sinon";
+import { comparePolygons } from "./methods.js";
+import { Match } from "./match.js";
 import * as turf from "@turf/turf";
 
 // We plug all our fakes, spies, etc into the system under test using a sandbox. This makes it
 // easier to clean them up after each test.
 const sandbox = createSandbox();
-
-// Our test unit
-let comparePolygons: typeof testUnit;
 
 const examplePoly = [
   [-1.4609501, 51.2205179],
@@ -32,18 +28,6 @@ const exampleFarAwayPolyCenter = turf.center(turf.polygon([exampleFarAwayPoly]))
   .geometry.coordinates;
 
 describe("comparePolygons", () => {
-  let fakeNodeGeocoder: SinonStub;
-
-  beforeEach(() => {
-    fakeNodeGeocoder = sandbox.stub();
-    // We need to stub node-geocoder, which returns the geocoder constructor directly as
-    // module.exports). Sinon doesn't have a way to stub this (see what it can stub here
-    // https://sinonjs.org/how-to/stub-dependency/), so we need to use proxyquire.
-    ({ comparePolygons } = proxyquire("./methods", {
-      "node-geocoder": fakeNodeGeocoder,
-    }));
-  });
-
   afterEach(async () => {
     // Restore all fakes that were created https://sinonjs.org/releases/latest/sandbox/
     sandbox.restore();
@@ -127,16 +111,18 @@ describe("comparePolygons", () => {
             exampleFarAwayPolyCenter,
             Math.random() * 50,
             Math.random() * 360,
-            { units: "meters" }
+            { units: "meters" },
           ).geometry.coordinates;
 
-        // Stub the geocoder so it returns random coordinates each time
-        fakeNodeGeocoder.returns({
+        // Stub the geocoder to always return the above generated coordinates Sinon doesn't have a
+        // way to stub this (see what it can stub here https://sinonjs.org/how-to/stub-dependency/),
+        // so we need to inject it directly into the method
+        const fakeGeocoder = {
           geocode: (address: string) => {
             const coords = getRandomCoordinates();
             return [{ longitude: coords[0], latitude: coords[1] }];
           },
-        });
+        };
 
         for (let i = 0; i < 10; i++) {
           const result = await comparePolygons(
@@ -145,7 +131,8 @@ describe("comparePolygons", () => {
             examplePoly,
             exampleFarAwayPoly,
             undefined,
-            "123 Fake St"
+            "123 Fake St",
+            fakeGeocoder,
           );
 
           expect(result.match).to.equal(Match.Moved);
@@ -159,16 +146,16 @@ describe("comparePolygons", () => {
             exampleFarAwayPolyCenter,
             Math.random() * 950 + 50,
             Math.random() * 360,
-            { units: "meters" }
+            { units: "meters" },
           ).geometry.coordinates;
 
-        // Stub the geocoder so it returns random coordinates each time
-        fakeNodeGeocoder.returns({
+        // Stub the geocoder to always return the above generated coordinates
+        const fakeGeocoder = {
           geocode: (address: string) => {
             const coords = getRandomCoordinates();
             return [{ longitude: coords[0], latitude: coords[1] }];
           },
-        });
+        };
 
         for (let i = 0; i < 10; i++) {
           const result = await comparePolygons(
@@ -177,7 +164,8 @@ describe("comparePolygons", () => {
             examplePoly,
             exampleFarAwayPoly,
             undefined,
-            "123 Fake St"
+            "123 Fake St",
+            fakeGeocoder,
           );
 
           expect(result.match).to.equal(Match.Fail);
@@ -185,20 +173,11 @@ describe("comparePolygons", () => {
       });
 
       it("should return Match.Fail when there is no associated title address", async () => {
-        fakeNodeGeocoder.returns({
-          geocode: (address: string) => [
-            {
-              longitude: exampleFarAwayPolyCenter[0],
-              latitude: exampleFarAwayPolyCenter[1],
-            },
-          ],
-        });
-
         const result = await comparePolygons(
           1,
           2,
           examplePoly,
-          exampleFarAwayPoly
+          exampleFarAwayPoly,
           // no title address
         );
 
@@ -206,11 +185,11 @@ describe("comparePolygons", () => {
       });
 
       it("should return Match.Fail when geocoding of the title address fails", async () => {
-        fakeNodeGeocoder.returns({
+        const fakeGeocoder = {
           geocode: (address: string) => {
             throw new Error("TEST: failed geocoding");
           },
-        });
+        };
 
         const result = await comparePolygons(
           1,
@@ -218,7 +197,8 @@ describe("comparePolygons", () => {
           examplePoly,
           exampleFarAwayPoly,
           undefined,
-          "123 Fake St"
+          "123 Fake St",
+          fakeGeocoder,
         );
 
         expect(result.match).to.equal(Match.Fail);

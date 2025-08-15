@@ -10,8 +10,9 @@ import {
   getPolygonsByIdInSearchArea,
   getLocalAuthorityPolygonsInSearchArea,
   getChurchOfEnglandPolygonsInSearchArea,
-} from "../queries/query";
-import { PipelineOptions, triggerPipelineRun } from "../pipeline/run";
+  getUnregisteredPolygonsInSearchArea,
+} from "../queries/query.js";
+import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
 
 type GetPolygonsInBoxRequest = Request & {
   query: {
@@ -20,7 +21,7 @@ type GetPolygonsInBoxRequest = Request & {
     ne_lng: number;
     ne_lat: number;
     type?: string;
-    acceptedOnly?: string;
+    acceptedOnly?: boolean;
     secret: string;
   };
 };
@@ -28,7 +29,7 @@ type GetPolygonsInBoxRequest = Request & {
 // TODO: combine with search route so we can filter by a box and ownership at the same time?
 const getPolygonsInBox = async (
   request: GetPolygonsInBoxRequest,
-  h: ResponseToolkit
+  h: ResponseToolkit,
 ): Promise<ResponseObject> => {
   const { sw_lng, sw_lat, ne_lng, ne_lat, type, acceptedOnly, secret } =
     request.query;
@@ -67,15 +68,11 @@ const getPolygonsInBox = async (
     case "churchOfEngland":
       polygons = await getChurchOfEnglandPolygonsInSearchArea(searchArea);
       break;
+    case "unregistered":
+      polygons = await getUnregisteredPolygonsInSearchArea(searchArea);
+      break;
     case "pending":
-      polygons = await getPendingPolygonsInSearchArea(
-        searchArea,
-        acceptedOnly === "true"
-      );
-      // Add "-pending" to the end of each poly_id to avoid id conflicts with normal polygons
-      polygons.forEach((poly) => {
-        poly.poly_id = `${poly.poly_id}-pending`;
-      });
+      polygons = await getPendingPolygonsInSearchArea(searchArea, acceptedOnly);
       break;
     default:
       return h.response("unknown ownership type").code(400);
@@ -101,7 +98,7 @@ type GetPolygonsRequest = Request & {
  */
 async function getPolygonsByIdInArea(
   request: GetPolygonsRequest,
-  h: ResponseToolkit
+  h: ResponseToolkit,
 ): Promise<ResponseObject> {
   const { poly_ids, searchArea, includeLeaseholds, secret } = request.payload;
 
@@ -116,7 +113,7 @@ async function getPolygonsByIdInArea(
   const result = await getPolygonsByIdInSearchArea(
     poly_ids,
     searchArea,
-    includeLeaseholds
+    includeLeaseholds,
   );
 
   return h.response(result).code(200);
@@ -152,7 +149,7 @@ type RunPipelineRequest = Request & {
 
 const runPipeline = async (
   request: RunPipelineRequest,
-  h: ResponseToolkit
+  h: ResponseToolkit,
 ): Promise<ResponseObject> => {
   const { secret, ...options } = request.query;
   console.log(options);
