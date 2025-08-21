@@ -132,7 +132,7 @@ export const initialiseUnregisteredLandLayer = async (
   console.log(
     "Clipping pending_inspire_polygons, roads, rail, water and building from england and wales to create unregistered layer...",
   );
-  console.time("clipping");
+  console.time("clip_all");
 
   // Loop through each polygon in england_and_wales
   let polyToClip = await getNextEnglandAndWalesPolygon(
@@ -163,6 +163,8 @@ export const initialiseUnregisteredLandLayer = async (
     ).filter((p) => p.match_type !== Match.Exact);
 
     if (intersectingInspirePolys.length > 0) {
+      console.time("clipping");
+
       let polyWithoutInspire: GeoJSON.Feature<
         GeoJSON.Polygon | GeoJSON.MultiPolygon
       > = turf.polygon(polyToClip.geom.coordinates);
@@ -198,6 +200,8 @@ export const initialiseUnregisteredLandLayer = async (
       unregisteredPolys = turf.truncate(
         turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
       ).features;
+
+      console.timeEnd("clipping");
     } else {
       // No intersecting inspire polygons, so just add the whole polygon as is
       unregisteredPolys.push(turf.polygon(polyToClip.geom.coordinates));
@@ -282,7 +286,7 @@ export const initialiseUnregisteredLandLayer = async (
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
 
-  console.timeEnd("clipping");
+  console.timeEnd("clip_all");
 };
 
 /**
@@ -426,3 +430,6 @@ initialiseUnregisteredLandLayer(process.argv[2], parseInt(process.argv[3]))
   .catch((error) => {
     console.error("Error creating initial unregistered land layer:", error);
   });
+
+// Fix OOM during clipping of INSPIRE:
+// Processing england_and_wales polygon id 44010 , coords [ 53.590382, -2.462559 ] area m2 733803.844861821
