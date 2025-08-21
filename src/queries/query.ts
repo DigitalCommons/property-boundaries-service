@@ -330,7 +330,9 @@ export const bulkCreateEnglandAndWalesPolygons = async (
 
   const numFeatures = polygons.length;
   if (numFeatures === 0) {
-    throw new Error(`Expected > 0 England and Wales polygons but received ${numFeatures} polygons`);
+    throw new Error(
+      `Expected > 0 England and Wales polygons but received ${numFeatures} polygons`,
+    );
   }
 
   const query = `INSERT INTO england_and_wales (geom)
@@ -970,11 +972,11 @@ export const insertAllAcceptedPendingPolygons = async () => {
 
   const chunkSize = 100000;
   for (let i = 0; i <= (lastPendingPolygon?.id ?? 0); i += chunkSize) {
-    const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
-    SELECT p.poly_id, p.geom
+    const query = `INSERT INTO land_ownership_polygons (poly_id, geom, updatedAt)
+    SELECT p.poly_id, p.geom, p.createdAt
     FROM pending_inspire_polygons p WHERE accepted = true
       AND id >= ${i} AND id < ${i + chunkSize}
-    ON DUPLICATE KEY UPDATE geom = p.geom;`;
+    ON DUPLICATE KEY UPDATE geom = p.geom, updatedAt = p.createdAt;`;
 
     await sequelize.query(query, {
       type: QueryTypes.INSERT,
