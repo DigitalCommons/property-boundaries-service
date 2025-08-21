@@ -165,36 +165,33 @@ export const initialiseUnregisteredLandLayer = async (
     if (intersectingInspirePolys.length > 0) {
       console.time("clipping");
 
+      const diff = turf.featureCollection([
+        turf.polygon(polyToClip.geom.coordinates),
+        ...intersectingInspirePolys.map((inspirePoly) =>
+          turf.polygon(inspirePoly.geom.coordinates),
+        ),
+      ]);
+
       let polyWithoutInspire: GeoJSON.Feature<
         GeoJSON.Polygon | GeoJSON.MultiPolygon
-      > = turf.polygon(polyToClip.geom.coordinates);
+      >;
 
-      for (const inspirePoly of intersectingInspirePolys) {
-        const diff = turf.featureCollection([
-          polyWithoutInspire,
-          turf.polygon(inspirePoly.geom.coordinates),
-        ]);
-
-        try {
-          polyWithoutInspire = turf.difference(
-            // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(diff),
-          );
-        } catch (error) {
-          // sometimes this happens due to floating point precision issues with turf when the
-          // borders of polygons are long and very close to each other. In this case, truncate
-          // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
-          // fewer issues
-          console.warn(
-            `Turf difference failed with error "${error.message}" try again with 5 d.p. precision`,
-          );
-          polyWithoutInspire = turf.difference(
-            turf.truncate(diff, { precision: 5 }),
-          );
-        }
-
-        // Can stop clipping if we are left with no area
-        if (!polyWithoutInspire) break;
+      try {
+        polyWithoutInspire = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(diff),
+        );
+      } catch (error) {
+        // sometimes this happens due to floating point precision issues with turf when the
+        // borders of polygons are long and very close to each other. In this case, truncate
+        // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
+        // fewer issues
+        console.warn(
+          `Turf difference failed with error "${error.message}" try again with 5 d.p. precision`,
+        );
+        polyWithoutInspire = turf.difference(
+          turf.truncate(diff, { precision: 5 }),
+        );
       }
 
       unregisteredPolys = turf.truncate(
