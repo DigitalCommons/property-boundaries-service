@@ -226,50 +226,58 @@ export const initialiseUnregisteredLandLayer = async (
     // water and buildings, with only a few polys land included in the OS NGD land features dataset.
     // So it's more efficient to do a pairwise intersection, rather than doing an intersection of
     // their unions. Use an RBush index to speed up the spatial queries when finding intersections.
+    // For efficiency, index the larger, denser set (landFeatures) and query the smaller set
+    // (remainingPolys).
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
-    index.load(remainingPolys);
+    index.load(landFeatures);
     const unregisteredLandPolys = [];
 
-    for (const landFeature of landFeatures) {
-      if (!index.collides(landFeature)) continue; // cheap to first check if any bboxes intersect
+    for (const remainingPoly of remainingPolys) {
+      if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
 
-      const candidates = index.search(landFeature); // find those whose bbox intersects
+      const candidates = index.search(remainingPoly); // find those whose bbox intersects
 
-      for (const remainingPoly of candidates.features) {
-        // Before we do the expensive intersection, check if the precise features intersect
-        if (!turf.booleanIntersects(landFeature, remainingPoly)) continue;
+      // filter by actual touches before doing expensive union and intersect operations
+      const touchingLandFeatures = candidates.features.filter((landFeature) =>
+        turf.booleanIntersects(landFeature, remainingPoly),
+      );
+      if (touchingLandFeatures.length === 0) continue;
 
-        try {
-          const clipped = turf.intersect(
-            // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(turf.featureCollection([landFeature, remainingPoly])),
+      // For efficiency, take union of touching land before intersection
+      const landUnion =
+        touchingLandFeatures.length > 1
+          ? turf.union(turf.featureCollection(touchingLandFeatures))
+          : touchingLandFeatures[0];
+
+      try {
+        const clipped = turf.intersect(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(turf.featureCollection([landUnion, remainingPoly])),
+        );
+        if (clipped) {
+          // Before we add the clipped geometry into the DB, filter out slivers by only keeping
+          // those which are bigger than 20 m2 and don't disappear if we shrink the borders by 2 m
+          unregisteredLandPolys.push(
+            ...turf
+              .truncate(turf.flatten(clipped))
+              .features.filter(
+                (f) =>
+                  turf.area(f) > 20 &&
+                  turf.area(
+                    turf.buffer(f, -2, { units: "meters" }) ?? turf.polygon([]),
+                  ) > 0,
+              ),
           );
-          if (clipped) {
-            // Before we add the clipped geometry into the DB, filter out slivers by only keeping
-            // those which are bigger than 20 m2 and don't disappear if we shrink the borders by 2 m
-            unregisteredLandPolys.push(
-              ...turf
-                .truncate(turf.flatten(clipped))
-                .features.filter(
-                  (f) =>
-                    turf.area(f) > 20 &&
-                    turf.area(
-                      turf.buffer(f, -2, { units: "meters" }) ??
-                        turf.polygon([]),
-                    ) > 0,
-                ),
-            );
-          }
-        } catch (error) {
-          if (
-            error.message.includes("Unable to complete output ring starting at")
-          ) {
-            // sometimes this happens due to an issue with turf or invalid geometry
-            console.warn(
-              `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
-            );
-          } else throw error;
         }
+      } catch (error) {
+        if (
+          error.message.includes("Unable to complete output ring starting at")
+        ) {
+          // sometimes this happens due to an issue with turf or invalid geometry
+          console.warn(
+            `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
+          );
+        } else throw error;
       }
     }
     console.timeEnd("clip_osngd");
