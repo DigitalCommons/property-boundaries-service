@@ -162,7 +162,7 @@ export const initialiseUnregisteredLandLayer = async (
       polyToClip.id,
     );
     if (intersectingInspirePolys.length > 0) {
-      console.time("clipping");
+      console.time("clip_inspire");
 
       const diff = turf.featureCollection([
         turf.polygon(polyToClip.geom.coordinates),
@@ -197,7 +197,7 @@ export const initialiseUnregisteredLandLayer = async (
         turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
       ).features;
 
-      console.timeEnd("clipping");
+      console.timeEnd("clip_inspire");
     } else {
       // No intersecting inspire polygons, so just add the whole polygon as is
       unregisteredPolys.push(turf.polygon(polyToClip.geom.coordinates));
@@ -215,6 +215,7 @@ export const initialiseUnregisteredLandLayer = async (
     // unregisteredPolys with OS NGD 'land' features, which are polygons "representing an area on
     // the Earth's surface that has not otherwise been captured as a Building Part, Rail, Road Track
     // Or Path, Structure, or Water Feature Type."
+    console.time("clip_osngd");
 
     // Just get all the land features within the original england_and_wales polygon, since the
     // unregistered polygons will be numerous and cover lots of the area. We want to minimise OS NGD
@@ -273,6 +274,7 @@ export const initialiseUnregisteredLandLayer = async (
         }
       }
     }
+    console.timeEnd("clip_osngd");
 
     // Add the clipped polygons to the DB
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
