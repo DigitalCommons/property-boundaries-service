@@ -156,7 +156,7 @@ export const initialiseUnregisteredLandLayer = async (
     }
 
     // First, clip away any overlapping pending_inspire_polygons
-    let unregisteredPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+    let remainingPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
     const intersectingInspirePolys = await getIntersectingPendingInspirePolys(
       polyToClip.id,
@@ -193,26 +193,26 @@ export const initialiseUnregisteredLandLayer = async (
         );
       }
 
-      unregisteredPolys = turf.truncate(
+      remainingPolys = turf.truncate(
         turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
       ).features;
 
       console.timeEnd("clip_inspire");
     } else {
       // No intersecting inspire polygons, so just add the whole polygon as is
-      unregisteredPolys.push(turf.polygon(polyToClip.geom.coordinates));
+      remainingPolys.push(turf.polygon(polyToClip.geom.coordinates));
     }
 
     console.log(
       "Clipped away",
       intersectingInspirePolys.length,
       "inspire polygons. # clipped polys to further analyse:",
-      unregisteredPolys.length,
+      remainingPolys.length,
     );
 
     // Now, rather than clipping OS NGD roads, rail, water and buildings features all separately and
-    // performing multiple API queries and difference operations, we will just inersect the
-    // unregisteredPolys with OS NGD 'land' features, which are polygons "representing an area on
+    // performing multiple API queries and difference operations, we will just intersect the
+    // remainingPolys with OS NGD 'land' features, which are polygons "representing an area on
     // the Earth's surface that has not otherwise been captured as a Building Part, Rail, Road Track
     // Or Path, Structure, or Water Feature Type."
     console.time("clip_osngd");
@@ -222,12 +222,12 @@ export const initialiseUnregisteredLandLayer = async (
     // API calls
     const landFeatures = await getOsNgdLandFeatures(turf.bbox(polyToClip.geom));
 
-    // We expect that most of the unregisteredPolys will just be transport, water and building
-    // features and will be removed, with just a few matching the OS NGD land features. So it's more
-    // efficient to do a pairwise intersection, rather than doing an intersection of their unions.
-    // Use an RBush index to speed up the spatial queries when finding intersections
+    // We expect that most of the remainingPolys will just be areas of land covering transport,
+    // water and buildings, with only a few polys land included in the OS NGD land features dataset.
+    // So it's more efficient to do a pairwise intersection, rather than doing an intersection of
+    // their unions. Use an RBush index to speed up the spatial queries when finding intersections.
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
-    index.load(unregisteredPolys); // still useful to reduce the 200×50 pairs
+    index.load(remainingPolys);
     const unregisteredLandPolys = [];
 
     for (const landFeature of landFeatures) {
@@ -235,16 +235,14 @@ export const initialiseUnregisteredLandLayer = async (
 
       const candidates = index.search(landFeature); // find those whose bbox intersects
 
-      for (const unregisteredPoly of candidates.features) {
+      for (const remainingPoly of candidates.features) {
         // Before we do the expensive intersection, check if the precise features intersect
-        if (!turf.booleanIntersects(landFeature, unregisteredPoly)) continue;
+        if (!turf.booleanIntersects(landFeature, remainingPoly)) continue;
 
         try {
           const clipped = turf.intersect(
             // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(
-              turf.featureCollection([landFeature, unregisteredPoly]),
-            ),
+            turf.truncate(turf.featureCollection([landFeature, remainingPoly])),
           );
           if (clipped) {
             // Before we add the clipped geometry into the DB, filter out slivers by only keeping
