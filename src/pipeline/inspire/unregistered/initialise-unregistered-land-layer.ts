@@ -158,10 +158,9 @@ export const initialiseUnregisteredLandLayer = async (
     // First, clip away any overlapping pending_inspire_polygons
     let unregisteredPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
-    const intersectingInspirePolys = (
-      await getIntersectingPendingInspirePolys(polyToClip.id)
-    ).filter((p) => p.match_type !== Match.Exact);
-
+    const intersectingInspirePolys = await getIntersectingPendingInspirePolys(
+      polyToClip.id,
+    );
     if (intersectingInspirePolys.length > 0) {
       console.time("clipping");
 
