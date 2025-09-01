@@ -63,6 +63,19 @@ export const initialiseUnregisteredLandLayer = async (
   startAtEnglandAndWalesId?: number,
   stopBeforeEnglandAndWalesId?: number,
 ) => {
+  console.log(
+    "Initialising unregistered land layer with parameters:",
+    JSON.stringify(
+      {
+        countriesShp,
+        startAtEnglandAndWalesId,
+        stopBeforeEnglandAndWalesId,
+      },
+      null,
+      2,
+    ),
+  );
+
   if (countriesShp) {
     if (await englandAndWalesTableExists()) {
       throw new Error(
@@ -240,9 +253,9 @@ export const initialiseUnregisteredLandLayer = async (
     // Or Path, Structure, or Water Feature Type."
     console.time("clip_osngd");
 
-    // Get OS NGD land features from the pre-populated table
-    const landFeatures = await getOsLandFeaturesByEnglandAndWalesId(
+    const landFeatures = await getOsLandFeaturesForEnglandAndWalesPoly(
       polyToClip.id,
+      polyToClip.geom,
     );
 
     // We expect that most of the remainingPolys will just be areas of land covering transport,
@@ -450,56 +463,67 @@ const fetchOsNgdLandFeatures = async (
 };
 
 /**
+ * Get OS NGD land features that sit within an england_and_wales polygon's bbox. First check if the
+ * features have already been downloaded and stored in the DB, download them if not.
+ *
+ * @param englandAndWalesPolyId - The id of the england_and_wales polygon
+ * @param geom - The geometry of the england_and_wales polygon
+ */
+const getOsLandFeaturesForEnglandAndWalesPoly = async (
+  englandAndWalesPolyId: number,
+  geom: GeoJSON.Polygon,
+): Promise<GeoJSON.Feature<GeoJSON.Polygon>[]> => {
+  // Check if this england_and_wales polygon has already been processed
+  const existingFeatures = await getOsLandFeaturesByEnglandAndWalesId(
+    englandAndWalesPolyId,
+  );
+  if (existingFeatures.length > 0) {
+    return existingFeatures;
+  }
+
+  console.log(
+    `Downloading OS NGD land features for england_and_wales id ${englandAndWalesPolyId}`,
+  );
+  // Get OS NGD land features for this polygon's bbox
+  const landFeatures = await fetchOsNgdLandFeatures(turf.bbox(geom));
+
+  if (landFeatures.length > 0) {
+    // Add england_and_wales_id to each feature
+    const featuresWithId = landFeatures.map((feature) => ({
+      ...feature,
+      england_and_wales_id: englandAndWalesPolyId,
+      os_ngd_id: feature.properties?.id || feature.properties?.os_ngd_id,
+    }));
+
+    // Bulk insert into os_land_polys table
+    await bulkCreateOsLandPolys(featuresWithId);
+
+    console.log("Inserted", featuresWithId.length, "OS NGD land features");
+    return landFeatures;
+  } else {
+    console.log(`No OS NGD land features found`);
+    return [];
+  }
+};
+
+/**
  * Populate the os_land_polys table with OS NGD land features for all england_and_wales polygons.
  * This function should be run after the england_and_wales table is populated.
  */
-export const populateOsLandPolys = async () => {
+const populateOsLandPolys = async () => {
   let englandAndWalesPoly = await getNextEnglandAndWalesPolygon(0);
   let totalFeatures = 0;
 
   while (englandAndWalesPoly) {
-    // Check if this england_and_wales polygon has already been processed
-    if (
-      (await getOsLandFeaturesByEnglandAndWalesId(englandAndWalesPoly.id))
-        .length > 0
-    ) {
-      console.log(
-        `Skipping england_and_wales id ${englandAndWalesPoly.id} - already downloaded OS land features`,
-      );
-      englandAndWalesPoly = await getNextEnglandAndWalesPolygon(
-        englandAndWalesPoly.id + 1,
-      );
-      continue;
-    }
-
-    console.log(
-      `Downloading OS NGD land features for england_and_wales id ${englandAndWalesPoly.id}`,
-    );
     try {
-      // Get OS NGD land features for this polygon's bbox
-      const landFeatures = await fetchOsNgdLandFeatures(
-        turf.bbox(englandAndWalesPoly.geom),
+      const features = await getOsLandFeaturesForEnglandAndWalesPoly(
+        englandAndWalesPoly.id,
+        englandAndWalesPoly.geom,
       );
-
-      if (landFeatures.length > 0) {
-        // Add england_and_wales_id to each feature
-        const featuresWithId = landFeatures.map((feature) => ({
-          ...feature,
-          england_and_wales_id: englandAndWalesPoly.id,
-          os_ngd_id: feature.properties?.id || feature.properties?.os_ngd_id,
-        }));
-
-        // Bulk insert into os_land_polys table
-        await bulkCreateOsLandPolys(featuresWithId);
-        totalFeatures += featuresWithId.length;
-
-        console.log("Inserted", featuresWithId.length, "OS NGD land features");
-      } else {
-        console.log(`No OS NGD land features found`);
-      }
+      totalFeatures += features.length;
     } catch (error) {
       console.error(
-        `Error processing england_and_wales id ${englandAndWalesPoly.id}:`,
+        `Error downloading OS NGD land features for england_and_wales id ${englandAndWalesPoly.id}:`,
         error,
       );
       // Continue with next polygon instead of failing completely
