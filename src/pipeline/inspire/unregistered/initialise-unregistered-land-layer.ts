@@ -60,8 +60,8 @@ import { Match } from "../match.js";
  */
 export const initialiseUnregisteredLandLayer = async (
   countriesShp: string,
-  startAtEnglandAndWalesId: number | null,
-  stopBeforeEnglandAndWalesId: number | null,
+  startAtEnglandAndWalesId?: number,
+  stopBeforeEnglandAndWalesId?: number,
 ) => {
   console.log(
     "Initialising unregistered land layer with parameters:",
@@ -152,7 +152,7 @@ export const initialiseUnregisteredLandLayer = async (
   }
 
   if (
-    startAtEnglandAndWalesId === null ||
+    Number.isNaN(startAtEnglandAndWalesId) ||
     startAtEnglandAndWalesId === stopBeforeEnglandAndWalesId // i.e. skipping the next section
   ) {
     console.log("Populating OS land polys table using OS NGD API...");
@@ -169,16 +169,9 @@ export const initialiseUnregisteredLandLayer = async (
     startAtEnglandAndWalesId || 0,
   );
 
-  console.log(
-    "stopBeforeEnglandAndWalesId",
-    stopBeforeEnglandAndWalesId,
-    stopBeforeEnglandAndWalesId == null,
-    0 == null,
-  );
-
   while (
     polyToClip &&
-    (stopBeforeEnglandAndWalesId === null ||
+    (Number.isNaN(stopBeforeEnglandAndWalesId) ||
       polyToClip.id < stopBeforeEnglandAndWalesId)
   ) {
     console.log(
