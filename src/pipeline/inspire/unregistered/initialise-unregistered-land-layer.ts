@@ -402,6 +402,7 @@ const MAX_RETRIES = 3;
 const fetchOsNgdLandFeatures = async (
   bbox: GeoJSON.BBox,
 ): Promise<GeoJSON.Feature<GeoJSON.Polygon>[]> => {
+  console.time("fetch_osngd");
   const osngdFeatures: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
   // OS NGD API returns max 100 features per request
@@ -457,7 +458,7 @@ const fetchOsNgdLandFeatures = async (
       throw error;
     }
   }
-
+  console.timeEnd("fetch_osngd");
   console.log("We fetched", osngdFeatures.length, "OS NGD features");
   return osngdFeatures;
 };
