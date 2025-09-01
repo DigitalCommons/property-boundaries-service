@@ -262,18 +262,16 @@ export const initialiseUnregisteredLandLayer = async (
     // water and buildings, with only a few polys land included in the OS NGD land features dataset.
     // So it's more efficient to do a pairwise intersection, rather than doing an intersection of
     // their unions. Use an RBush index to speed up the spatial queries when finding intersections.
-    // For efficiency, index the larger, denser set (landFeatures) and query the smaller set
-    // (remainingPolys).
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
-    index.load(landFeatures);
+    index.load(remainingPolys);
     const unregisteredLandPolys = [];
 
-    for (const remainingPoly of remainingPolys) {
-      if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
+    for (const landFeature of landFeatures) {
+      if (!index.collides(landFeature)) continue; // cheap to first check if any bboxes intersect
 
-      const candidates = index.search(remainingPoly); // find those whose bbox intersects
+      const candidates = index.search(landFeature); // find those whose bbox intersects
 
-      for (const landFeature of candidates.features) {
+      for (const remainingPoly of candidates.features) {
         // Before we do the expensive intersection, check if the precise features intersect
         if (!turf.booleanIntersects(landFeature, remainingPoly)) continue;
 
