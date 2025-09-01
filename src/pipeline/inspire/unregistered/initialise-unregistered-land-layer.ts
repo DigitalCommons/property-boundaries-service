@@ -275,41 +275,65 @@ export const initialiseUnregisteredLandLayer = async (
 
       const candidates = index.search(remainingPoly); // find those whose bbox intersects
 
-      for (const landFeature of candidates.features) {
-        // Before we do the expensive intersection, check if the precise features intersect
-        if (!turf.booleanIntersects(landFeature, remainingPoly)) continue;
+      // filter by actual touches before doing expensive union and intersect operations
+      const touchingLandFeatures = candidates.features.filter((landFeature) =>
+        turf.booleanIntersects(landFeature, remainingPoly),
+      );
+      if (touchingLandFeatures.length === 0) continue;
 
-        try {
-          const clipped = turf.intersect(
-            // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(turf.featureCollection([landFeature, remainingPoly])),
-          );
-          if (clipped) {
-            // Before we add the clipped geometry into the DB, filter out slivers by only keeping
-            // those which are bigger than 20 m2 and don't disappear if we shrink the borders by 2 m
-            unregisteredLandPolys.push(
-              ...turf
-                .truncate(turf.flatten(clipped))
-                .features.filter(
-                  (f) =>
-                    turf.area(f) > 20 &&
-                    turf.area(
-                      turf.buffer(f, -2, { units: "meters" }) ??
-                        turf.polygon([]),
-                    ) > 0,
+      // For efficiency, take union of touching land before intersection
+      const landUnion =
+        touchingLandFeatures.length > 1
+          ? turf.union(
+              turf.truncate(turf.featureCollection(touchingLandFeatures)),
+            )
+          : touchingLandFeatures[0];
+
+      try {
+        const clipped = turf.intersect(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(turf.featureCollection([landUnion, remainingPoly])),
+        );
+        if (clipped) {
+          // Before we add the clipped geometry into the DB, filter out slivers by only keeping
+          // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
+          // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
+          // shrinking all poly borders by 1m, then expanding them again. This will round corners
+          // slightly, but hopefully won't be too noticeable.
+          unregisteredLandPolys.push(
+            ...turf.truncate(
+              turf.buffer(
+                turf.buffer(
+                  turf.featureCollection(
+                    turf
+                      .flatten(clipped)
+                      .features.filter(
+                        (f) =>
+                          turf.area(f) > 20 &&
+                          turf.area(
+                            turf.buffer(f, -2, { units: "meters" }) ??
+                              turf.polygon([]),
+                          ) > 0,
+                      ),
+                  ),
+                  -1,
+                  { units: "meters" },
                 ),
-            );
-          }
-        } catch (error) {
-          if (
-            error.message.includes("Unable to complete output ring starting at")
-          ) {
-            // sometimes this happens due to an issue with turf or invalid geometry
-            console.warn(
-              `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
-            );
-          } else throw error;
+                1,
+                { units: "meters" },
+              ),
+            ).features,
+          );
         }
+      } catch (error) {
+        if (
+          error.message.includes("Unable to complete output ring starting at")
+        ) {
+          // sometimes this happens due to an issue with turf or invalid geometry
+          console.warn(
+            `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
+          );
+        } else throw error;
       }
     }
     console.timeEnd("clip_osngd");
@@ -492,13 +516,15 @@ const getOsLandFeaturesForEnglandAndWalesPoly = async (
   if (landFeatures.length > 0) {
     // Add england_and_wales_id to each feature
     const featuresWithId = landFeatures.map((feature) => ({
-      ...feature,
+      ...turf.truncate(feature),
       england_and_wales_id: englandAndWalesPolyId,
       os_ngd_id: feature.properties?.id || feature.properties?.os_ngd_id,
     }));
 
     // Bulk insert into os_land_polys table
     await bulkCreateOsLandPolys(featuresWithId);
+
+    console.log("Inserted", featuresWithId.length, "OS NGD land features");
     return landFeatures;
   } else {
     console.log(`No OS NGD land features found`);
