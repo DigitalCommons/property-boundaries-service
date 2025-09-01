@@ -60,8 +60,8 @@ import { Match } from "../match.js";
  */
 export const initialiseUnregisteredLandLayer = async (
   countriesShp: string,
-  startAtEnglandAndWalesId?: number,
-  stopBeforeEnglandAndWalesId?: number,
+  startAtEnglandAndWalesId: number | null,
+  stopBeforeEnglandAndWalesId: number | null,
 ) => {
   console.log(
     "Initialising unregistered land layer with parameters:",
@@ -152,7 +152,7 @@ export const initialiseUnregisteredLandLayer = async (
   }
 
   if (
-    startAtEnglandAndWalesId === undefined ||
+    startAtEnglandAndWalesId === null ||
     startAtEnglandAndWalesId === stopBeforeEnglandAndWalesId // i.e. skipping the next section
   ) {
     console.log("Populating OS land polys table using OS NGD API...");
