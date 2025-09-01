@@ -330,7 +330,7 @@ export const initialiseUnregisteredLandLayer = async (
           // Before we add the clipped geometry into the DB, filter out slivers by only keeping
           // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
           // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
-          // shrinking all poly borders by 1m, then expanding them again. This will round corners
+          // shrinking all poly borders by 0.5m, then expanding them again. This will round corners
           // slightly, but hopefully won't be too noticeable.
           console.time("filter_slivers");
           unregisteredLandPolys.push(
@@ -350,10 +350,10 @@ export const initialiseUnregisteredLandLayer = async (
                             ) > 0,
                         ),
                     ),
-                    -1,
+                    -0.5,
                     { units: "meters" },
                   ),
-                  1,
+                  0.5,
                   { units: "meters" },
                 ),
               ),
