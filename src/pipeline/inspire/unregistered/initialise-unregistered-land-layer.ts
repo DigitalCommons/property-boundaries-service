@@ -234,17 +234,7 @@ export const initialiseUnregisteredLandLayer = async (
       }
 
       remainingPolys = turf.truncate(
-        turf.flatten(
-          turf.buffer(
-            // avoid having to process some slivers later
-            turf.featureCollection([polyWithoutInspire]) ??
-              turf.featureCollection([]),
-            -20,
-            {
-              units: "centimeters",
-            },
-          ),
-        ),
+        turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
       ).features;
 
       console.timeEnd("clip_inspire");
@@ -327,7 +317,7 @@ export const initialiseUnregisteredLandLayer = async (
           // Before we add the clipped geometry into the DB, filter out slivers by only keeping
           // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
           // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
-          // shrinking all poly borders by 0.5m, then expanding them again. This will round corners
+          // shrinking all poly borders by 1m, then expanding them again. This will round corners
           // slightly, but hopefully won't be too noticeable.
           console.time("filter_slivers");
           unregisteredLandPolys.push(
@@ -347,10 +337,10 @@ export const initialiseUnregisteredLandLayer = async (
                             ) > 0,
                         ),
                     ),
-                    -0.5,
+                    -1,
                     { units: "meters" },
                   ),
-                  0.5,
+                  1,
                   { units: "meters" },
                 ),
               ),
@@ -373,7 +363,7 @@ export const initialiseUnregisteredLandLayer = async (
 
     console.time("bulk_create");
     // Add the clipped polygons to the DB
-    // await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
+    await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
     console.timeEnd("bulk_create");
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
