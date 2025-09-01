@@ -267,22 +267,26 @@ export const initialiseUnregisteredLandLayer = async (
     // For efficiency, index the larger, denser set (landFeatures) and query the smaller set
     // (remainingPolys).
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
-    console.time("load_index");
     index.load(landFeatures);
-    console.timeEnd("load_index");
     const unregisteredLandPolys = [];
 
     for (const remainingPoly of remainingPolys) {
+      console.time("collides");
       if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
+      console.timeEnd("collides");
 
+      console.time("search");
       const candidates = index.search(remainingPoly); // find those whose bbox intersects
+      console.timeEnd("search");
 
+      console.time("filter");
       // filter by actual touches before doing expensive union and intersect operations
       const touchingLandFeatures = candidates.features.filter((landFeature) =>
         turf.booleanIntersects(landFeature, remainingPoly),
       );
       if (touchingLandFeatures.length === 0) continue;
-
+      console.timeEnd("filter");
+      console.time("union");
       // For efficiency, take union of touching land before intersection
       const landUnion =
         touchingLandFeatures.length > 1
@@ -290,18 +294,21 @@ export const initialiseUnregisteredLandLayer = async (
               turf.truncate(turf.featureCollection(touchingLandFeatures)),
             )
           : touchingLandFeatures[0];
-
+      console.timeEnd("union");
+      console.time("intersect");
       try {
         const clipped = turf.intersect(
           // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
           turf.truncate(turf.featureCollection([landUnion, remainingPoly])),
         );
+        console.timeEnd("intersect");
         if (clipped) {
           // Before we add the clipped geometry into the DB, filter out slivers by only keeping
           // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
           // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
           // shrinking all poly borders by 1m, then expanding them again. This will round corners
           // slightly, but hopefully won't be too noticeable.
+          console.time("filter_slivers");
           unregisteredLandPolys.push(
             ...turf.truncate(
               turf.flatten(
@@ -328,6 +335,7 @@ export const initialiseUnregisteredLandLayer = async (
               ),
             ).features,
           );
+          console.timeEnd("filter_slivers");
         }
       } catch (error) {
         if (
@@ -342,9 +350,10 @@ export const initialiseUnregisteredLandLayer = async (
     }
     console.timeEnd("clip_osngd");
 
+    console.time("bulk_create");
     // Add the clipped polygons to the DB
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
-
+    console.timeEnd("bulk_create");
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
