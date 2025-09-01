@@ -284,6 +284,7 @@ export const initialiseUnregisteredLandLayer = async (
       console.time("filter");
       // filter by actual touches before doing expensive union and intersect operations
       console.log("Filtering", candidates.features.length, "candidates");
+      console.log(JSON.stringify(remainingPoly));
       const touchingLandFeatures = candidates.features.filter((landFeature) =>
         turf.booleanIntersects(landFeature, remainingPoly),
       );
