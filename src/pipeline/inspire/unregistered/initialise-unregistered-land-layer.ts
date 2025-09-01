@@ -284,9 +284,11 @@ export const initialiseUnregisteredLandLayer = async (
       console.time("filter");
       // filter by actual touches before doing expensive union and intersect operations
       console.log("Filtering", candidates.features.length, "candidates");
-      console.log(JSON.stringify(remainingPoly));
       const touchingLandFeatures = candidates.features.filter((landFeature) =>
-        turf.booleanIntersects(landFeature, remainingPoly),
+        turf.booleanIntersects(
+          landFeature,
+          turf.buffer(remainingPoly, -20, { units: "centimeters" }), // avoid slight overlaps due to precision
+        ),
       );
       console.log(
         "Found",
@@ -364,7 +366,7 @@ export const initialiseUnregisteredLandLayer = async (
 
     console.time("bulk_create");
     // Add the clipped polygons to the DB
-    await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
+    // await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
     console.timeEnd("bulk_create");
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
