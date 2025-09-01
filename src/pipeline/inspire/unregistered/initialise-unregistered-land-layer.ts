@@ -281,22 +281,22 @@ export const initialiseUnregisteredLandLayer = async (
       const candidates = index.search(remainingPoly); // find those whose bbox intersects
       console.timeEnd("search");
 
-      console.time("filter");
-      // filter by actual touches before doing expensive union and intersect operations
-      console.log("Filtering", candidates.features.length, "candidates");
-      const touchingLandFeatures = candidates.features.filter((landFeature) =>
-        turf.booleanIntersects(landFeature, remainingPoly),
-      );
-      console.log(
-        "Found",
-        touchingLandFeatures.length,
-        "touching land features",
-      );
-      if (touchingLandFeatures.length === 0) {
-        console.timeEnd("filter");
-        continue;
-      }
-      console.timeEnd("filter");
+      // console.time("filter");
+      // // filter by actual touches before doing expensive union and intersect operations
+      // console.log("Filtering", candidates.features.length, "candidates");
+      // const touchingLandFeatures = candidates.features.filter((landFeature) =>
+      //   turf.booleanIntersects(landFeature, remainingPoly),
+      // );
+      // console.log(
+      //   "Found",
+      //   touchingLandFeatures.length,
+      //   "touching land features",
+      // );
+      // if (touchingLandFeatures.length === 0) {
+      //   console.timeEnd("filter");
+      //   continue;
+      // }
+      // console.timeEnd("filter");
       console.time("union");
       // For efficiency, take union of touching land before intersection
       const landUnion =
