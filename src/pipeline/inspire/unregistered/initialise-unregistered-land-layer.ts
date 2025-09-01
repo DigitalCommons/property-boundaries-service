@@ -274,23 +274,6 @@ export const initialiseUnregisteredLandLayer = async (
 
       const candidates = index.search(remainingPoly); // find those whose bbox intersects
 
-      // console.time("filter");
-      // // filter by actual touches before doing expensive union and intersect operations
-      // console.log("Filtering", candidates.features.length, "candidates");
-      // const touchingLandFeatures = candidates.features.filter((landFeature) =>
-      //   turf.booleanIntersects(landFeature, remainingPoly),
-      // );
-      // console.log(
-      //   "Found",
-      //   touchingLandFeatures.length,
-      //   "touching land features",
-      // );
-      // if (touchingLandFeatures.length === 0) {
-      //   console.timeEnd("filter");
-      //   continue;
-      // }
-      // console.timeEnd("filter");
-      console.time("union");
       // For efficiency, take union of touching land before intersection
       const landUnion =
         candidates.features.length > 1
@@ -298,21 +281,18 @@ export const initialiseUnregisteredLandLayer = async (
               turf.truncate(turf.featureCollection(candidates.features)),
             )
           : candidates.features[0];
-      console.timeEnd("union");
-      console.time("intersect");
+
       try {
         const clipped = turf.intersect(
           // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
           turf.truncate(turf.featureCollection([landUnion, remainingPoly])),
         );
-        console.timeEnd("intersect");
         if (clipped) {
           // Before we add the clipped geometry into the DB, filter out slivers by only keeping
           // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
           // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
           // shrinking all poly borders by 1m, then expanding them again. This will round corners
           // slightly, but hopefully won't be too noticeable.
-          console.time("filter_slivers");
           unregisteredLandPolys.push(
             ...turf.truncate(
               turf.flatten(
@@ -339,7 +319,6 @@ export const initialiseUnregisteredLandLayer = async (
               ),
             ).features,
           );
-          console.timeEnd("filter_slivers");
         }
       } catch (error) {
         if (
