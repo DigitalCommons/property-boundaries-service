@@ -452,19 +452,15 @@ export const getOsLandFeaturesByEnglandAndWalesId = async (
 ): Promise<Feature<Polygon>[]> => {
   const results = await sequelize.query<{
     geom: GeoJSON.Polygon;
-    os_ngd_id?: string;
-  }>(
-    `SELECT geom, os_ngd_id FROM os_land_polys WHERE england_and_wales_id = ?`,
-    {
-      replacements: [englandAndWalesId],
-      type: QueryTypes.SELECT,
-    },
-  );
+  }>(`SELECT geom FROM os_land_polys WHERE england_and_wales_id = ?`, {
+    replacements: [englandAndWalesId],
+    type: QueryTypes.SELECT,
+  });
 
   return results.map((result) => ({
     type: "Feature" as const,
     geometry: result.geom,
-    properties: { os_ngd_id: result.os_ngd_id },
+    properties: {},
   }));
 };
 
