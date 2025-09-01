@@ -270,16 +270,9 @@ export const initialiseUnregisteredLandLayer = async (
     const unregisteredLandPolys = [];
 
     for (const remainingPoly of remainingPolys) {
-      console.time("collides");
-      if (!index.collides(remainingPoly)) {
-        console.timeEnd("collides");
-        continue; // cheap to first check if any bboxes intersect
-      }
-      console.timeEnd("collides");
+      if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
 
-      console.time("search");
       const candidates = index.search(remainingPoly); // find those whose bbox intersects
-      console.timeEnd("search");
 
       // console.time("filter");
       // // filter by actual touches before doing expensive union and intersect operations
@@ -361,10 +354,8 @@ export const initialiseUnregisteredLandLayer = async (
     }
     console.timeEnd("clip_osngd");
 
-    console.time("bulk_create");
     // Add the clipped polygons to the DB
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
-    console.timeEnd("bulk_create");
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
