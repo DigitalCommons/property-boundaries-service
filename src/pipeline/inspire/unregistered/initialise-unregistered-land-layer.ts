@@ -234,7 +234,17 @@ export const initialiseUnregisteredLandLayer = async (
       }
 
       remainingPolys = turf.truncate(
-        turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
+        turf.flatten(
+          turf.buffer(
+            // avoid having to process some slivers later
+            turf.featureCollection([polyWithoutInspire]) ??
+              turf.featureCollection([]),
+            -20,
+            {
+              units: "centimeters",
+            },
+          ),
+        ),
       ).features;
 
       console.timeEnd("clip_inspire");
