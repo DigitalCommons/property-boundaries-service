@@ -330,7 +330,9 @@ export const bulkCreateEnglandAndWalesPolygons = async (
 
   const numFeatures = polygons.length;
   if (numFeatures === 0) {
-    throw new Error(`Expected > 0 England and Wales polygons but received ${numFeatures} polygons`);
+    throw new Error(
+      `Expected > 0 England and Wales polygons but received ${numFeatures} polygons`,
+    );
   }
 
   const query = `INSERT INTO england_and_wales (geom)
@@ -776,6 +778,32 @@ export const getPolygonsByIdInSearchArea = async (
 
   return await sequelize.query(query, {
     replacements,
+    type: QueryTypes.SELECT,
+  });
+};
+
+/** Get polygons that match with any of the given title numbers.
+ *
+ * @param title_numbers an array of title numbers
+ * @returns an array of polygons that match the criteria
+ */
+export const getPolygonsByTitleNumbers = async (title_numbers: string[]) => {
+  if (!title_numbers || title_numbers.length === 0) return [];
+
+  const uniqueTitleNumbers = Array.from(
+    new Set(title_numbers.map((t) => t?.trim()).filter(Boolean)),
+  );
+
+  const placeholders = uniqueTitleNumbers.map(() => "?").join(",");
+
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
+    FROM land_ownership_polygons
+    LEFT JOIN land_ownerships
+      ON land_ownership_polygons.title_no = land_ownerships.title_no
+    WHERE land_ownership_polygons.title_no IN (${placeholders});`;
+
+  return await sequelize.query(query, {
+    replacements: uniqueTitleNumbers,
     type: QueryTypes.SELECT,
   });
 };

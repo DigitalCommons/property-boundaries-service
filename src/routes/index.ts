@@ -11,6 +11,7 @@ import {
   getLocalAuthorityPolygonsInSearchArea,
   getChurchOfEnglandPolygonsInSearchArea,
   getUnregisteredPolygonsInSearchArea,
+  getPolygonsByTitleNumbers,
 } from "../queries/query.js";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
 
@@ -90,6 +91,13 @@ type GetPolygonsRequest = Request & {
   };
 };
 
+type GetPolygonsByTitleNumbersRequest = Request & {
+  payload: {
+    title_numbers: string[];
+    secret: string;
+  };
+};
+
 /**
  * Get polygons that:
  * - match with the ID(s) (if given)
@@ -117,6 +125,24 @@ async function getPolygonsByIdInArea(
   );
 
   return h.response(result).code(200);
+}
+
+async function getPolygonsByTitle(
+  request: GetPolygonsByTitleNumbersRequest,
+  h: ResponseToolkit,
+): Promise<ResponseObject> {
+  const { title_numbers, secret } = request.payload ?? {};
+
+  if (!secret || secret !== process.env.SECRET) {
+    return h.response("missing or incorrect secret").code(403);
+  }
+
+  if (!Array.isArray(title_numbers) || title_numbers.length === 0) {
+    return h.response("title_numbers must be a non-empty array").code(400);
+  }
+
+  const rows = await getPolygonsByTitleNumbers(title_numbers);
+  return h.response(rows).code(200);
 }
 
 async function search(request: Request): Promise<any> {
@@ -201,6 +227,15 @@ const getPolygonsRoute: ServerRoute = {
   },
 };
 
+const getPolygonsByTitleNumbersRoute: ServerRoute = {
+  method: "POST",
+  path: "/polygons/title-numbers",
+  handler: getPolygonsByTitle,
+  options: {
+    auth: false,
+  },
+};
+
 const runPipelineRoute: ServerRoute = {
   method: "GET",
   path: "/run-pipeline",
@@ -215,6 +250,7 @@ const routes = [
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,
+  getPolygonsByTitleNumbersRoute,
 ];
 
 export default routes;
