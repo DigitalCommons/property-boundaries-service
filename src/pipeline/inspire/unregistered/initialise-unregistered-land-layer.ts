@@ -138,7 +138,10 @@ export const initialiseUnregisteredLandLayer = async (
     );
   }
 
-  if (startAtEnglandAndWalesId === undefined) {
+  if (
+    startAtEnglandAndWalesId === undefined ||
+    startAtEnglandAndWalesId === stopBeforeEnglandAndWalesId // i.e. skipping the next section
+  ) {
     console.log("Populating OS land polys table using OS NGD API...");
     await populateOsLandPolys();
   }
