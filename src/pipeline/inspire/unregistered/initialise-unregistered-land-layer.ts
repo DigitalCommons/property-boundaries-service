@@ -171,7 +171,7 @@ export const initialiseUnregisteredLandLayer = async (
 
   while (
     polyToClip &&
-    (stopBeforeEnglandAndWalesId === undefined ||
+    (stopBeforeEnglandAndWalesId === null ||
       polyToClip.id < stopBeforeEnglandAndWalesId)
   ) {
     console.log(
