@@ -267,7 +267,9 @@ export const initialiseUnregisteredLandLayer = async (
     // For efficiency, index the larger, denser set (landFeatures) and query the smaller set
     // (remainingPolys).
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
+    console.time("load_index");
     index.load(landFeatures);
+    console.timeEnd("load_index");
     const unregisteredLandPolys = [];
 
     for (const remainingPoly of remainingPolys) {
@@ -342,7 +344,6 @@ export const initialiseUnregisteredLandLayer = async (
 
     // Add the clipped polygons to the DB
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
-    console.log("Inserted", unregisteredLandPolys.length, "clipped polygons");
 
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
