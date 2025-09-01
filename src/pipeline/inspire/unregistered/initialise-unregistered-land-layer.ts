@@ -386,7 +386,7 @@ const limiter = new Bottleneck({
 let retries = 0;
 const MAX_RETRIES = 3;
 
-const getOsNgdLandFeatures = async (
+const fetchOsNgdLandFeatures = async (
   bbox: GeoJSON.BBox,
 ): Promise<GeoJSON.Feature<GeoJSON.Polygon>[]> => {
   const osngdFeatures: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
@@ -458,13 +458,26 @@ export const populateOsLandPolys = async () => {
   let totalFeatures = 0;
 
   while (englandAndWalesPoly) {
+    // Check if this england_and_wales polygon has already been processed
+    if (
+      (await getOsLandFeaturesByEnglandAndWalesId(englandAndWalesPoly.id))
+        .length > 0
+    ) {
+      console.log(
+        `Skipping england_and_wales id ${englandAndWalesPoly.id} - already downloaded OS land features`,
+      );
+      englandAndWalesPoly = await getNextEnglandAndWalesPolygon(
+        englandAndWalesPoly.id + 1,
+      );
+      continue;
+    }
+
     console.log(
       `Downloading OS NGD land features for england_and_wales id ${englandAndWalesPoly.id}`,
     );
-
     try {
       // Get OS NGD land features for this polygon's bbox
-      const landFeatures = await getOsNgdLandFeatures(
+      const landFeatures = await fetchOsNgdLandFeatures(
         turf.bbox(englandAndWalesPoly.geom),
       );
 
