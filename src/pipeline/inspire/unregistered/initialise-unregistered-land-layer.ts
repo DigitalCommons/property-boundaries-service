@@ -300,11 +300,11 @@ export const initialiseUnregisteredLandLayer = async (
       console.time("union");
       // For efficiency, take union of touching land before intersection
       const landUnion =
-        touchingLandFeatures.length > 1
+        candidates.features.length > 1
           ? turf.union(
-              turf.truncate(turf.featureCollection(touchingLandFeatures)),
+              turf.truncate(turf.featureCollection(candidates.features)),
             )
-          : touchingLandFeatures[0];
+          : candidates.features[0];
       console.timeEnd("union");
       console.time("intersect");
       try {
