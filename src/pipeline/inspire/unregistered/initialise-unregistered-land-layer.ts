@@ -169,6 +169,13 @@ export const initialiseUnregisteredLandLayer = async (
     startAtEnglandAndWalesId || 0,
   );
 
+  console.log(
+    "stopBeforeEnglandAndWalesId",
+    stopBeforeEnglandAndWalesId,
+    stopBeforeEnglandAndWalesId == null,
+    0 == null,
+  );
+
   while (
     polyToClip &&
     (stopBeforeEnglandAndWalesId === null ||
