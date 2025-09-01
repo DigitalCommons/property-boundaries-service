@@ -24,6 +24,8 @@ There are the tables in our database:
 - `england_and_wales` -
   this is a temporary table, created once for one-time unregistered land initialisation script, so
   doesn't have a Sequelize migration
+- `os_land_polys` -
+  this is a table used in the one-time unregistered land initialisation script
 
 View the `migrations` folder to see their full definitions.
 

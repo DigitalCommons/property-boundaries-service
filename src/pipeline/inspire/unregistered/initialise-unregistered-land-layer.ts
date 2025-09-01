@@ -1,11 +1,15 @@
-// This is a one-time script that is used to create the initial unregistered layer. First it creates
-// a table of polygons that cover the whole of England and Wales, using the ONS Countries BGC
-// dataset. The coordinates inserted to the table are transformed to the EPSG:4326 projection (the
-// standard GPS projection used by GeoJSON and in our DB ), using the GDAL ogr2ogr tool. After this,
-// the script loops through each England and Wales polygon, removing
-//  - all registered freehold boundaries, using INSPIRE data
-//  - all non-land boundaries (i.e. transport, water and buildings), using the OS NGD API,
-// and inserts the remaining polygons into the unregistered_land table.
+// This is a one-time script that is used to create the initial unregistered layer.
+//
+// - First it creates a table of polygons that cover the whole of England and Wales, using the ONS
+//   Countries BGC dataset. The coordinates inserted to the table are transformed to the EPSG:4326
+//   projection (the standard GPS projection used by GeoJSON and in our DB ), using the GDAL ogr2ogr
+//   tool.
+// - After this, it loops through the England and Wales polygons and populates the os_land_polys
+//   table with all land boundaries (i.e. not transport, water or buildings), using the OS NGD API,
+//   that sit within each England and Wales polygon's bounding box.
+// - Finally, the script again loops through each England and Wales polygon, removing all registered
+//   freehold boundaries (using INSPIRE data) and intersecting with the os_land_polys, then inserts
+//   the remaining boundaries into the unregistered_land table.
 //
 // Before running this script, you must:
 //  - download the countries BGC dataset Shapefile from
@@ -22,7 +26,8 @@
 // file.
 //
 // Also, as the second argument, you can provide an ID of the england_and_wales polygon to start
-// analysing e.g. if you want to resume the script.
+// analysing e.g. if you want to resume the script after all OS NGD land features have been
+// pre-populated into the os_land_polys table.
 //
 // Example usage:
 //    node --loader ts-node/esm src/pipeline/inspire/unregistered/initialise-unregistered-land-layer.ts '' 13138
@@ -38,8 +43,10 @@ import axios from "axios";
 import {
   bulkCreateEnglandAndWalesPolygons,
   bulkCreateUnregisteredLandPolygons,
+  bulkCreateOsLandPolys,
   getIntersectingPendingInspirePolys,
   getNextEnglandAndWalesPolygon,
+  getOsLandFeaturesByEnglandAndWalesId,
   englandAndWalesTableExists,
 } from "../../../queries/query.js";
 import { Match } from "../match.js";
@@ -48,11 +55,13 @@ import { Match } from "../match.js";
  * See the top of this file for more details about what this script does.
  *
  * @param {string} countriesShp - The path to the input SHP file containing the countries boundaries
- * @param {number} [startingEnglandAndWalesId] - The ID of the england_and_wales polygon to start analysing, default the first.
+ * @param {number} [startAtEnglandAndWalesId] - The ID of the england_and_wales polygon to start analysing, default the first.
+ * @param {numner} [stopBeforeEnglandAndWalesId] - The ID of the england_and_wales polygon to stop before, default don't stop.
  */
 export const initialiseUnregisteredLandLayer = async (
   countriesShp: string,
-  startingEnglandAndWalesId?: number,
+  startAtEnglandAndWalesId?: number,
+  stopBeforeEnglandAndWalesId?: number,
 ) => {
   if (countriesShp) {
     if (await englandAndWalesTableExists()) {
@@ -129,6 +138,11 @@ export const initialiseUnregisteredLandLayer = async (
     );
   }
 
+  if (startAtEnglandAndWalesId === undefined) {
+    console.log("Populating OS land polys table using OS NGD API...");
+    await populateOsLandPolys();
+  }
+
   console.log(
     "Clipping pending_inspire_polygons, roads, rail, water and building from england and wales to create unregistered layer...",
   );
@@ -136,10 +150,14 @@ export const initialiseUnregisteredLandLayer = async (
 
   // Loop through each polygon in england_and_wales
   let polyToClip = await getNextEnglandAndWalesPolygon(
-    startingEnglandAndWalesId || 0,
+    startAtEnglandAndWalesId || 0,
   );
 
-  while (polyToClip) {
+  while (
+    polyToClip &&
+    (stopBeforeEnglandAndWalesId === undefined ||
+      polyToClip.id < stopBeforeEnglandAndWalesId)
+  ) {
     console.log(
       "Processing england_and_wales polygon id",
       polyToClip.id,
@@ -219,10 +237,10 @@ export const initialiseUnregisteredLandLayer = async (
     // Or Path, Structure, or Water Feature Type."
     console.time("clip_osngd");
 
-    // Just get all the land features within the original england_and_wales polygon, since the
-    // unregistered polygons will be numerous and cover lots of the area. We want to minimise OS NGD
-    // API calls
-    const landFeatures = await getOsNgdLandFeatures(turf.bbox(polyToClip.geom));
+    // Get OS NGD land features from the pre-populated table
+    const landFeatures = await getOsLandFeaturesByEnglandAndWalesId(
+      polyToClip.id,
+    );
 
     // We expect that most of the remainingPolys will just be areas of land covering transport,
     // water and buildings, with only a few polys land included in the OS NGD land features dataset.
@@ -428,8 +446,67 @@ const getOsNgdLandFeatures = async (
   return osngdFeatures;
 };
 
+/**
+ * Populate the os_land_polys table with OS NGD land features for all england_and_wales polygons.
+ * This function should be run after the england_and_wales table is populated.
+ */
+export const populateOsLandPolys = async () => {
+  let englandAndWalesPoly = await getNextEnglandAndWalesPolygon(0);
+  let totalFeatures = 0;
+
+  while (englandAndWalesPoly) {
+    console.log(
+      `Downloading OS NGD land features for england_and_wales id ${englandAndWalesPoly.id}`,
+    );
+
+    try {
+      // Get OS NGD land features for this polygon's bbox
+      const landFeatures = await getOsNgdLandFeatures(
+        turf.bbox(englandAndWalesPoly.geom),
+      );
+
+      if (landFeatures.length > 0) {
+        // Add england_and_wales_id to each feature
+        const featuresWithId = landFeatures.map((feature) => ({
+          ...feature,
+          england_and_wales_id: englandAndWalesPoly.id,
+          os_ngd_id: feature.properties?.id || feature.properties?.os_ngd_id,
+        }));
+
+        // Bulk insert into os_land_polys table
+        await bulkCreateOsLandPolys(featuresWithId);
+        totalFeatures += featuresWithId.length;
+
+        console.log("Inserted", featuresWithId.length, "OS NGD land features");
+      } else {
+        console.log(`No OS NGD land features found`);
+      }
+    } catch (error) {
+      console.error(
+        `Error processing england_and_wales id ${englandAndWalesPoly.id}:`,
+        error,
+      );
+      // Continue with next polygon instead of failing completely
+    }
+
+    // Get next polygon
+    englandAndWalesPoly = await getNextEnglandAndWalesPolygon(
+      englandAndWalesPoly.id + 1,
+    );
+  }
+
+  console.log(
+    "Finished populating os_land_polys table. Total features inserted:",
+    totalFeatures,
+  );
+};
+
 // Script that runs when invoking this script from command line:
-initialiseUnregisteredLandLayer(process.argv[2], parseInt(process.argv[3]))
+initialiseUnregisteredLandLayer(
+  process.argv[2],
+  parseInt(process.argv[3]),
+  parseInt(process.argv[4]),
+)
   .then(() => {
     console.log("Initial unregistered land layer created successfully.");
   })
