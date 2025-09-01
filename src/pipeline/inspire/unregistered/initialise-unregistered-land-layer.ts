@@ -140,20 +140,18 @@ export const initialiseUnregisteredLandLayer = async (
   );
 
   while (polyToClip) {
-    if (polyToClip.id % 1 === 0) {
-      console.log(
-        "Processing england_and_wales polygon id",
-        polyToClip.id,
-        ", coords",
-        [
-          // Reverse so they can be searched in the front-end
-          polyToClip.geom.coordinates[0][0][1],
-          polyToClip.geom.coordinates[0][0][0],
-        ],
-        "area m2",
-        turf.area(polyToClip.geom),
-      );
-    }
+    console.log(
+      "Processing england_and_wales polygon id",
+      polyToClip.id,
+      ", coords",
+      [
+        // Reverse so they can be searched in the front-end
+        polyToClip.geom.coordinates[0][0][1],
+        polyToClip.geom.coordinates[0][0][0],
+      ],
+      "area m2",
+      turf.area(polyToClip.geom),
+    );
 
     // First, clip away any overlapping pending_inspire_polygons
     let remainingPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
@@ -161,6 +159,12 @@ export const initialiseUnregisteredLandLayer = async (
     const intersectingInspirePolys = await getIntersectingPendingInspirePolys(
       polyToClip.id,
     );
+    console.log(
+      "Found",
+      intersectingInspirePolys.length,
+      "intersecting pending inspire polygons",
+    );
+
     if (intersectingInspirePolys.length > 0) {
       console.time("clip_inspire");
 
@@ -204,9 +208,7 @@ export const initialiseUnregisteredLandLayer = async (
     }
 
     console.log(
-      "Clipped away",
-      intersectingInspirePolys.length,
-      "inspire polygons. # clipped polys to further analyse:",
+      "Clipped away inspire polygons. # clipped polys to further analyse:",
       remainingPolys.length,
     );
 
