@@ -302,25 +302,27 @@ export const initialiseUnregisteredLandLayer = async (
           // slightly, but hopefully won't be too noticeable.
           unregisteredLandPolys.push(
             ...turf.truncate(
-              turf.buffer(
+              turf.flatten(
                 turf.buffer(
-                  turf.featureCollection(
-                    turf
-                      .flatten(clipped)
-                      .features.filter(
-                        (f) =>
-                          turf.area(f) > 20 &&
-                          turf.area(
-                            turf.buffer(f, -2, { units: "meters" }) ??
-                              turf.polygon([]),
-                          ) > 0,
-                      ),
+                  turf.buffer(
+                    turf.featureCollection(
+                      turf
+                        .flatten(clipped)
+                        .features.filter(
+                          (f) =>
+                            turf.area(f) > 20 &&
+                            turf.area(
+                              turf.buffer(f, -2, { units: "meters" }) ??
+                                turf.polygon([]),
+                            ) > 0,
+                        ),
+                    ),
+                    -1,
+                    { units: "meters" },
                   ),
-                  -1,
+                  1,
                   { units: "meters" },
                 ),
-                1,
-                { units: "meters" },
               ),
             ).features,
           );
