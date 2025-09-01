@@ -473,6 +473,11 @@ const getOsLandFeaturesForEnglandAndWalesPoly = async (
     englandAndWalesPolyId,
   );
   if (existingFeatures.length > 0) {
+    console.log(
+      "Found",
+      existingFeatures.length,
+      "existing OS NGD land features",
+    );
     return existingFeatures;
   }
 
@@ -492,7 +497,6 @@ const getOsLandFeaturesForEnglandAndWalesPoly = async (
 
     // Bulk insert into os_land_polys table
     await bulkCreateOsLandPolys(featuresWithId);
-
     return landFeatures;
   } else {
     console.log(`No OS NGD land features found`);
