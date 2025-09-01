@@ -253,12 +253,11 @@ export const initialiseUnregisteredLandLayer = async (
     // remainingPolys with OS NGD 'land' features, which are polygons "representing an area on
     // the Earth's surface that has not otherwise been captured as a Building Part, Rail, Road Track
     // Or Path, Structure, or Water Feature Type."
-    console.time("clip_osngd");
-
     const landFeatures = await getOsLandFeaturesForEnglandAndWalesPoly(
       polyToClip.id,
       polyToClip.geom,
     );
+    console.time("clip_osngd");
 
     // We expect that most of the remainingPolys will just be areas of land covering transport,
     // water and buildings, with only a few polys land included in the OS NGD land features dataset.
@@ -272,7 +271,10 @@ export const initialiseUnregisteredLandLayer = async (
 
     for (const remainingPoly of remainingPolys) {
       console.time("collides");
-      if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
+      if (!index.collides(remainingPoly)) {
+        console.timeEnd("collides");
+        continue; // cheap to first check if any bboxes intersect
+      }
       console.timeEnd("collides");
 
       console.time("search");
@@ -284,7 +286,10 @@ export const initialiseUnregisteredLandLayer = async (
       const touchingLandFeatures = candidates.features.filter((landFeature) =>
         turf.booleanIntersects(landFeature, remainingPoly),
       );
-      if (touchingLandFeatures.length === 0) continue;
+      if (touchingLandFeatures.length === 0) {
+        console.timeEnd("filter");
+        continue;
+      }
       console.timeEnd("filter");
       console.time("union");
       // For efficiency, take union of touching land before intersection
