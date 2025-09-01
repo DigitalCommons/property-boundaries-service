@@ -334,7 +334,13 @@ export const initialiseUnregisteredLandLayer = async (
     console.timeEnd("clip_osngd");
 
     // Add the clipped polygons to the DB
+    console.log(
+      "Adding",
+      unregisteredLandPolys.length,
+      "unregistered land polygons to DB",
+    );
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
+
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
