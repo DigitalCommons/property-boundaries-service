@@ -341,6 +341,12 @@ export const initialiseUnregisteredLandLayer = async (
     );
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
 
+    // Print to last_completed_england_and_wales_poly.txt
+    fs.writeFileSync(
+      "last_completed_england_and_wales_poly.txt",
+      polyToClip.id.toString(),
+    );
+
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
@@ -578,6 +584,3 @@ initialiseUnregisteredLandLayer(
   .catch((error) => {
     console.error("Error creating initial unregistered land layer:", error);
   });
-
-// Fix OOM during clipping of INSPIRE:
-// Processing england_and_wales polygon id 44010 , coords [ 53.590382, -2.462559 ] area m2 733803.844861821
