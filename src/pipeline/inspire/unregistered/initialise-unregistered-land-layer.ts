@@ -1,11 +1,15 @@
-// This is a one-time script that is used to create the initial unregistered layer. First it creates
-// a table of polygons that cover the whole of England and Wales, using the ONS Countries BGC
-// dataset. The coordinates inserted to the table are transformed to the EPSG:4326 projection (the
-// standard GPS projection used by GeoJSON and in our DB ), using the GDAL ogr2ogr tool. After this,
-// the script loops through each England and Wales polygon, removing
-//  - all registered freehold boundaries, using INSPIRE data
-//  - all non-land boundaries (i.e. transport, water and buildings), using the OS NGD API,
-// and inserts the remaining polygons into the unregistered_land table.
+// This is a one-time script that is used to create the initial unregistered layer.
+//
+// - First it creates a table of polygons that cover the whole of England and Wales, using the ONS
+//   Countries BGC dataset. The coordinates inserted to the table are transformed to the EPSG:4326
+//   projection (the standard GPS projection used by GeoJSON and in our DB ), using the GDAL ogr2ogr
+//   tool.
+// - After this, it loops through the England and Wales polygons and populates the os_land_polys
+//   table with all land boundaries (i.e. not transport, water or buildings), using the OS NGD API,
+//   that sit within each England and Wales polygon's bounding box.
+// - Finally, the script again loops through each England and Wales polygon, removing all registered
+//   freehold boundaries (using INSPIRE data) and intersecting with the os_land_polys, then inserts
+//   the remaining boundaries into the unregistered_land table.
 //
 // Before running this script, you must:
 //  - download the countries BGC dataset Shapefile from
@@ -22,7 +26,8 @@
 // file.
 //
 // Also, as the second argument, you can provide an ID of the england_and_wales polygon to start
-// analysing e.g. if you want to resume the script.
+// analysing e.g. if you want to resume the script after all OS NGD land features have been
+// pre-populated into the os_land_polys table.
 //
 // Example usage:
 //    node --loader ts-node/esm src/pipeline/inspire/unregistered/initialise-unregistered-land-layer.ts '' 13138
@@ -38,8 +43,10 @@ import axios from "axios";
 import {
   bulkCreateEnglandAndWalesPolygons,
   bulkCreateUnregisteredLandPolygons,
+  bulkCreateOsLandPolys,
   getIntersectingPendingInspirePolys,
   getNextEnglandAndWalesPolygon,
+  getOsLandFeaturesByEnglandAndWalesId,
   englandAndWalesTableExists,
 } from "../../../queries/query.js";
 import { Match } from "../match.js";
@@ -48,12 +55,27 @@ import { Match } from "../match.js";
  * See the top of this file for more details about what this script does.
  *
  * @param {string} countriesShp - The path to the input SHP file containing the countries boundaries
- * @param {number} [startingEnglandAndWalesId] - The ID of the england_and_wales polygon to start analysing, default the first.
+ * @param {number} [startAtEnglandAndWalesId] - The ID of the england_and_wales polygon to start analysing, default the first.
+ * @param {numner} [stopBeforeEnglandAndWalesId] - The ID of the england_and_wales polygon to stop before, default don't stop.
  */
 export const initialiseUnregisteredLandLayer = async (
   countriesShp: string,
-  startingEnglandAndWalesId?: number,
+  startAtEnglandAndWalesId?: number,
+  stopBeforeEnglandAndWalesId?: number,
 ) => {
+  console.log(
+    "Initialising unregistered land layer with parameters:",
+    JSON.stringify(
+      {
+        countriesShp,
+        startAtEnglandAndWalesId,
+        stopBeforeEnglandAndWalesId,
+      },
+      null,
+      2,
+    ),
+  );
+
   if (countriesShp) {
     if (await englandAndWalesTableExists()) {
       throw new Error(
@@ -129,160 +151,207 @@ export const initialiseUnregisteredLandLayer = async (
     );
   }
 
+  if (
+    Number.isNaN(startAtEnglandAndWalesId) ||
+    startAtEnglandAndWalesId === stopBeforeEnglandAndWalesId // i.e. skipping the next section
+  ) {
+    console.log("Populating OS land polys table using OS NGD API...");
+    await populateOsLandPolys();
+  }
+
   console.log(
     "Clipping pending_inspire_polygons, roads, rail, water and building from england and wales to create unregistered layer...",
   );
-  console.time("clipping");
+  console.time("clip_all");
 
   // Loop through each polygon in england_and_wales
   let polyToClip = await getNextEnglandAndWalesPolygon(
-    startingEnglandAndWalesId || 0,
+    startAtEnglandAndWalesId || 0,
   );
 
-  while (polyToClip) {
-    if (polyToClip.id % 1 === 0) {
-      console.log(
-        "Processing england_and_wales polygon id",
-        polyToClip.id,
-        ", coords",
-        [
-          // Reverse so they can be searched in the front-end
-          polyToClip.geom.coordinates[0][0][1],
-          polyToClip.geom.coordinates[0][0][0],
-        ],
-        "area m2",
-        turf.area(polyToClip.geom),
-      );
-    }
+  while (
+    polyToClip &&
+    (Number.isNaN(stopBeforeEnglandAndWalesId) ||
+      polyToClip.id < stopBeforeEnglandAndWalesId)
+  ) {
+    console.log(
+      "Processing england_and_wales polygon id",
+      polyToClip.id,
+      ", coords",
+      [
+        // Reverse so they can be searched in the front-end
+        polyToClip.geom.coordinates[0][0][1],
+        polyToClip.geom.coordinates[0][0][0],
+      ],
+      "area m2",
+      turf.area(polyToClip.geom),
+    );
 
     // First, clip away any overlapping pending_inspire_polygons
-    let unregisteredPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+    let remainingPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
-    const intersectingInspirePolys = (
-      await getIntersectingPendingInspirePolys(polyToClip.id)
-    ).filter((p) => p.match_type !== Match.Exact);
+    const intersectingInspirePolys = await getIntersectingPendingInspirePolys(
+      polyToClip.id,
+    );
+    console.log(
+      "Found",
+      intersectingInspirePolys.length,
+      "intersecting pending inspire polygons",
+    );
 
     if (intersectingInspirePolys.length > 0) {
+      console.time("clip_inspire");
+
+      const diff = turf.featureCollection([
+        turf.polygon(polyToClip.geom.coordinates),
+        ...intersectingInspirePolys.map((inspirePoly) =>
+          turf.buffer(turf.polygon(inspirePoly.geom.coordinates), 20, {
+            units: "centimeters", // buffer by 20 cm to avoid slivers remaning between polygons
+          }),
+        ),
+      ]);
+
       let polyWithoutInspire: GeoJSON.Feature<
         GeoJSON.Polygon | GeoJSON.MultiPolygon
-      > = turf.polygon(polyToClip.geom.coordinates);
+      >;
 
-      for (const inspirePoly of intersectingInspirePolys) {
-        const diff = turf.featureCollection([
-          polyWithoutInspire,
-          turf.polygon(inspirePoly.geom.coordinates),
-        ]);
-
-        try {
-          polyWithoutInspire = turf.difference(
-            // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(diff),
-          );
-        } catch (error) {
-          // sometimes this happens due to floating point precision issues with turf when the
-          // borders of polygons are long and very close to each other. In this case, truncate
-          // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
-          // fewer issues
-          console.warn(
-            `Turf difference failed with error "${error.message}" try again with 5 d.p. precision`,
-          );
-          polyWithoutInspire = turf.difference(
-            turf.truncate(diff, { precision: 5 }),
-          );
-        }
-
-        // Can stop clipping if we are left with no area
-        if (!polyWithoutInspire) break;
+      try {
+        polyWithoutInspire = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(diff),
+        );
+      } catch (error) {
+        // sometimes this happens due to floating point precision issues with turf when the
+        // borders of polygons are long and very close to each other. In this case, truncate
+        // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
+        // fewer issues
+        console.warn(
+          `Turf difference failed with error "${error.message}" try again with 5 d.p. precision`,
+        );
+        polyWithoutInspire = turf.difference(
+          turf.truncate(diff, { precision: 5 }),
+        );
       }
 
-      unregisteredPolys = turf.truncate(
+      remainingPolys = turf.truncate(
         turf.flatten(polyWithoutInspire ?? turf.featureCollection([])),
       ).features;
+
+      console.timeEnd("clip_inspire");
     } else {
       // No intersecting inspire polygons, so just add the whole polygon as is
-      unregisteredPolys.push(turf.polygon(polyToClip.geom.coordinates));
+      remainingPolys.push(turf.polygon(polyToClip.geom.coordinates));
     }
 
     console.log(
-      "Clipped away",
-      intersectingInspirePolys.length,
-      "inspire polygons. # clipped polys to further analyse:",
-      unregisteredPolys.length,
+      "Clipped away inspire polygons. # clipped polys to further analyse:",
+      remainingPolys.length,
     );
 
     // Now, rather than clipping OS NGD roads, rail, water and buildings features all separately and
-    // performing multiple API queries and difference operations, we will just inersect the
-    // unregisteredPolys with OS NGD 'land' features, which are polygons "representing an area on
+    // performing multiple API queries and difference operations, we will just intersect the
+    // remainingPolys with OS NGD 'land' features, which are polygons "representing an area on
     // the Earth's surface that has not otherwise been captured as a Building Part, Rail, Road Track
     // Or Path, Structure, or Water Feature Type."
+    const landFeatures = await getOsLandFeaturesForEnglandAndWalesPoly(
+      polyToClip.id,
+      polyToClip.geom,
+    );
+    console.time("clip_osngd");
 
-    // Just get all the land features within the original england_and_wales polygon, since the
-    // unregistered polygons will be numerous and cover lots of the area. We want to minimise OS NGD
-    // API calls
-    const landFeatures = await getOsNgdLandFeatures(turf.bbox(polyToClip.geom));
-
-    // We expect that most of the unregisteredPolys will just be transport, water and building
-    // features and will be removed, with just a few matching the OS NGD land features. So it's more
-    // efficient to do a pairwise intersection, rather than doing an intersection of their unions.
-    // Use an RBush index to speed up the spatial queries when finding intersections
+    // We expect that most of the remainingPolys will just be areas of land covering transport,
+    // water and buildings, with only a few polys land included in the OS NGD land features dataset.
+    // So it's more efficient to do a pairwise intersection, rather than doing an intersection of
+    // their unions. Use an RBush index to speed up the spatial queries when finding intersections.
+    // For efficiency, index the larger, denser set (landFeatures) and query the smaller set
+    // (remainingPolys).
     const index = turf.geojsonRbush<GeoJSON.Polygon>();
-    index.load(unregisteredPolys); // still useful to reduce the 200×50 pairs
+    index.load(landFeatures);
     const unregisteredLandPolys = [];
 
-    for (const landFeature of landFeatures) {
-      if (!index.collides(landFeature)) continue; // cheap to first check if any bboxes intersect
+    for (const remainingPoly of remainingPolys) {
+      if (!index.collides(remainingPoly)) continue; // cheap to first check if any bboxes intersect
 
-      const candidates = index.search(landFeature); // find those whose bbox intersects
+      const candidates = index.search(remainingPoly); // find those whose bbox intersects
 
-      for (const unregisteredPoly of candidates.features) {
-        // Before we do the expensive intersection, check if the precise features intersect
-        if (!turf.booleanIntersects(landFeature, unregisteredPoly)) continue;
+      // For efficiency, take union of touching land before intersection
+      const landUnion =
+        candidates.features.length > 1
+          ? turf.union(
+              turf.truncate(turf.featureCollection(candidates.features)),
+            )
+          : candidates.features[0];
 
-        try {
-          const clipped = turf.intersect(
-            // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
-            turf.truncate(
-              turf.featureCollection([landFeature, unregisteredPoly]),
-            ),
-          );
-          if (clipped) {
-            // Before we add the clipped geometry into the DB, filter out slivers by only keeping
-            // those which are bigger than 20 m2 and don't disappear if we shrink the borders by 2 m
-            unregisteredLandPolys.push(
-              ...turf
-                .truncate(turf.flatten(clipped))
-                .features.filter(
-                  (f) =>
-                    turf.area(f) > 20 &&
-                    turf.area(
-                      turf.buffer(f, -2, { units: "meters" }) ??
-                        turf.polygon([]),
-                    ) > 0,
+      try {
+        const clipped = turf.intersect(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(turf.featureCollection([landUnion, remainingPoly])),
+        );
+        if (clipped) {
+          // Before we add the clipped geometry into the DB, filter out slivers by only keeping
+          // those polys which are bigger than 20m2 and don't disappear if we shrink the borders by
+          // 2m. Then, try to remove slivers that are dangling onto edges of larger polygons by
+          // shrinking all poly borders by 0.6m, then expanding them again. This will round corners
+          // slightly, but hopefully won't be too noticeable.
+          unregisteredLandPolys.push(
+            ...turf.truncate(
+              turf.flatten(
+                turf.buffer(
+                  turf.buffer(
+                    turf.featureCollection(
+                      turf
+                        .flatten(clipped)
+                        .features.filter(
+                          (f) =>
+                            turf.area(f) > 20 &&
+                            turf.area(
+                              turf.buffer(f, -2, { units: "meters" }) ??
+                                turf.polygon([]),
+                            ) > 0,
+                        ),
+                    ),
+                    -0.6,
+                    { units: "meters" },
+                  ),
+                  0.6,
+                  { units: "meters" },
                 ),
-            );
-          }
-        } catch (error) {
-          if (
-            error.message.includes("Unable to complete output ring starting at")
-          ) {
-            // sometimes this happens due to an issue with turf or invalid geometry
-            console.warn(
-              `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
-            );
-          } else throw error;
+              ),
+            ).features,
+          );
         }
+      } catch (error) {
+        if (
+          error.message.includes("Unable to complete output ring starting at")
+        ) {
+          // sometimes this happens due to an issue with turf or invalid geometry
+          console.warn(
+            `Turf intersection failed with output ring error, englandAndWales poly id ${polyToClip.id}. Skip this land feature.`,
+          );
+        } else throw error;
       }
     }
+    console.timeEnd("clip_osngd");
 
     // Add the clipped polygons to the DB
+    console.log(
+      "Adding",
+      unregisteredLandPolys.length,
+      "unregistered land polygons to DB",
+    );
     await bulkCreateUnregisteredLandPolygons(unregisteredLandPolys);
-    console.log("Inserted", unregisteredLandPolys.length, "clipped polygons");
+
+    // Print to last_completed_england_and_wales_poly.txt
+    fs.writeFileSync(
+      "last_completed_england_and_wales_poly.txt",
+      polyToClip.id.toString(),
+    );
 
     // Get the next polygon to clip
     polyToClip = await getNextEnglandAndWalesPolygon(polyToClip.id + 1);
   }
 
-  console.timeEnd("clipping");
+  console.timeEnd("clip_all");
 };
 
 /**
@@ -355,9 +424,10 @@ const limiter = new Bottleneck({
 let retries = 0;
 const MAX_RETRIES = 3;
 
-const getOsNgdLandFeatures = async (
+const fetchOsNgdLandFeatures = async (
   bbox: GeoJSON.BBox,
 ): Promise<GeoJSON.Feature<GeoJSON.Polygon>[]> => {
+  console.time("fetch_osngd");
   const osngdFeatures: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
   // OS NGD API returns max 100 features per request
@@ -413,13 +483,101 @@ const getOsNgdLandFeatures = async (
       throw error;
     }
   }
-
+  console.timeEnd("fetch_osngd");
   console.log("We fetched", osngdFeatures.length, "OS NGD features");
   return osngdFeatures;
 };
 
+/**
+ * Get OS NGD land features that sit within an england_and_wales polygon's bbox. First check if the
+ * features have already been downloaded and stored in the DB, download them if not.
+ *
+ * @param englandAndWalesPolyId - The id of the england_and_wales polygon
+ * @param geom - The geometry of the england_and_wales polygon
+ */
+const getOsLandFeaturesForEnglandAndWalesPoly = async (
+  englandAndWalesPolyId: number,
+  geom: GeoJSON.Polygon,
+): Promise<GeoJSON.Feature<GeoJSON.Polygon>[]> => {
+  // Check if this england_and_wales polygon has already been processed
+  const existingFeatures = await getOsLandFeaturesByEnglandAndWalesId(
+    englandAndWalesPolyId,
+  );
+  if (existingFeatures.length > 0) {
+    console.log(
+      "Found",
+      existingFeatures.length,
+      "existing OS NGD land features",
+    );
+    return existingFeatures;
+  }
+
+  console.log(
+    `Downloading OS NGD land features for england_and_wales id ${englandAndWalesPolyId}`,
+  );
+  // Get OS NGD land features for this polygon's bbox
+  const landFeatures = await fetchOsNgdLandFeatures(turf.bbox(geom));
+
+  if (landFeatures.length > 0) {
+    // Add england_and_wales_id to each feature
+    const featuresWithId = landFeatures.map((feature) => ({
+      ...turf.truncate(feature),
+      england_and_wales_id: englandAndWalesPolyId,
+      os_ngd_id: feature.properties?.id || feature.properties?.os_ngd_id,
+    }));
+
+    // Bulk insert into os_land_polys table
+    await bulkCreateOsLandPolys(featuresWithId);
+
+    console.log("Inserted", featuresWithId.length, "OS NGD land features");
+    return landFeatures;
+  } else {
+    console.log(`No OS NGD land features found`);
+    return [];
+  }
+};
+
+/**
+ * Populate the os_land_polys table with OS NGD land features for all england_and_wales polygons.
+ * This function should be run after the england_and_wales table is populated.
+ */
+const populateOsLandPolys = async () => {
+  let englandAndWalesPoly = await getNextEnglandAndWalesPolygon(0);
+  let totalFeatures = 0;
+
+  while (englandAndWalesPoly) {
+    try {
+      const features = await getOsLandFeaturesForEnglandAndWalesPoly(
+        englandAndWalesPoly.id,
+        englandAndWalesPoly.geom,
+      );
+      totalFeatures += features.length;
+    } catch (error) {
+      console.error(
+        `Error downloading OS NGD land features for england_and_wales id ${englandAndWalesPoly.id}:`,
+        error,
+      );
+      // Continue with next polygon instead of failing completely
+    }
+
+    // Get next polygon
+    englandAndWalesPoly = await getNextEnglandAndWalesPolygon(
+      englandAndWalesPoly.id + 1,
+    );
+  }
+
+  console.log(
+    "Finished populating os_land_polys table. Total features inserted:",
+    totalFeatures,
+  );
+};
+
 // Script that runs when invoking this script from command line:
-initialiseUnregisteredLandLayer(process.argv[2], parseInt(process.argv[3]))
+initialiseUnregisteredLandLayer(
+  process.argv[2],
+  parseInt(process.argv[3]),
+  parseInt(process.argv[4]),
+)
   .then(() => {
     console.log("Initial unregistered land layer created successfully.");
   })

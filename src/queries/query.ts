@@ -15,6 +15,7 @@ import {
 } from "../pipeline/util.js";
 import { Match } from "../pipeline/inspire/match.js";
 import dbConfig from "../../config/config.js";
+import pino from "pino";
 
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
@@ -226,6 +227,35 @@ export const UnregisteredLandModel = sequelize.define(
   },
 );
 
+export const OsLandPolysModel = sequelize.define(
+  "OsLandPolys",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    geom: {
+      allowNull: false,
+      type: DataTypes.GEOMETRY("POLYGON", 4326),
+    },
+    england_and_wales_id: {
+      allowNull: false,
+      type: DataTypes.INTEGER,
+    },
+    os_ngd_id: {
+      allowNull: true,
+      type: DataTypes.STRING,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+  },
+  {
+    tableName: "os_land_polys",
+  },
+);
+
 export enum PipelineStatus {
   Running = 1,
   Stopped = 0,
@@ -348,6 +378,39 @@ export const bulkCreateEnglandAndWalesPolygons = async (
   });
 };
 
+/**
+ * Bulk create OS NGD land polygons with england_and_wales_id reference.
+ */
+export const bulkCreateOsLandPolys = async (
+  polygons: Array<
+    Feature<Polygon> & { england_and_wales_id: number; os_ngd_id?: string }
+  >,
+  logging = false,
+) => {
+  const numFeatures = polygons.length;
+  if (numFeatures === 0) {
+    return;
+  }
+
+  const parsedValues = polygons.map((polygon) => [
+    JSON.stringify(polygon.geometry), // geom
+    polygon.england_and_wales_id, // england_and_wales_id
+    polygon.os_ngd_id || null, // os_ngd_id
+  ]);
+
+  const query = `INSERT INTO os_land_polys (geom, england_and_wales_id, os_ngd_id)
+    VALUES
+    ${"(ST_GeomFromGeoJSON(?), ?, ?),".repeat(numFeatures - 1)}
+    (ST_GeomFromGeoJSON(?), ?, ?)`;
+
+  return await sequelize.query(query, {
+    replacements: parsedValues.flat(),
+    type: QueryTypes.INSERT,
+    logging: logging ? console.log : false,
+    benchmark: true,
+  });
+};
+
 export const englandAndWalesTableExists = async () => {
   return (
     (
@@ -382,6 +445,26 @@ export const getIntersectingPendingInspirePolys = async (
   );
 
 /**
+ * Get OS NGD land features by england_and_wales_id bbox that they sit within.
+ */
+export const getOsLandFeaturesByEnglandAndWalesId = async (
+  englandAndWalesId: number,
+): Promise<Feature<Polygon>[]> => {
+  const results = await sequelize.query<{
+    geom: GeoJSON.Polygon;
+  }>(`SELECT geom FROM os_land_polys WHERE england_and_wales_id = ?`, {
+    replacements: [englandAndWalesId],
+    type: QueryTypes.SELECT,
+  });
+
+  return results.map((result) => ({
+    type: "Feature" as const,
+    geometry: result.geom,
+    properties: {},
+  }));
+};
+
+/**
  * Get unregistered land polygons that intersect with a given pending inspire polygon
  */
 const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
@@ -402,23 +485,19 @@ const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
  * their geometries in the unregistered_land table.
  */
 export const clipPendingPolygonsFromUnregisteredLand = async (
-  logging = false,
+  logger: pino.Logger,
 ) => {
   // Loop through each pending inspire polygon
-  let count = 0;
   let pendingPoly = await getNextPendingPolygon(0);
 
   while (pendingPoly) {
-    // Skip exact matches
-    if (pendingPoly.match_type === Match.Exact) {
-      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
-      continue;
-    }
-
-    count++;
-    if (count % 500 === 0) {
-      console.log("Processing new/changed pending inspire polygon", count);
-    }
+    // TODO: Uncomment this later, but we're running for all pending polygons initially, since the
+    // data on staging-2 is more recent than the unregistered_land created on dev-2
+    // // Skip exact matches
+    // if (pendingPoly.match_type === Match.Exact) {
+    //   pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+    //   continue;
+    // }
 
     // Get all unregistered land polys that intersect with this pending poly
     const intersectingUnregisteredPolys =
@@ -429,6 +508,14 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
       pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
       continue;
     }
+
+    logger.info(
+      {
+        pendingPolyId: pendingPoly.id,
+        pendingPolyIdCoords: pendingPoly.geom.coordinates[0][0],
+      },
+      `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
+    );
 
     // For each intersecting unregistered polygon, clip the pending poly from it
     for (const unregisteredPoly of intersectingUnregisteredPolys) {
@@ -450,11 +537,12 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
         // borders of polygons are long and very close to each other. In this case, truncate
         // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
         // fewer issues
-        console.warn(
-          `Turf difference failed with error "${error.message}", try again with 5 d.p. precision. Pending poly_id:`,
-          pendingPoly.poly_id,
-          ", Unregistered poly id:",
-          unregisteredPoly.id,
+        logger.warn(
+          {
+            pendingPolyId: pendingPoly.id,
+            unregisteredPolyId: unregisteredPoly.id,
+          },
+          `Turf difference failed with error "${error.message}", trying again with 5 d.p. precision.`,
         );
         clippedUnregisteredPoly = turf.difference(
           // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
@@ -484,10 +572,7 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
                 turf.buffer(f, -2, { units: "meters" }) ?? turf.polygon([]),
               ) > 0,
           );
-        await bulkCreateUnregisteredLandPolygons(
-          flattenedClippedFeatures,
-          logging,
-        );
+        await bulkCreateUnregisteredLandPolygons(flattenedClippedFeatures);
       }
     }
 
