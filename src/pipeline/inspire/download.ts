@@ -5,19 +5,22 @@ import fs from "fs";
 import { readdir, lstat, rm } from "fs/promises";
 import extract from "extract-zip";
 import { exec, spawn } from "child_process";
+import { wrapper } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 import { promisify } from "util";
-import { logger } from "../logger";
+import { logger } from "../logger.js";
 import {
   deleteAllPendingPolygons,
   getLastPipelineRun,
   setPipelineLastCouncilDownloaded,
-} from "../../queries/query";
-import { getLatestInspirePublishMonth } from "../util";
+} from "../../queries/query.js";
+import { getLatestInspirePublishMonth } from "../util.js";
+import axios from "axios";
 
 // An array of different user agents for different versions of Chrome on Windows and Mac
 const userAgents = [
-  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.0.110 Safari/537.36",
-  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.32.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.0.110 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.32.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.11.0.0 Safari/537.36",
 ];
 
@@ -28,7 +31,7 @@ let anyNewDownloads = false;
 /** Download INSPIRE files using a headless playwright browser */
 const downloadInspire = async (
   maxCouncils: number,
-  afterCouncil: string | undefined
+  afterCouncil: string | undefined,
 ) => {
   const url =
     "https://use-land-property-data.service.gov.uk/datasets/inspire/download";
@@ -38,7 +41,10 @@ const downloadInspire = async (
     userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
   const page = await context.newPage();
-  await page.goto(url);
+  await page.goto(url, {
+    referer: "https://use-land-property-data.service.gov.uk/datasets/inspire",
+  });
+  await page.locator(".govuk-link").first().waitFor({ timeout: 10000 });
 
   const inspireDownloadLinks = await page.evaluate((afterCouncil) => {
     const inspireDownloadLinks: any[] = [];
@@ -68,6 +74,14 @@ const downloadInspire = async (
     return inspireDownloadLinks;
   }, afterCouncil);
 
+  logger.info(`Found ${inspireDownloadLinks.length} INSPIRE download links`);
+
+  if (inspireDownloadLinks.length === 0) {
+    logger.error(`Page content: ${await page.content()}`);
+    throw new Error("No INSPIRE download links found.");
+  }
+  await browser.close();
+
   for (const link of inspireDownloadLinks.slice(0, maxCouncils)) {
     const council = link.council;
     const downloadFilePath = `${downloadPath}/${council}.zip`;
@@ -75,22 +89,34 @@ const downloadInspire = async (
     if (fs.existsSync(downloadFilePath)) {
       // If zip file is already downloaded for this month, we don't need to download it again
       logger.info(
-        `Skip downloading ${council}.zip since zipfile already exists`
+        `Skip downloading ${council}.zip since zipfile already exists`,
       );
     } else {
-      const downloadButton = await page.waitForSelector("#" + link.id);
-      const downloadPromise = page.waitForEvent("download");
-      await downloadButton.click();
-      const download = await downloadPromise;
-
       logger.info(`Downloading ${council}.zip`);
-      await download.saveAs(downloadFilePath);
+      await downloadZipFile(`${url}/${council}.zip`, downloadFilePath);
       anyNewDownloads = true;
     }
     councils.push(council);
   }
+};
 
-  await browser.close();
+const downloadZipFile = async (url: string, outputPath: string) => {
+  const writer = fs.createWriteStream(outputPath);
+
+  const jar = new CookieJar();
+  const response = await wrapper(axios).get(url, {
+    jar,
+    withCredentials: true,
+    maxRedirects: 2,
+    responseType: "stream",
+  });
+
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
 };
 
 /**
@@ -100,7 +126,7 @@ const downloadInspire = async (
 const backupInspireDownloads = async () => {
   if (!process.env.REMOTE_BACKUP_DESTINATION_PATH) {
     logger.warn(
-      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set"
+      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set",
     );
     return;
   }
@@ -109,6 +135,28 @@ const backupInspireDownloads = async () => {
   const { stdout, stderr } = await promisify(exec)(command);
   logger.info(`raw INSPIRE backup script stdout: ${stdout}`);
   logger.info(`raw INSPIRE backup script stderr: ${stderr}`);
+};
+
+/**
+ * Download the latest INSPIRE data backup from our Hetzner storage box (as zip files for each
+ * council). This is useful for re-running the pipeling on the latest data after the month has
+ * passed, for example if the gov Land Reg website has stopped working.
+ *
+ * @returns {Promise<string>} The month of the latest INSPIRE data backup
+ */
+const restoreLatestInspireBackup = async (): Promise<string> => {
+  if (!process.env.REMOTE_BACKUP_DESTINATION_PATH) {
+    logger.warn(
+      "Skipping backup since REMOTE_BACKUP_DESTINATION_PATH is not set",
+    );
+    return null;
+  }
+  const command = "bash scripts/restore-latest-inspire-downloads.sh";
+  logger.info(`Running '${command}'`);
+  const { stdout, stderr } = await promisify(exec)(command);
+  logger.info(`raw INSPIRE restore script stdout: ${stdout}`);
+  logger.info(`raw INSPIRE restore script stderr: ${stderr}`);
+  return stdout.trim();
 };
 
 /** Unzip an archive then delete the original archive (to save space) */
@@ -157,7 +205,7 @@ const gmlToPendingInspirePolygons = async (council: string) => {
             resolve();
           } else {
             reject(
-              `spawn exited with code ${code} when transforming GML for ${council}`
+              `spawn exited with code ${code} when transforming GML for ${council}`,
             );
           }
         });
@@ -200,21 +248,17 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   // Download the data for the first <maxCouncils> councils after <afterCouncil>. Default to all.
   const maxCouncils: number = options.maxCouncils || 1e4;
 
-  const latestInspirePublishMonth = getLatestInspirePublishMonth();
+  const inspireDataMonth = options.inspireDataRestore
+    ? await restoreLatestInspireBackup()
+    : getLatestInspirePublishMonth();
 
-  logger.info(
-    `Download ${latestInspirePublishMonth} INSPIRE data ` + afterCouncil
-      ? `after council ${afterCouncil}`
-      : "for all councils"
-  );
-
-  downloadPath = path.resolve("./downloads", latestInspirePublishMonth);
+  downloadPath = path.resolve("./downloads", inspireDataMonth);
   fs.mkdirSync(downloadPath, { recursive: true });
 
   // delete old files in the downloads folder
   const oldDownloadsFolders = fs
     .readdirSync("./downloads")
-    .filter((folderName) => folderName !== latestInspirePublishMonth);
+    .filter((folderName) => folderName !== inspireDataMonth);
   for (const folder of oldDownloadsFolders) {
     fs.rmSync(path.resolve("./downloads", folder), {
       recursive: true,
@@ -229,14 +273,29 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
     await deleteAllPendingPolygons();
   }
 
-  councils = [];
+  if (options.inspireDataRestore) {
+    // Set councils to list of filenames in the download folder
 
-  // Download INSPIRE data from govt website
-  await downloadInspire(maxCouncils, afterCouncil);
+    councils = fs
+      .readdirSync(downloadPath)
+      .filter((file) => file.endsWith(".zip"))
+      .map((file) => file.replace(".zip", ""));
+  } else {
+    logger.info(
+      `Download ${inspireDataMonth} INSPIRE data ` + afterCouncil
+        ? `after council ${afterCouncil}`
+        : "for all councils",
+    );
 
-  // If new files were downloaded, back them up
-  if (anyNewDownloads) {
-    await backupInspireDownloads();
+    councils = [];
+
+    // Download INSPIRE data from govt website
+    await downloadInspire(maxCouncils, afterCouncil);
+
+    // If new files were downloaded, back them up
+    if (anyNewDownloads) {
+      await backupInspireDownloads();
+    }
   }
 
   // Unzip and transform all new downloads
@@ -246,6 +305,6 @@ export const downloadAndBackupInspirePolygons = async (options: any) => {
   }
 
   logger.info(
-    "Downloaded, transformed, and created all pending INSPIRE polygons in DB"
+    "Downloaded, transformed, and created all pending INSPIRE polygons in DB",
   );
 };

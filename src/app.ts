@@ -2,8 +2,9 @@ import "dotenv/config";
 import Hapi from "@hapi/hapi";
 import { Server } from "@hapi/hapi";
 import qs from "qs";
-import routes from "./routes/index";
-import { resumePipelineRunIfInterrupted } from "./pipeline/run";
+import routes from "./routes/index.js";
+import { resumePipelineRunIfInterrupted } from "./pipeline/run.js";
+import { logger } from "./pipeline/logger.js";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
@@ -38,7 +39,7 @@ async function start() {
         " " +
         request.path +
         " --> " +
-        request.response.statusCode
+        request.response.statusCode,
     );
   });
 
@@ -53,9 +54,15 @@ async function start() {
   }
 }
 
-process.on("unhandledRejection", (err) => {
-  console.error("unhandledRejection");
-  console.error(err);
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException", err, err.stack);
+  logger?.error(err, "uncaughtException");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  logger?.error(promise, `unhandledRejection, reason: ${reason}`);
   process.exit(1);
 });
 

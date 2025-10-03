@@ -10,19 +10,20 @@ import {
   setPipelineLastTask,
   startPipelineRun,
   stopPipelineRun,
-} from "../queries/query";
-import { updateOwnerships } from "./ownerships/update";
-import { downloadAndBackupInspirePolygons } from "./inspire/download";
-import { analyseAllPendingPolygons } from "./inspire/analyse-all";
-import { logger, initLogger } from "./logger";
+} from "../queries/query.js";
+import { updateOwnerships } from "./ownerships/update.js";
+import { downloadAndBackupInspirePolygons } from "./inspire/download.js";
+import { analyseAllPendingPolygons } from "./inspire/analyse-all.js";
+import { logger, initLogger } from "./logger.js";
 import moment from "moment-timezone";
 import {
   getLatestInspirePublishDate,
   getRunningPipelineKey,
   notifyMatrix,
-} from "./util";
+} from "./util.js";
 
 type TaskOptions = {
+  inspireDataRestore?: boolean; // If true, restore INSPIRE data from our latest backup instead of downloading it from the gov website
   afterCouncil?: string; // Only process councils after this one, alphabetically
   maxCouncils?: number; // Max number of councils to process INSPIRE data for
   maxPolygons?: number; // Max number of INSPIRE polygons to process
@@ -151,11 +152,18 @@ const runPipeline = async (options: PipelineOptions) => {
     const summaryTable = output || "Error: no summary table";
 
     await stopPipelineRun();
+
     const timeElapsedThisRun = moment.duration(Date.now() - startTimeMs);
     const timeElapsedTotal = moment.duration(
       Date.now() - (await getPipelineStartTimeIncludingInterruptions()),
     );
-    const timeElapsedString = `${timeElapsedThisRun.hours()} h ${timeElapsedThisRun.minutes()} min (this run), ${timeElapsedTotal.hours()} h ${timeElapsedTotal.minutes()} min (total)`;
+    // Format time elapsed as h min
+    const timeElapsedString = `${Math.floor(
+      timeElapsedThisRun.asHours(),
+    )} h ${timeElapsedThisRun.minutes()} min (this run), ${Math.floor(
+      timeElapsedTotal.asHours(),
+    )} h ${timeElapsedTotal.minutes()} min (total)`;
+
     const msg = `Pipeline ${pipelineKey} finished in ${timeElapsedString}`;
     logger.info(msg);
     console.log(msg);

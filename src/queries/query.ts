@@ -6,11 +6,15 @@ import {
   WhereOptions,
   Options,
 } from "sequelize";
-import { Feature, Polygon } from "geojson";
+import { Feature, MultiPolygon, Polygon } from "geojson";
+import * as turf from "@turf/turf";
 import { customAlphabet } from "nanoid";
-import { getRunningPipelineKey, setRunningPipelineKey } from "../pipeline/util";
-import { Match } from "../pipeline/inspire/match";
-import dbConfig from "../../config/config";
+import {
+  getRunningPipelineKey,
+  setRunningPipelineKey,
+} from "../pipeline/util.js";
+import { Match } from "../pipeline/inspire/match.js";
+import dbConfig from "../../config/config.js";
 
 /** Used to generate pipeline unique keys */
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 10);
@@ -201,6 +205,27 @@ export const PipelineRunModel = sequelize.define(
   },
 );
 
+export const UnregisteredLandModel = sequelize.define(
+  "UnregisteredLand",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    geom: {
+      allowNull: false,
+      type: DataTypes.GEOMETRY("POLYGON", 4326),
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+  },
+  {
+    tableName: "unregistered_land",
+  },
+);
+
 export enum PipelineStatus {
   Running = 1,
   Stopped = 0,
@@ -240,6 +265,10 @@ export const bulkCreatePendingPolygons = async (
   logging = false,
 ) => {
   const numFeatures = polygonGeojsonFeatures.length;
+  if (numFeatures === 0) {
+    // No polygons to create
+    return;
+  }
   const parsedPolygonValues = polygonGeojsonFeatures.map((feature) => [
     feature.properties.INSPIREID, // poly_id
     JSON.stringify(feature.geometry), // geom
@@ -262,13 +291,218 @@ export const bulkCreatePendingPolygons = async (
   });
 };
 
+export const bulkCreateUnregisteredLandPolygons = async (
+  polygons: Feature<Polygon>[],
+  logging = false,
+) => {
+  const numFeatures = polygons.length;
+  if (numFeatures === 0) {
+    // No polygons to create
+    return;
+  }
+
+  const query = `INSERT INTO unregistered_land (geom)
+    VALUES
+    ${"(ST_GeomFromGeoJSON(?)),".repeat(numFeatures - 1)}
+    (ST_GeomFromGeoJSON(?))`;
+
+  return await sequelize.query(query, {
+    replacements: polygons.map((f) => JSON.stringify(f.geometry)),
+    type: QueryTypes.INSERT,
+    logging: logging ? console.log : false,
+    benchmark: true,
+  });
+};
+
+/**
+ * This is just used once in the initialise-unregistered-land-layer.ts script.
+ */
+export const bulkCreateEnglandAndWalesPolygons = async (
+  polygons: Feature<Polygon>[],
+  logging = false,
+) => {
+  await sequelize.query(
+    `CREATE TABLE england_and_wales LIKE unregistered_land;`,
+    {
+      type: QueryTypes.RAW,
+    },
+  );
+
+  const numFeatures = polygons.length;
+  if (numFeatures === 0) {
+    throw new Error(
+      `Expected > 0 England and Wales polygons but received ${numFeatures} polygons`,
+    );
+  }
+
+  const query = `INSERT INTO england_and_wales (geom)
+    VALUES
+    ${"(ST_GeomFromGeoJSON(?)),".repeat(numFeatures - 1)}
+    (ST_GeomFromGeoJSON(?))`;
+
+  return await sequelize.query(query, {
+    replacements: polygons.map((f) => JSON.stringify(f.geometry)),
+    type: QueryTypes.INSERT,
+    logging: logging ? console.log : false,
+    benchmark: true,
+  });
+};
+
+export const englandAndWalesTableExists = async () => {
+  return (
+    (
+      await sequelize.query(
+        `SELECT * FROM information_schema.tables
+        WHERE table_schema = DATABASE() AND table_name = 'england_and_wales';`,
+        {
+          type: QueryTypes.SELECT,
+        },
+      )
+    ).length > 0
+  );
+};
+
+export const deleteUnregisteredLandPolygon = async (id: number) =>
+  await UnregisteredLandModel.destroy({
+    where: { id },
+  });
+
+export const getIntersectingPendingInspirePolys = async (
+  englandAndWalesId: number,
+): Promise<PendingPolygon[]> =>
+  await sequelize.query<PendingPolygon>(
+    `SELECT i.* FROM
+      england_and_wales e
+      JOIN pending_inspire_polygons i ON ST_Intersects(e.geom, i.geom)
+      WHERE e.id = ?;`,
+    {
+      replacements: [englandAndWalesId],
+      type: QueryTypes.SELECT,
+    },
+  );
+
+/**
+ * Get unregistered land polygons that intersect with a given pending inspire polygon
+ */
+const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
+  await sequelize.query<{ id: number; geom: GeoJSON.Polygon }>(
+    `SELECT u.* FROM
+      pending_inspire_polygons p
+      JOIN unregistered_land u ON ST_Intersects(p.geom, u.geom)
+      WHERE p.id = ?;`,
+    {
+      replacements: [pendingPolyId],
+      type: QueryTypes.SELECT,
+    },
+  );
+
+/**
+ * Take all pending_inspire_polygons that don't have match_type = exact i.e. new or changed ones.
+ * Clip their geometries from all the unregistered_land polygons that intersect with them, updating
+ * their geometries in the unregistered_land table.
+ */
+export const clipPendingPolygonsFromUnregisteredLand = async (
+  logging = false,
+) => {
+  // Loop through each pending inspire polygon
+  let count = 0;
+  let pendingPoly = await getNextPendingPolygon(0);
+
+  while (pendingPoly) {
+    // Skip exact matches
+    if (pendingPoly.match_type === Match.Exact) {
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
+
+    count++;
+    if (count % 500 === 0) {
+      console.log("Processing new/changed pending inspire polygon", count);
+    }
+
+    // Get all unregistered land polys that intersect with this pending poly
+    const intersectingUnregisteredPolys =
+      await getIntersectingUnregisteredPolys(pendingPoly.id);
+
+    if (intersectingUnregisteredPolys.length === 0) {
+      // No intersecting unregistered polygons, so skip to next pending poly
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
+
+    // For each intersecting unregistered polygon, clip the pending poly from it
+    for (const unregisteredPoly of intersectingUnregisteredPolys) {
+      // Clip the pending poly away from the unregistered polygon
+      let clippedUnregisteredPoly: Feature<Polygon | MultiPolygon>;
+
+      try {
+        clippedUnregisteredPoly = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(
+            turf.featureCollection([
+              turf.polygon(unregisteredPoly.geom.coordinates),
+              turf.polygon(pendingPoly.geom.coordinates),
+            ]),
+          ),
+        );
+      } catch (error) {
+        // sometimes this happens due to floating point precision issues with turf when the
+        // borders of polygons are long and very close to each other. In this case, truncate
+        // the coordinates to 5 d.p. (~0.5 m precision) and try again, since this seems to cause
+        // fewer issues
+        console.warn(
+          `Turf difference failed with error "${error.message}", try again with 5 d.p. precision. Pending poly_id:`,
+          pendingPoly.poly_id,
+          ", Unregistered poly id:",
+          unregisteredPoly.id,
+        );
+        clippedUnregisteredPoly = turf.difference(
+          // Truncate coords to 6 d.p. since higher precision can cause issues with turf calculations
+          turf.truncate(
+            turf.featureCollection([
+              turf.polygon(unregisteredPoly.geom.coordinates),
+              turf.polygon(pendingPoly.geom.coordinates),
+            ]),
+            { precision: 5 },
+          ),
+        );
+      }
+
+      // Delete the original unregistered polygon
+      await deleteUnregisteredLandPolygon(unregisteredPoly.id);
+
+      if (clippedUnregisteredPoly) {
+        // Before inserting the new clipped geometry into the unregistered_land table, flatten it
+        // into individual polygons, and filter out slivers by only keeping those which are bigger
+        // than 20 m2 and don't disappear if we shrink the borders by 2 m
+        const flattenedClippedFeatures = turf
+          .truncate(turf.flatten(clippedUnregisteredPoly))
+          .features.filter(
+            (f) =>
+              turf.area(f) > 20 &&
+              turf.area(
+                turf.buffer(f, -2, { units: "meters" }) ?? turf.polygon([]),
+              ) > 0,
+          );
+        await bulkCreateUnregisteredLandPolygons(
+          flattenedClippedFeatures,
+          logging,
+        );
+      }
+    }
+
+    // Get the next pending polygon
+    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+  }
+};
+
 /** A subset of the fields in the model, which are used for analysis */
 export type PendingPolygon = {
   id: number;
   poly_id: number;
   geom: Polygon;
   council: string;
-  matchType: Match | null;
+  match_type: Match | null;
 };
 
 /**
@@ -294,13 +528,48 @@ export const getNextPendingPolygon = async (
     });
   }
 
+  return polygon;
+};
+
+/**
+ * Return the next unregistered_land polygon with id at least equal to minId, or null if none exist.
+ */
+export const getNextUnregisteredLandPolygon = async (
+  minId: number,
+): Promise<{ id: number; geom: GeoJSON.Polygon }> => {
+  const polygon: any = await UnregisteredLandModel.findOne({
+    where: { id: { [Op.gte]: minId } },
+    raw: true,
+  });
+
   return polygon
     ? {
         id: polygon.id,
-        poly_id: polygon.poly_id,
         geom: polygon.geom,
-        council: polygon.council,
-        matchType: polygon.match_type,
+      }
+    : null;
+};
+
+/**
+ * Return the next england_and_wales polygon with id at least equal to minId, or null if none exist.
+ * This is only used in the initialise-unregistered-land-layer.ts script.
+ */
+export const getNextEnglandAndWalesPolygon = async (
+  minId: number,
+): Promise<{ id: number; geom: GeoJSON.Polygon }> => {
+  const polygons: any = await sequelize.query(
+    `SELECT id, geom FROM england_and_wales WHERE id >= ? LIMIT 1;`,
+    {
+      replacements: [minId],
+      type: QueryTypes.SELECT,
+      raw: true,
+    },
+  );
+
+  return polygons.length > 0
+    ? {
+        id: polygons[0].id,
+        geom: polygons[0].geom,
       }
     : null;
 };
@@ -527,10 +796,13 @@ export const getLocalAuthorityPolygonsInSearchArea = async (
   LEFT JOIN land_ownerships
   ON land_ownership_polygons.title_no = land_ownerships.title_no
   WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?))
-  AND (proprietor_category_1 = 'Local Authority')
+  AND (
+    proprietor_category_1 = 'Local Authority' OR
+    proprietor_category_2 = 'Local Authority' OR
+    proprietor_category_3 = 'Local Authority' OR
+    proprietor_category_4 = 'Local Authority'
+  )
   LIMIT 5000;`;
-  // add these once we show more than 1 proprietor
-  // OR proprietor_category_2 = 'Local Authority' OR proprietor_category_3 = 'Local Authority' OR proprietor_category_4 = 'Local Authority'
 
   return await sequelize.query(query, {
     replacements: [searchArea],
@@ -552,11 +824,10 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
 
   const churchOfEnglandCondition = churchOfEnglandProprietorMatches
     .map(
-      (match) => `proprietor_name_1 LIKE '%${match}%'`,
-      // uncomment these once we show more than 1 proprietor
-      // OR proprietor_name_2 LIKE '%${match}%'
-      // OR proprietor_name_3 LIKE '%${match}%'
-      // OR proprietor_name_4 LIKE '%${match}%'`
+      (match) => `proprietor_name_1 LIKE '%${match}%'
+                  OR proprietor_name_2 LIKE '%${match}%'
+                  OR proprietor_name_3 LIKE '%${match}%'
+                  OR proprietor_name_4 LIKE '%${match}%'`,
     )
     .join(" OR ");
 
@@ -606,6 +877,29 @@ export const getPendingPolygonsInSearchArea = async (
 };
 
 /**
+ * Get unregistered land boundaries that intersect with the search area.
+ *
+ * Limit result to 5000 polygons to avoid OOMEs.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ * @returns an array of polygons that match the criteria
+ */
+
+export const getUnregisteredPolygonsInSearchArea = async (
+  searchArea: string,
+) => {
+  const query = `SELECT id as poly_id, geom
+    FROM unregistered_land
+    WHERE ST_Intersects(geom, ST_GeomFromGeoJSON(?)) 
+    LIMIT 5000;`;
+
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
  * Return pending polygon with poly_id if it exists, or null.
  */
 export const getPendingPolygon = async (
@@ -616,15 +910,7 @@ export const getPendingPolygon = async (
     raw: true,
   });
 
-  return polygon
-    ? {
-        id: polygon.id,
-        poly_id: polygon.poly_id,
-        geom: polygon.geom,
-        council: polygon.council,
-        matchType: polygon.match_type,
-      }
-    : null;
+  return polygon;
 };
 
 /**
@@ -688,11 +974,11 @@ export const insertAllAcceptedPendingPolygons = async () => {
 
   const chunkSize = 100000;
   for (let i = 0; i <= (lastPendingPolygon?.id ?? 0); i += chunkSize) {
-    const query = `INSERT INTO land_ownership_polygons (poly_id, geom)
-    SELECT p.poly_id, p.geom
+    const query = `INSERT INTO land_ownership_polygons (poly_id, geom, updatedAt)
+    SELECT p.poly_id, p.geom, p.createdAt
     FROM pending_inspire_polygons p WHERE accepted = true
       AND id >= ${i} AND id < ${i + chunkSize}
-    ON DUPLICATE KEY UPDATE geom = p.geom;`;
+    ON DUPLICATE KEY UPDATE geom = p.geom, updatedAt = p.createdAt;`;
 
     await sequelize.query(query, {
       type: QueryTypes.INSERT,
@@ -947,19 +1233,19 @@ export const setPipelineLastPolyAnalysed = async (id: number) => {
 /**
  * Returns the total pending inspire polygon count
  *  - up to the row with @param upToId (if specified), AND
- *  - with match_type equal to @param matchType (if specified),
+ *  - with match_type equal to @param match_type (if specified),
  * or the whole table if neither options specified.
  */
 export const getPendingPolygonCount = async (
   upToId?: number,
-  matchType?: Match,
+  match_type?: Match,
 ): Promise<number> => {
   const where: WhereOptions = {};
   if (upToId !== undefined) {
     where.id = { [Op.lt]: upToId };
   }
-  if (matchType !== undefined) {
-    where.match_type = matchType;
+  if (match_type !== undefined) {
+    where.match_type = match_type;
   }
   return await PendingPolygonModel.count({ where });
 };
