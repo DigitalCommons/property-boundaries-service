@@ -544,8 +544,8 @@ export const analyseAllPendingPolygons = async (
 
   if (options.updateBoundaries) {
     // logger.info(
-      "Clip all new/changed pending polygon boundaries from unregistered_land table",
-    );
+    //  "Clip all new/changed pending polygon boundaries from unregistered_land table",
+    //);
     // await clipPendingPolygonsFromUnregisteredLand(logger);
 
     logger.info("Updating main land_ownership_polygons table");
