@@ -430,7 +430,7 @@ export const deleteUnregisteredLandPolygon = async (id: number) =>
     where: { id },
   });
 
-export const getIntersectingPendingInspirePolys = async (
+export const getPendingInspirePolysIntersectingWithEnglandAndWalesTile = async (
   englandAndWalesId: number,
 ): Promise<PendingPolygon[]> =>
   await sequelize.query<PendingPolygon>(
@@ -465,22 +465,51 @@ export const getOsLandFeaturesByEnglandAndWalesId = async (
 };
 
 /**
- * Get unregistered land polygons that intersect with a given pending inspire polygon
+ * Get unregistered land polygons that intersect with a given pending inspire polygon (properly
+ * overlapping, not just touching).
+ *
+ * Note that ST_Intersects sometimes returns strange results for polygons that are touching, so we
+ * should use Turf to calculate the actual overlap later.
  */
-const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
+const getUnregisteredPolysIntersectingWithPendingPoly = async (
+  poly_id: number,
+) =>
   await sequelize.query<{ id: number; geom: GeoJSON.Polygon }>(
     `SELECT u.* FROM
       pending_inspire_polygons p
-      JOIN unregistered_land u ON ST_Intersects(p.geom, u.geom)
-      WHERE p.id = ?;`,
+      JOIN unregistered_land u
+      ON ST_Intersects(p.geom, u.geom) AND NOT ST_Touches(p.geom, u.geom)
+      WHERE p.poly_id = ?;`,
     {
-      replacements: [pendingPolyId],
+      replacements: [poly_id],
       type: QueryTypes.SELECT,
     },
   );
 
 /**
- * Take all pending_inspire_polygons that don't have match_type = exact i.e. new or changed ones.
+ * Get unregistered land polygons that intersect with a given land ownership polygon (properly
+ * overlapping, not just touching).
+ *
+ * Note that ST_Intersects sometimes returns strange results for polygons that are touching, so we
+ * should use Turf to calculate the actual overlap later.
+ */
+export const getUnregisteredPolysIntersectingWithLandOwnershipPoly = async (
+  poly_id: number,
+) =>
+  await sequelize.query<{ id: number; geom: GeoJSON.Polygon }>(
+    `SELECT u.* FROM
+      land_ownership_polygons p
+      JOIN unregistered_land u
+      ON ST_Intersects(p.geom, u.geom) AND NOT ST_Touches(p.geom, u.geom)
+      WHERE p.poly_id = ?;`,
+    {
+      replacements: [poly_id],
+      type: QueryTypes.SELECT,
+    },
+  );
+
+/**
+ * Take all pending_inspire_polygons that don't have match_type = exact (i.e. new or changed ones).
  * Clip their geometries from all the unregistered_land polygons that intersect with them, updating
  * their geometries in the unregistered_land table.
  */
@@ -491,17 +520,17 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
   let pendingPoly = await getNextPendingPolygon(0);
 
   while (pendingPoly) {
-    // TODO: Uncomment this later, but we're running for all pending polygons initially, since the
-    // data on staging-2 is more recent than the unregistered_land created on dev-2
-    // // Skip exact matches
-    // if (pendingPoly.match_type === Match.Exact) {
-    //   pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
-    //   continue;
-    // }
+    if (pendingPoly.match_type === Match.Exact) {
+      // Skip exact matches
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
 
     // Get all unregistered land polys that intersect with this pending poly
     const intersectingUnregisteredPolys =
-      await getIntersectingUnregisteredPolys(pendingPoly.id);
+      await getUnregisteredPolysIntersectingWithPendingPoly(
+        pendingPoly.poly_id,
+      );
 
     if (intersectingUnregisteredPolys.length === 0) {
       // No intersecting unregistered polygons, so skip to next pending poly
@@ -512,7 +541,16 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
     logger.info(
       {
         pendingPolyId: pendingPoly.id,
-        pendingPolyIdCoords: pendingPoly.geom.coordinates[0][0],
+        pendingPolyInspireId: pendingPoly.poly_id,
+        pendingPolyCoords: [
+          pendingPoly.geom.coordinates[0][0][1],
+          pendingPoly.geom.coordinates[0][0][0],
+        ],
+        unregisteredPolyIds: intersectingUnregisteredPolys.map((p) => p.id),
+        unregisteredPoly1Coords: [
+          intersectingUnregisteredPolys[0].geom.coordinates[0][0][1],
+          intersectingUnregisteredPolys[0].geom.coordinates[0][0][0],
+        ],
       },
       `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
     );
@@ -539,7 +577,7 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
         // fewer issues
         logger.warn(
           {
-            pendingPolyId: pendingPoly.id,
+            pendingPolyInspireId: pendingPoly.poly_id,
             unregisteredPolyId: unregisteredPoly.id,
           },
           `Turf difference failed with error "${error.message}", trying again with 5 d.p. precision.`,
@@ -573,6 +611,21 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
               ) > 0,
           );
         await bulkCreateUnregisteredLandPolygons(flattenedClippedFeatures);
+        logger.info(
+          {
+            pendingPolyInspireId: pendingPoly.poly_id,
+            unregisteredPolyId: unregisteredPoly.id,
+          },
+          `Clipped unregistered poly into ${flattenedClippedFeatures.length} smaller piece(s)`,
+        );
+      } else {
+        logger.info(
+          {
+            pendingPolyInspireId: pendingPoly.poly_id,
+            unregisteredPolyId: unregisteredPoly.id,
+          },
+          `Removed unregistered poly completely since it is contained within pending polygon`,
+        );
       }
     }
 
@@ -615,6 +668,22 @@ export const getNextPendingPolygon = async (
 
   return polygon;
 };
+
+/**
+ * Return the next land_ownership_polygon with id at least equal to minId and created since the
+ * specified date. Return null if none exist.
+ */
+export const getNextLandOwnershipPolygonCreatedSinceDate = async (
+  minId: number,
+  sinceDate: Date,
+) =>
+  await PolygonModel.findOne({
+    where: {
+      id: { [Op.gte]: minId },
+      createdAt: { [Op.ne]: null, [Op.gte]: sinceDate },
+    },
+    raw: true,
+  });
 
 /**
  * Return the next unregistered_land polygon with id at least equal to minId, or null if none exist.
