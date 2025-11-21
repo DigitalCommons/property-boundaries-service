@@ -465,13 +465,15 @@ export const getOsLandFeaturesByEnglandAndWalesId = async (
 };
 
 /**
- * Get unregistered land polygons that intersect with a given pending inspire polygon
+ * Get unregistered land polygons that intersect with a given pending inspire polygon (properly
+ * overlapping, not just touching).
  */
 const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
   await sequelize.query<{ id: number; geom: GeoJSON.Polygon }>(
     `SELECT u.* FROM
       pending_inspire_polygons p
-      JOIN unregistered_land u ON ST_Intersects(p.geom, u.geom)
+      JOIN unregistered_land u
+      ON ST_Intersects(p.geom, u.geom) AND NOT ST_Touches(p.geom, u.geom)
       WHERE p.id = ?;`,
     {
       replacements: [pendingPolyId],
@@ -514,7 +516,11 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
     logger.info(
       {
         pendingPolyId: pendingPoly.id,
-        pendingPolyIdCoords: pendingPoly.geom.coordinates[0][0],
+        pendingPolyInspireId: pendingPoly.poly_id,
+        pendingPolyCoords: [
+          pendingPoly.geom.coordinates[0][0][1],
+          pendingPoly.geom.coordinates[0][0][0],
+        ],
       },
       `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
     );
