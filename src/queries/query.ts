@@ -530,6 +530,10 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
       `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
     );
 
+    // TODO remove this, just debugging the intersection detection
+    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+    continue;
+
     // For each intersecting unregistered polygon, clip the pending poly from it
     for (const unregisteredPoly of intersectingUnregisteredPolys) {
       // Clip the pending poly away from the unregistered polygon
