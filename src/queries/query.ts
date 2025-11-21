@@ -521,6 +521,11 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
           pendingPoly.geom.coordinates[0][0][1],
           pendingPoly.geom.coordinates[0][0][0],
         ],
+        unregisteredPolyIds: intersectingUnregisteredPolys.map((p) => p.id),
+        unregisteredPoly1Coords: [
+          intersectingUnregisteredPolys[0].geom.coordinates[0][0][1],
+          intersectingUnregisteredPolys[0].geom.coordinates[0][0][0],
+        ],
       },
       `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
     );
