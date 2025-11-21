@@ -49,7 +49,6 @@ import {
   getOsLandFeaturesByEnglandAndWalesId,
   englandAndWalesTableExists,
 } from "../../../queries/query.js";
-import { Match } from "../match.js";
 
 /**
  * See the top of this file for more details about what this script does.

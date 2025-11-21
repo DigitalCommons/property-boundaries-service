@@ -480,24 +480,26 @@ const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
   );
 
 /**
- * Take all pending_inspire_polygons that don't have match_type = exact i.e. new or changed ones.
+ * Take all pending_inspire_polygons that don't have match_type = exact (i.e. new or changed ones).
  * Clip their geometries from all the unregistered_land polygons that intersect with them, updating
  * their geometries in the unregistered_land table.
+ *
+ * @param newOrChangedOnly Defaults to true. If set to false, clip all pending polygons including
+ *    those with match_type = exact, not just those that are new or changed.
  */
 export const clipPendingPolygonsFromUnregisteredLand = async (
   logger: pino.Logger,
+  newOrChangedOnly = true,
 ) => {
   // Loop through each pending inspire polygon
   let pendingPoly = await getNextPendingPolygon(0);
 
   while (pendingPoly) {
-    // TODO: Uncomment this later, but we're running for all pending polygons initially, since the
-    // data on staging-2 is more recent than the unregistered_land created on dev-2
-    // // Skip exact matches
-    // if (pendingPoly.match_type === Match.Exact) {
-    //   pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
-    //   continue;
-    // }
+    if (newOrChangedOnly && pendingPoly.match_type === Match.Exact) {
+      // Skip exact matches
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      continue;
+    }
 
     // Get all unregistered land polys that intersect with this pending poly
     const intersectingUnregisteredPolys =
