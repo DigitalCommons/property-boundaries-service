@@ -467,6 +467,9 @@ export const getOsLandFeaturesByEnglandAndWalesId = async (
 /**
  * Get unregistered land polygons that intersect with a given pending inspire polygon (properly
  * overlapping, not just touching).
+ *
+ * Note that ST_Intersects sometimes returns strange results for polygons that are touching, so we
+ * should use Turf to calculate the actual overlap later.
  */
 const getIntersectingUnregisteredPolys = async (pendingPolyId: number) =>
   await sequelize.query<{ id: number; geom: GeoJSON.Polygon }>(
@@ -530,10 +533,6 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
       `Found ${intersectingUnregisteredPolys.length} intersecting unregistered polygons`,
     );
 
-    // TODO remove this, just debugging the intersection detection
-    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
-    continue;
-
     // For each intersecting unregistered polygon, clip the pending poly from it
     for (const unregisteredPoly of intersectingUnregisteredPolys) {
       // Clip the pending poly away from the unregistered polygon
@@ -556,7 +555,7 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
         // fewer issues
         logger.warn(
           {
-            pendingPolyId: pendingPoly.id,
+            pendingPolyInspireId: pendingPoly.poly_id,
             unregisteredPolyId: unregisteredPoly.id,
           },
           `Turf difference failed with error "${error.message}", trying again with 5 d.p. precision.`,
@@ -590,6 +589,21 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
               ) > 0,
           );
         await bulkCreateUnregisteredLandPolygons(flattenedClippedFeatures);
+        logger.info(
+          {
+            pendingPolyInspireId: pendingPoly.poly_id,
+            unregisteredPolyId: unregisteredPoly.id,
+          },
+          `Clipped unregistered poly into ${flattenedClippedFeatures.length} smaller piece(s)`,
+        );
+      } else {
+        logger.info(
+          {
+            pendingPolyInspireId: pendingPoly.poly_id,
+            unregisteredPolyId: unregisteredPoly.id,
+          },
+          `Removed unregistered poly completely since it is contained within pending polygon`,
+        );
       }
     }
 
