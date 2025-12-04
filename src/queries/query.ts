@@ -5,6 +5,7 @@ import {
   Op,
   WhereOptions,
   Options,
+  where,
 } from "sequelize";
 import { Feature, MultiPolygon, Polygon } from "geojson";
 import * as turf from "@turf/turf";
@@ -516,16 +517,10 @@ export const getUnregisteredPolysIntersectingWithLandOwnershipPoly = async (
 export const clipPendingPolygonsFromUnregisteredLand = async (
   logger: pino.Logger,
 ) => {
-  // Loop through each pending inspire polygon
-  let pendingPoly = await getNextPendingPolygon(0);
+  // Loop through each pending inspire polygon, skipping exact matches
+  let pendingPoly = await getNextPendingPolygon(0, true);
 
   while (pendingPoly) {
-    if (pendingPoly.match_type === Match.Exact) {
-      // Skip exact matches
-      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
-      continue;
-    }
-
     // Get all unregistered land polys that intersect with this pending poly
     const intersectingUnregisteredPolys =
       await getUnregisteredPolysIntersectingWithPendingPoly(
@@ -534,7 +529,7 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
 
     if (intersectingUnregisteredPolys.length === 0) {
       // No intersecting unregistered polygons, so skip to next pending poly
-      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+      pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1, true);
       continue;
     }
 
@@ -630,7 +625,7 @@ export const clipPendingPolygonsFromUnregisteredLand = async (
     }
 
     // Get the next pending polygon
-    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1);
+    pendingPoly = await getNextPendingPolygon(pendingPoly.id + 1, true);
   }
 };
 
@@ -644,18 +639,28 @@ export type PendingPolygon = {
 };
 
 /**
- * Return the next pending polygon with id at least equal to minId, or null if none exist.
+ * Return the next pending inspire polygon with id at least equal to minId, or null if none exist.
  *
  * Note: Before returning the polygon, delete other polygons from the table that have the same
  * poly_id, to avoid reprocessing the same data later. Duplicates show up in the data when the same
  * polygon lies on a boundary between multiple councils. We don't just make poly_id a unique key,
  * since this causes issues in the earlier download step when inserting data from each council.
+ *
+ * @param minId Minimum id of the pending polygon to return
+ * @param skipExactMatches If true, skip pending polygons with match_type = exact
  */
 export const getNextPendingPolygon = async (
   minId: number,
+  skipExactMatches = false,
 ): Promise<PendingPolygon> => {
+  const whereClause: WhereOptions = { id: { [Op.gte]: minId } };
+
+  if (skipExactMatches) {
+    whereClause.match_type = { [Op.ne]: Match.Exact };
+  }
+
   const polygon: any = await PendingPolygonModel.findOne({
-    where: { id: { [Op.gte]: minId } },
+    where: whereClause,
     raw: true,
   });
 
