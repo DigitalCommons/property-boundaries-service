@@ -5,7 +5,6 @@ import {
   Op,
   WhereOptions,
   Options,
-  where,
 } from "sequelize";
 import { Feature, MultiPolygon, Polygon } from "geojson";
 import * as turf from "@turf/turf";
@@ -1182,29 +1181,33 @@ export const getPolygonsByArea = async (searchArea: string) => {
   return polygonsAndOwnerships;
 };
 
+/**
+ * Find property polygons that are associated with a title that has a proprietor exactly matching
+ * the given name.
+ *
+ * @param name proprietor name to search for
+ * @returns an array of polygons with ownership info for each polygon that matches the proprietor name
+ */
 export const getPolygonsByProprietorName = async (name: string) => {
-  const polygonsAndOwnerships = await LandOwnershipModel.findAll({
-    where: {
-      proprietor_name_1: name,
-    },
-    include: PolygonModel,
-    raw: true,
+  const query = `SELECT land_ownerships.*,
+    land_ownership_polygons.poly_id AS poly_id,
+    land_ownership_polygons.geom AS geom,
+    land_ownership_polygons.createdAt AS polyCreatedAt,
+    land_ownership_polygons.updatedAt AS polyUpdatedAt
+  FROM land_ownerships
+  INNER JOIN land_ownership_polygons
+    ON land_ownerships.title_no = land_ownership_polygons.title_no
+  WHERE land_ownerships.proprietor_name_1 = ?
+     OR land_ownerships.proprietor_name_2 = ?
+     OR land_ownerships.proprietor_name_3 = ?
+     OR land_ownerships.proprietor_name_4 = ?;`;
+
+  const polygonsAndOwnerships = await sequelize.query(query, {
+    replacements: [name, name, name, name],
+    type: QueryTypes.SELECT,
   });
 
-  return polygonsAndOwnerships.map((polyAndOwn) => {
-    const poly = {
-      ...polyAndOwn,
-      poly_id: polyAndOwn["Polygon.poly_id"],
-      geom: polyAndOwn["Polygon.geom"],
-    };
-
-    delete poly["Polygon.poly_id"];
-    delete poly["Polygon.geom"];
-    delete poly["Polygon.id"];
-    delete poly["Polygon.title_no"];
-
-    return poly;
-  });
+  return polygonsAndOwnerships;
 };
 
 /** Create an entry in the pipeline_runs table, store and return its unique key */
