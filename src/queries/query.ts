@@ -1200,6 +1200,8 @@ export const getPolygonsByProprietorName = async (name: string) => {
 
     delete poly["Polygon.poly_id"];
     delete poly["Polygon.geom"];
+    delete poly["Polygon.id"];
+    delete poly["Polygon.title_no"];
 
     return poly;
   });
