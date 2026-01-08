@@ -96,10 +96,10 @@ type GetPolygonsRequest = Request & {
  * AND
  * - intersect with the search area (if given as a GeoJSON Polygon geometry)
  */
-async function getPolygonsByIdInArea(
+const getPolygonsByIdInArea = async (
   request: GetPolygonsRequest,
   h: ResponseToolkit,
-): Promise<ResponseObject> {
+): Promise<ResponseObject> => {
   const { poly_ids, searchArea, includeLeaseholds, secret } = request.payload;
 
   if (!secret || secret !== process.env.SECRET) {
@@ -117,19 +117,29 @@ async function getPolygonsByIdInArea(
   );
 
   return h.response(result).code(200);
-}
+};
 
-async function search(request: Request): Promise<any> {
+type SearchRequest = Request & {
+  query: {
+    proprietorName: string;
+    secret: string;
+  };
+};
+
+const search = async (
+  request: SearchRequest,
+  h: ResponseToolkit,
+): Promise<any> => {
   const { proprietorName, secret } = request.query;
 
   if (!secret || secret !== process.env.SECRET) {
-    return "missing or incorrect secret";
+    return h.response("missing or incorrect secret").code(403);
   }
 
   const polygons = await getPolygonsByProprietorName(proprietorName);
 
-  return polygons;
-}
+  return h.response(polygons).code(200);
+};
 
 type Modify<T, R> = Omit<T, keyof R> & R;
 
