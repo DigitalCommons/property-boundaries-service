@@ -44,12 +44,11 @@ import {
   bulkCreateEnglandAndWalesPolygons,
   bulkCreateUnregisteredLandPolygons,
   bulkCreateOsLandPolys,
-  getIntersectingPendingInspirePolys,
+  getPendingInspirePolysIntersectingWithEnglandAndWalesTile,
   getNextEnglandAndWalesPolygon,
   getOsLandFeaturesByEnglandAndWalesId,
   englandAndWalesTableExists,
 } from "../../../queries/query.js";
-import { Match } from "../match.js";
 
 /**
  * See the top of this file for more details about what this script does.
@@ -190,9 +189,10 @@ export const initialiseUnregisteredLandLayer = async (
     // First, clip away any overlapping pending_inspire_polygons
     let remainingPolys: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
 
-    const intersectingInspirePolys = await getIntersectingPendingInspirePolys(
-      polyToClip.id,
-    );
+    const intersectingInspirePolys =
+      await getPendingInspirePolysIntersectingWithEnglandAndWalesTile(
+        polyToClip.id,
+      );
     console.log(
       "Found",
       intersectingInspirePolys.length,
