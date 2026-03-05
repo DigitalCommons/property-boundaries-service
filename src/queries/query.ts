@@ -34,50 +34,50 @@ const { database, username, password, ...config } = (dbConfig[
 export const sequelize = new Sequelize(database, username, password, config);
 
 type Ownership = {
-  title_no: string,
-  tenure: string,
-  property_address: string,
-  district: string,
-  county: string,
-  region: string,
-  postcode: string,
-  multiple_address_indicator: string,
-  price_paid: string,
-  proprietor_name_1: string,
-  company_registration_no_1: string,
-  proprietor_category_1: string,
-  proprietor_1_address_1: string,
-  proprietor_1_address_2: string,
-  proprietor_1_address_3: string,
-  proprietor_name_2: string,
-  company_registration_no_2: string,
-  proprietor_category_2: string,
-  proprietor_2_address_1: string,
-  proprietor_2_address_2: string,
-  proprietor_2_address_3: string,
-  proprietor_name_3: string,
-  company_registration_no_3: string,
-  proprietor_category_3: string,
-  proprietor_3_address_1: string,
-  proprietor_3_address_2: string,
-  proprietor_3_address_3: string,
-  proprietor_name_4: string,
-  company_registration_no_4: string,
-  proprietor_category_4: string,
-  proprietor_4_address_1: string,
-  proprietor_4_address_2: string,
-  proprietor_4_address_3: string,
-  date_proprietor_added: string,
-  additional_proprietor_indicator: string,
-  proprietor_uk_based: boolean,
-  createdAt: Date,
-  updatedAt: Date,
-}
+  title_no: string;
+  tenure: string;
+  property_address: string;
+  district: string;
+  county: string;
+  region: string;
+  postcode: string;
+  multiple_address_indicator: string;
+  price_paid: string;
+  proprietor_name_1: string;
+  company_registration_no_1: string;
+  proprietor_category_1: string;
+  proprietor_1_address_1: string;
+  proprietor_1_address_2: string;
+  proprietor_1_address_3: string;
+  proprietor_name_2: string;
+  company_registration_no_2: string;
+  proprietor_category_2: string;
+  proprietor_2_address_1: string;
+  proprietor_2_address_2: string;
+  proprietor_2_address_3: string;
+  proprietor_name_3: string;
+  company_registration_no_3: string;
+  proprietor_category_3: string;
+  proprietor_3_address_1: string;
+  proprietor_3_address_2: string;
+  proprietor_3_address_3: string;
+  proprietor_name_4: string;
+  company_registration_no_4: string;
+  proprietor_category_4: string;
+  proprietor_4_address_1: string;
+  proprietor_4_address_2: string;
+  proprietor_4_address_3: string;
+  date_proprietor_added: string;
+  additional_proprietor_indicator: string;
+  proprietor_uk_based: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 export type Geometry = {
-  type: 'Polygon',
+  type: "Polygon";
   coordinates: number[][][];
-}
+};
 
 export const PolygonModel = sequelize.define(
   "Polygon",
@@ -750,9 +750,9 @@ export const getNextUnregisteredLandPolygon = async (
 
   return polygon
     ? {
-      id: polygon.id,
-      geom: polygon.geom,
-    }
+        id: polygon.id,
+        geom: polygon.geom,
+      }
     : null;
 };
 
@@ -774,9 +774,9 @@ export const getNextEnglandAndWalesPolygon = async (
 
   return polygons.length > 0
     ? {
-      id: polygons[0].id,
-      geom: polygons[0].geom,
-    }
+        id: polygons[0].id,
+        geom: polygons[0].geom,
+      }
     : null;
 };
 
@@ -1060,13 +1060,11 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
 export const getSocialHousingPolygonsInSearchArea = async (
   searchArea: string,
 ) => {
-  const searchAreaText = polygonToWKT(JSON.parse(searchArea));
-
   const query = `SELECT land_ownerships.*, land_ownership_polygons.*
   FROM land_ownership_polygons
   LEFT JOIN land_ownerships
   ON land_ownership_polygons.title_no = land_ownerships.title_no
-  WHERE ST_Intersects(geom, ST_GeomFromText('${searchAreaText}', 4326))
+  WHERE ST_Intersects(geom,  ST_GeomFromGeoJSON(?))
   AND EXISTS (
       SELECT 1
       FROM social_housing_owners sho
@@ -1078,6 +1076,7 @@ export const getSocialHousingPolygonsInSearchArea = async (
     )
   LIMIT 5000;`;
   return await sequelize.query(query, {
+    replacements: [searchArea],
     type: QueryTypes.SELECT,
   });
 };
@@ -1495,8 +1494,11 @@ export const getPendingPolygonCount = async (
 
 /* Inserting Ownerships and Polygons for use as dummy data */
 
-export const insertTestOwnership = async (title_no: string, proprietor_name_1: string) => {
-  const ownership: Ownership = {
+export const insertTestOwnership = async (
+  title_no: string,
+  proprietor_name_1: string,
+) => {
+  const ownershipToCreate: Ownership = {
     title_no,
     tenure: "freehold",
     property_address: "123 Example Street",
@@ -1535,13 +1537,27 @@ export const insertTestOwnership = async (title_no: string, proprietor_name_1: s
     proprietor_uk_based: true,
     createdAt: new Date(),
     updatedAt: new Date(),
-  }
+  };
 
-  return await LandOwnershipModel.create(ownership);
-}
+  const [ownership, created] = await LandOwnershipModel.findOrCreate({
+    where: { title_no: title_no, proprietor_name_1: proprietor_name_1 },
+    defaults: ownershipToCreate,
+  });
+
+  if (created) {
+    console.log("Ownership row was created");
+  } else {
+    console.log("Ownership row already existed");
+  }
+  return ownership;
+};
 
 function polygonToWKT(geom) {
-  return `POLYGON((${geom.coordinates[0].map(point => `${point[0]} ${point[1]}, `).join("").slice(0, -2)}))`;
+  const coords = geom.coordinates[0]
+    .map((point) => `${point[1]} ${point[0]}`) // GeoJSON is [lon, lat] but WKT with SRID 4326 expects [lat, lon]
+    .join(", ");
+
+  return `POLYGON((${coords}))`;
 }
 
 export const insertTestPolygon = async (title_no: string, geom: Geometry) => {
@@ -1558,7 +1574,7 @@ export const insertTestPolygon = async (title_no: string, geom: Geometry) => {
         polygonText,
         new Date(),
         new Date(),
-      ]
-    }
+      ],
+    },
   );
-}
+};
