@@ -1539,17 +1539,21 @@ export const insertTestOwnership = async (
     updatedAt: new Date(),
   };
 
-  const [ownership, created] = await LandOwnershipModel.findOrCreate({
-    where: { title_no: title_no, proprietor_name_1: proprietor_name_1 },
-    defaults: ownershipToCreate,
-  });
-
-  if (created) {
-    console.log("Ownership row was created");
-  } else {
-    console.log("Ownership row already existed");
+  try {
+    const [ownership, created] = await LandOwnershipModel.findOrCreate({
+      where: { title_no: title_no, proprietor_name_1: proprietor_name_1 },
+      defaults: ownershipToCreate,
+    });
+    if (created) {
+      console.log("Ownership row was created");
+    } else {
+      console.log("Ownership row already existed");
+    }
+    return ownership;
+  } catch (err) {
+    console.error("Failed to create ownership row:", err);
+    throw err;
   }
-  return ownership;
 };
 
 function polygonToWKT(geom) {
