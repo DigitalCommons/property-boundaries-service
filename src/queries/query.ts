@@ -1556,26 +1556,17 @@ export const insertTestOwnership = async (
   }
 };
 
-function polygonToWKT(geom) {
-  const coords = geom.coordinates[0]
-    .map((point) => `${point[1]} ${point[0]}`) // GeoJSON is [lon, lat] but WKT with SRID 4326 expects [lat, lon]
-    .join(", ");
-
-  return `POLYGON((${coords}))`;
-}
-
 export const insertTestPolygon = async (title_no: string, geom: Geometry) => {
-  const polygonText = polygonToWKT(geom);
   const uniquePolyId = Math.round(Math.random() * 100000);
 
   return await sequelize.query(
     `INSERT INTO land_ownership_polygons (poly_id, title_no, geom, createdAt, updatedAt)
-   VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?)`,
+   VALUES (?, ?, ST_GeomFromGeoJSON(?, 4326), ?, ?)`,
     {
       replacements: [
         uniquePolyId,
         title_no,
-        polygonText,
+        JSON.stringify(geom),
         new Date(),
         new Date(),
       ],
