@@ -10,7 +10,11 @@ import {
   getPolygonsByIdInSearchArea,
   getLocalAuthorityPolygonsInSearchArea,
   getChurchOfEnglandPolygonsInSearchArea,
+  getSocialHousingPolygonsInSearchArea,
   getUnregisteredPolygonsInSearchArea,
+  insertTestOwnership,
+  insertTestPolygon,
+  Geometry,
 } from "../queries/query.js";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
 
@@ -67,6 +71,9 @@ const getPolygonsInBox = async (
       break;
     case "churchOfEngland":
       polygons = await getChurchOfEnglandPolygonsInSearchArea(searchArea);
+      break;
+    case "socialHousing":
+      polygons = await getSocialHousingPolygonsInSearchArea(searchArea);
       break;
     case "unregistered":
       polygons = await getUnregisteredPolygonsInSearchArea(searchArea);
@@ -181,6 +188,35 @@ const runPipeline = async (
   return h.response(`${msg}\n`);
 };
 
+type CreateTestDataRequest = Request & {
+  query: {
+    secret: string;
+  };
+  payload: {
+    title_no: string;
+    proprietor_name_1: string;
+    geom: Geometry;
+  };
+};
+
+const createTestData = async (
+  request: CreateTestDataRequest,
+  h: ResponseToolkit,
+) => {
+  const { secret } = request.query;
+
+  if (!secret || secret !== process.env.SECRET) {
+    return h.response("missing or incorrect secret").code(403);
+  }
+
+  const { title_no, proprietor_name_1, geom } = request.payload;
+
+  const ownership = await insertTestOwnership(title_no, proprietor_name_1);
+  const polygon = await insertTestPolygon(title_no, geom);
+
+  return h.response({ ownership, polygon });
+};
+
 const getBoundariesRoute: ServerRoute = {
   method: "GET",
   path: "/boundaries",
@@ -220,11 +256,25 @@ const runPipelineRoute: ServerRoute = {
   },
 };
 
+// Uncomment this route to use to insert your own test data. Commented when deployed on staging or prod
+
+/*
+const postTestDataRoute: ServerRoute = {
+    method: "POST",
+    path: "/test-data",
+    handler: createTestData,
+    options: {
+        auth: false
+    }
+}
+*/
+
 const routes = [
   getBoundariesRoute,
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,
+  // postTestDataRoute
 ];
 
 export default routes;

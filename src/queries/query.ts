@@ -5,6 +5,8 @@ import {
   Op,
   WhereOptions,
   Options,
+  literal,
+  where,
 } from "sequelize";
 import { Feature, MultiPolygon, Polygon } from "geojson";
 import * as turf from "@turf/turf";
@@ -30,6 +32,52 @@ const { database, username, password, ...config } = (dbConfig[
 ] ?? dbConfig.production) as Options;
 
 export const sequelize = new Sequelize(database, username, password, config);
+
+type Ownership = {
+  title_no: string;
+  tenure: string;
+  property_address: string;
+  district: string;
+  county: string;
+  region: string;
+  postcode: string;
+  multiple_address_indicator: string;
+  price_paid: string;
+  proprietor_name_1: string;
+  company_registration_no_1: string;
+  proprietor_category_1: string;
+  proprietor_1_address_1: string;
+  proprietor_1_address_2: string;
+  proprietor_1_address_3: string;
+  proprietor_name_2: string;
+  company_registration_no_2: string;
+  proprietor_category_2: string;
+  proprietor_2_address_1: string;
+  proprietor_2_address_2: string;
+  proprietor_2_address_3: string;
+  proprietor_name_3: string;
+  company_registration_no_3: string;
+  proprietor_category_3: string;
+  proprietor_3_address_1: string;
+  proprietor_3_address_2: string;
+  proprietor_3_address_3: string;
+  proprietor_name_4: string;
+  company_registration_no_4: string;
+  proprietor_category_4: string;
+  proprietor_4_address_1: string;
+  proprietor_4_address_2: string;
+  proprietor_4_address_3: string;
+  date_proprietor_added: string;
+  additional_proprietor_indicator: string;
+  proprietor_uk_based: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type Geometry = {
+  type: "Polygon";
+  coordinates: number[][][];
+};
 
 export const PolygonModel = sequelize.define(
   "Polygon",
@@ -1004,6 +1052,36 @@ export const getChurchOfEnglandPolygonsInSearchArea = async (
 };
 
 /**
+ * Get polygons owned by the Social Housing Companies that intersect with the search area.
+ * Limit result to 5000 polygons to avoid OOMEs.
+ *
+ * @param searchArea a stringified GeoJSON Polygon geometry
+ */
+export const getSocialHousingPolygonsInSearchArea = async (
+  searchArea: string,
+) => {
+  const query = `SELECT land_ownerships.*, land_ownership_polygons.*
+  FROM land_ownership_polygons
+  LEFT JOIN land_ownerships
+  ON land_ownership_polygons.title_no = land_ownerships.title_no
+  WHERE ST_Intersects(geom,  ST_GeomFromGeoJSON(?))
+  AND EXISTS (
+      SELECT 1
+      FROM social_housing_owners sho
+      WHERE
+        land_ownerships.proprietor_name_1 LIKE CONCAT('%', sho.name, '%')
+        OR land_ownerships.proprietor_name_2 LIKE CONCAT('%', sho.name, '%')
+        OR land_ownerships.proprietor_name_3 LIKE CONCAT('%', sho.name, '%')
+        OR land_ownerships.proprietor_name_4 LIKE CONCAT('%', sho.name, '%')
+    )
+  LIMIT 5000;`;
+  return await sequelize.query(query, {
+    replacements: [searchArea],
+    type: QueryTypes.SELECT,
+  });
+};
+
+/**
  * Get pending polygons that intersect with the search area.
  *
  * To each returned item, we add a 'tenure' property, which is set to 'Accepted' if the pending
@@ -1412,4 +1490,86 @@ export const getPendingPolygonCount = async (
     where.match_type = match_type;
   }
   return await PendingPolygonModel.count({ where });
+};
+
+/* Inserting Ownerships and Polygons for use as dummy data */
+
+export const insertTestOwnership = async (
+  title_no: string,
+  proprietor_name_1: string,
+) => {
+  const ownershipToCreate: Ownership = {
+    title_no,
+    tenure: "freehold",
+    property_address: "123 Example Street",
+    district: "Example",
+    county: "Example",
+    region: "Exampleshire",
+    postcode: "FF77FF",
+    multiple_address_indicator: "N",
+    price_paid: "£500",
+    proprietor_name_1,
+    company_registration_no_1: "Example ltd",
+    proprietor_category_1: "",
+    proprietor_1_address_1: "",
+    proprietor_1_address_2: "",
+    proprietor_1_address_3: "",
+    proprietor_name_2: "",
+    company_registration_no_2: "",
+    proprietor_category_2: "",
+    proprietor_2_address_1: "",
+    proprietor_2_address_2: "",
+    proprietor_2_address_3: "",
+    proprietor_name_3: "",
+    company_registration_no_3: "",
+    proprietor_category_3: "",
+    proprietor_3_address_1: "",
+    proprietor_3_address_2: "",
+    proprietor_3_address_3: "",
+    proprietor_name_4: "",
+    company_registration_no_4: "",
+    proprietor_category_4: "",
+    proprietor_4_address_1: "",
+    proprietor_4_address_2: "",
+    proprietor_4_address_3: "",
+    date_proprietor_added: new Date().toISOString().slice(0, 10),
+    additional_proprietor_indicator: "",
+    proprietor_uk_based: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  try {
+    const [ownership, created] = await LandOwnershipModel.findOrCreate({
+      where: { title_no: title_no, proprietor_name_1: proprietor_name_1 },
+      defaults: ownershipToCreate,
+    });
+    if (created) {
+      console.log("Ownership row was created");
+    } else {
+      console.log("Ownership row already existed");
+    }
+    return ownership;
+  } catch (err) {
+    console.error("Failed to create ownership row:", err);
+    throw err;
+  }
+};
+
+export const insertTestPolygon = async (title_no: string, geom: Geometry) => {
+  const uniquePolyId = Math.round(Math.random() * 100000);
+
+  return await sequelize.query(
+    `INSERT INTO land_ownership_polygons (poly_id, title_no, geom, createdAt, updatedAt)
+   VALUES (?, ?, ST_GeomFromGeoJSON(?, 4326), ?, ?)`,
+    {
+      replacements: [
+        uniquePolyId,
+        title_no,
+        JSON.stringify(geom),
+        new Date(),
+        new Date(),
+      ],
+    },
+  );
 };

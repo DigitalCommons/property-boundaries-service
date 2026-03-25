@@ -1,7 +1,6 @@
-'use strict';
+"use strict";
 
-const ownerNames = 
-`20-20 Housing Co-operative Limited
+const ownerNames = `20-20 Housing Co-operative Limited
 3CHA Ltd
 54 North Homes Limited
 700 Club
@@ -1620,17 +1619,17 @@ United Welsh Housing Association Limited
 Valleys to Coast Housing Limited
 Wales & West Housing Association Limited`.split("\n");
 
-export const up = async (queryInterface, Sequelize) => {            
-        const owners = ownerNames.map(name => ({
-            name,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        }));
+module.exports = {
+  up: async (queryInterface, Sequelize) => {
+    const owners = ownerNames.map((name) => ({
+      name,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
 
-        return queryInterface.bulkInsert('social_housing_owners', owners);
-    }
-
-export const  down = (queryInterface, Sequelize) => {
-        return queryInterface.bulkDelete('social_housing_owners', null, {});
-    }
-
+    return queryInterface.bulkInsert("social_housing_owners", owners);
+  },
+  down: (queryInterface, Sequelize) => {
+    return queryInterface.bulkDelete("social_housing_owners", null, {});
+  },
+};
