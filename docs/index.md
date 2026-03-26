@@ -21,6 +21,7 @@ pipeline, see [pipeline.md](./pipeline.md).
 - `npx sequelize-cli db:migrate:undo:all` to reset database migrations
 - `npm run dev:serve` to start the server responding to API requests.
 - `npm run build && npm run plot` to plot some of the analysis after a pipeline has run
+- `npx sequelize-cli db:seed:all` to run the database seeders
 
 ## Troubleshooting
 
