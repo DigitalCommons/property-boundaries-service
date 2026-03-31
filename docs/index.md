@@ -30,9 +30,13 @@ docker compose up -d
 ```
 
 This starts the Meilisearch container on port 7700. The web dashboard is available at
-`http://localhost:7700` — use the value of `MEILI_MASTER_KEY` from your `.env` to authenticate.
+`http://localhost:7700` - use the value of `MEILI_MASTER_KEY` from your `.env` to authenticate.
 
 Data is stored in a named Docker volume (`meilisearch_data`) and persists across container restarts.
+
+A Meilisearch client is initialised in the `start()` method in `app.ts`. This connects to Meilisearch using 
+the master key, it finds an auto generated key called "Default Admin API Key" and uses this to initialise 
+the client that the backend will use for queries etc. 
 
 ## Useful dev commands
 
