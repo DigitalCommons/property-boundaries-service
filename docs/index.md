@@ -16,27 +16,7 @@ To get an overview of the data we handle, and how it gets updated by the Ownersh
 pipeline, see [pipeline.md](./pipeline.md).
 
 ## Local services
-
-### Meilisearch
-
-[Meilisearch](https://www.meilisearch.com/) is used for fuzzy searching of proprietors. Run it
-locally via Docker:
-
-1. Ensure Docker is installed and is running
-2. Run:
-
-```
-docker compose up -d
-```
-
-This starts the Meilisearch container on port 7700. The web dashboard is available at
-`http://localhost:7700` - use the value of `MEILI_MASTER_KEY` from your `.env` to authenticate.
-
-Data is stored in a named Docker volume (`meilisearch_data`) and persists across container restarts.
-
-A Meilisearch client is initialised in the `start()` method in `app.ts`. This connects to Meilisearch using 
-the master key, it finds an auto generated key called "Default Admin API Key" and uses this to initialise 
-the client that the backend will use for queries etc. 
+The service uses a Docker container for Meilisearch to enable fuzzy searching of proprietor names. For local setup details and client usage instructions, see [meilisearch.md](./meilisearch.md).
 
 ## Useful dev commands
 
