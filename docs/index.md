@@ -15,6 +15,25 @@ explains how to use the layer in more detail.
 To get an overview of the data we handle, and how it gets updated by the Ownerships + INSPIRE
 pipeline, see [pipeline.md](./pipeline.md).
 
+## Local services
+
+### Meilisearch
+
+[Meilisearch](https://www.meilisearch.com/) is used for fuzzy searching of proprietors. Run it
+locally via Docker:
+
+1. Ensure Docker is installed and is running
+2. Run:
+
+```
+docker compose up -d
+```
+
+This starts the Meilisearch container on port 7700. The web dashboard is available at
+`http://localhost:7700` — use the value of `MEILI_MASTER_KEY` from your `.env` to authenticate.
+
+Data is stored in a named Docker volume (`meilisearch_data`) and persists across container restarts.
+
 ## Useful dev commands
 
 - `npx sequelize-cli db:migrate` to run new database migration(s)
