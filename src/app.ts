@@ -51,7 +51,10 @@ async function start() {
   try {
     await initMeiliSearch();
   } catch (error) {
-    console.error("Failed to initialize MeiliSearch client:", error);
+    logger.error(
+      error,
+      `Failed to initialize MeiliSearch client: ${error.message}`,
+    );
   }
 
   // Resume pipeline run if interrupted
