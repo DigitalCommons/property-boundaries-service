@@ -22,6 +22,7 @@ export async function initMeiliSearch(): Promise<void> {
     host: process.env.MEILI_HOST,
     apiKey: adminKey,
   });
+
   // health check to confirm connection is working
   const healthy = await meiliClient.isHealthy();
   if (!healthy) throw new Error("MeiliSearch is not healthy");
