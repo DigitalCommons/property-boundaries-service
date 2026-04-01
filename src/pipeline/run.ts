@@ -14,6 +14,7 @@ import {
 import { updateOwnerships } from "./ownerships/update.js";
 import { downloadAndBackupInspirePolygons } from "./inspire/download.js";
 import { analyseAllPendingPolygons } from "./inspire/analyse-all.js";
+import { updateProprietorsIndex } from "./proprietors/update.js";
 import { logger, initLogger } from "./logger.js";
 import moment from "moment-timezone";
 import {
@@ -56,6 +57,11 @@ const tasks = [
     desc: "Compare pending_inspire_polygons with the existing land_ownership_polygons and classify changes. Accept changes that meet criteria for a match and output detailed analysis about failed matches.",
     method: async (options: TaskOptions) =>
       await analyseAllPendingPolygons(options),
+  },
+  {
+    name: "updateProprietors",
+    desc: "Rebuild the Meilisearch proprietors index from the current land_ownerships data to keep proprietor search up to date.",
+    method: async (_options: TaskOptions) => await updateProprietorsIndex(),
   },
 ];
 
