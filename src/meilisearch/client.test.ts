@@ -14,7 +14,7 @@ describe("MeiliSearch Client", () => {
   });
 
   describe("initMeiliSearch", () => {
-    it("should initialize MeiliSearch client successfully", async () => {
+    it("should initialise MeiliSearch client successfully", async () => {
       // Arrange
       const adminKey = "admin-key-123";
       const mockKeys = {
@@ -106,7 +106,7 @@ describe("MeiliSearch Client", () => {
   });
 
   describe("getMeiliClient", () => {
-    it("should return the initialized MeiliSearch client", async () => {
+    it("should return the initialised MeiliSearch client", async () => {
       // Arrange
       const mockKeys = {
         results: [{ key: "admin-key-123", name: "Default Admin API Key" }],
@@ -132,7 +132,7 @@ describe("MeiliSearch Client", () => {
       expect(meiliClientInstance).to.equal(mockInstance);
     });
 
-    it("should throw error when client is not initialized", async () => {
+    it("should throw error when client is not initialised", async () => {
       // Arrange
       const mockKeys = {
         results: [{ key: "admin-key-123", name: "Default Admin API Key" }],
