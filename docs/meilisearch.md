@@ -41,7 +41,7 @@ The proprietors index is rebuilt automatically at the end of each full pipeline 
 2. Delete any leftover `proprietors_temp` index from a previous failed run.
 3. Create `proprietors_temp` and configure its settings.
 4. Query all distinct proprietor names from `land_ownerships` and insert them into `proprietors_temp` in batches of 10,000.
-5. Swap `proprietors_temp` into `proprietors` — the live index is never taken offline.
+5. Swap `proprietors_temp` into `proprietors` - the live index is never taken offline.
 6. Delete `proprietors_temp`.
 
 If anything fails, `proprietors_temp` is cleaned up and the live `proprietors` index is left untouched.
