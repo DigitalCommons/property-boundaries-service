@@ -49,7 +49,9 @@ async function start() {
 
   // initialise MeiliSearch client and check connection before starting to accept requests
   try {
-    await initMeiliSearch();
+    if (process.env.MEILISEARCH_ENABLED === "true") {
+      await initMeiliSearch();
+    }
   } catch (error) {
     logger.error(
       error,
