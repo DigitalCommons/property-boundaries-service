@@ -178,6 +178,12 @@ async function updateSettings(
  * throughout the process.
  */
 export async function updateProprietorsIndex(): Promise<void> {
+  if (process.env.MEILISEARCH_ENABLED !== "true") {
+    logger.warn(
+      "MeiliSearch is not enabled, skipping proprietors index update",
+    );
+    return;
+  }
   logger.info("Starting proprietors index update...");
   // Ensure the live index exists (create if absent, so we can swap into it)
   await createIndexIfNotExists(PROPRIETORS_INDEX);
