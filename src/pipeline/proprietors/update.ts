@@ -18,9 +18,9 @@ export type ProprietorDocument = {
 };
 
 /**
- * Derive a consistent numeric ID from a proprietor name using SHA-256.
+ * Derive a consistent ID from a proprietor name using SHA-256.
  * @param name The proprietor name to hash
- * @returns A numeric ID derived from the name
+ * @returns An ID derived from the name
  **/
 export function hashName(name: string): string {
   const hex = createHash("sha256").update(name).digest("hex").slice(0, 16);
@@ -29,8 +29,8 @@ export function hashName(name: string): string {
 
 /**
  * Delete an index if it exists, ignoring "index not found" errors.
- * Used for cleaning up the temp index before and after the update process, to ensure
- * we don't leave behind stale temp indexes after failed runs.
+ * Used for cleaning up the 'new' index before and after the update process, to ensure
+ * we don't leave behind stale 'new' indexes after failed runs.
  * @param indexName The name of the index to delete
  * @throws if the deletion operation fails for any reason other than the index not existing (which is not an error for this function)
  **/
@@ -58,7 +58,7 @@ export async function deleteIndexIfExists(indexName: string): Promise<void> {
 
 /**
  * Create an index if it doesn't exist. If the index already exists, does nothing.
- * Used for ensuring the live index exists before we attempt to swap into it, and for creating the temp index at the start of the update process.
+ * Used for ensuring the live index exists before we attempt to swap into it, and for creating the 'new' index at the start of the update process.
  * @param indexName the index to create
  * @throws if the creation operation fails for any reason other than the index already existing (which is not an error for this function)
  */
@@ -86,8 +86,8 @@ export async function createIndexIfNotExists(indexName: string): Promise<void> {
 
 /**
  * Swap one index into another
- * Used to swap the temp index into the live index at the end of the update process, to make the new data available with minimal downtime.
- * @param indexNameA the index to swap in (the temp index with the new data)
+ * Used to swap the 'new' index into the live index at the end of the update process, to make the new data available with minimal downtime.
+ * @param indexNameA the index to swap in (the 'new' index with the new data)
  * @param indexNameB the index to swap out (the live index currently in use)
  * @throws if the swap operation fails for any reason, including if either index doesn't exist or if the swap task fails
  **/
@@ -174,12 +174,12 @@ async function updateSettings(
 
 /**
  * Rebuild the Meilisearch proprietors index from the current land_ownerships
- * data. Uses a temporary index + swap to keep the live index available
+ * data. Uses a 'new' index + swap to keep the live index available
  * throughout the process.
  */
 export async function updateProprietorsIndex(): Promise<void> {
   if (process.env.MEILISEARCH_ENABLED !== "true") {
-    logger.warn(
+    logger.info(
       "MeiliSearch is not enabled, skipping proprietors index update",
     );
     return;
@@ -188,14 +188,14 @@ export async function updateProprietorsIndex(): Promise<void> {
   // Ensure the live index exists (create if absent, so we can swap into it)
   await createIndexIfNotExists(PROPRIETORS_INDEX);
 
-  // Clean up any leftover temp index from a previously failed run
+  // Clean up any leftover 'new' index from a previously failed run
   await deleteIndexIfExists(PROPRIETORS_NEW_INDEX);
 
-  // Create the temporary index
+  // Create the 'new' index
   await createIndexIfNotExists(PROPRIETORS_NEW_INDEX);
 
   try {
-    // Set searchable attributes on temp index
+    // Set searchable attributes on 'new' index
     await updateSettings(PROPRIETORS_NEW_INDEX, {
       searchableAttributes: ["name"],
     });
@@ -212,10 +212,10 @@ export async function updateProprietorsIndex(): Promise<void> {
     // Insert in batches
     await batchInsertProprietorDocuments(PROPRIETORS_NEW_INDEX, documents);
 
-    // Swap temp index into the live index
+    // Swap the 'new' index into the live index
     await swapIndexes(PROPRIETORS_NEW_INDEX, PROPRIETORS_INDEX);
 
-    // Delete the (now old) temp index — it holds the previous live data after swap
+    // Delete the (now old) 'new' index — it holds the previous live data after swap
     await deleteIndexIfExists(PROPRIETORS_NEW_INDEX);
 
     logger.info("Proprietors index update completed successfully");
@@ -224,7 +224,7 @@ export async function updateProprietorsIndex(): Promise<void> {
   } catch (err) {
     logger.error(
       err,
-      "Proprietors index update failed — cleaning up temp index",
+      "Proprietors index update failed — cleaning up 'new' index",
     );
     await deleteIndexIfExists(PROPRIETORS_NEW_INDEX);
     throw err;

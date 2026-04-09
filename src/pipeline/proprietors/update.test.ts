@@ -4,7 +4,7 @@ import { describe, it, beforeEach, afterEach } from "mocha";
 import esmock from "esmock";
 import { type ProprietorDocument } from "./update.js";
 
-describe("update.ts", () => {
+describe("update proprietors", () => {
   let sandbox: sinon.SinonSandbox;
   let mockMeiliClient: any;
   let mockIndex: any;
