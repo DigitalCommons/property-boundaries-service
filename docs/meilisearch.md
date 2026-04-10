@@ -21,3 +21,52 @@ To use this client, call
 getMeiliClient();
 ```
 from `src/meilisearch/client.js`
+
+### API endpoint
+
+`GET /api/proprietors`
+
+This endpoint is backed by Meilisearch. When called, it queries the `proprietors` index using the provided `searchTerm` and returns a paginated slice of matching documents. Meilisearch handles fuzzy matching, so partial or misspelled names will still return relevant results.
+
+The flow is:
+
+```
+Frontend → LX Backend → GET /api/proprietors → Meilisearch (proprietors index)
+```
+
+If the Meilisearch client has not been initialised (e.g. Meilisearch is unavailable at startup), the endpoint returns a 500 error.
+
+Headers:
+
+| Header      | Required | Description                   |
+|-------------|----------|-------------------------------|
+| `x-api-key` | Yes      | API secret for authentication |
+
+Query parameters:
+
+| Parameter    | Required | Default | Description                              |
+|--------------|----------|---------|------------------------------------------|
+| `searchTerm` | Yes      | —       | The name (or partial name) to search for |
+| `page`       | No       | `1`     | Page number (positive integer)           |
+| `pageSize`   | No       | `10`    | Results per page (1–100)                 |
+
+Example request:
+```
+GET /api/proprietors?searchTerm=Cambri&page=1&pageSize=10
+x-api-key: <secret>
+```
+
+Example response:
+```json
+{
+  "results": [
+    { "id": 1, "proprietorName": "Cambridge Council" }
+  ],
+  "page": 1,
+  "pageSize": 10,
+  "totalResults": 3453
+}
+```
+
+The endpoint supports request abortion — if the client closes the connection, the in-flight
+Meilisearch query is cancelled via an `AbortController` signal.
