@@ -11,6 +11,14 @@ This starts the Meilisearch container on port 7700. The web dashboard is availab
 
 Data is stored in a named Docker volume (`meilisearch_data`) and persists across container restarts.
 
+### Deployed Docker Setup
+
+Meilisearch runs on the same servers as the property boundaries service - dev-2, staging-2, and prod-2. It is deployed as a Docker container via the Ansible playbook in the `technology-and-infrastructure` repo.
+
+The `MEILI_MASTER_KEY` for each environment is stored in the password store and is passed to the container by the Ansible playbook. 
+
+Unlike the local setup, deployed instances run with `MEILI_ENV=production`, which disables the web dashboard and requires authentication for all API calls.
+
 ### Client
 The Meilisearch client is initialised in the `start()` method of `app.ts`. It connects to Meilisearch using the master key, retrieves the auto-generated 'Default Admin API Key', and uses this key to set up the client for backend queries.
 
@@ -68,5 +76,5 @@ Example response:
 }
 ```
 
-The endpoint supports request abortion — if the client closes the connection, the in-flight
+The endpoint supports request abortion - if the client closes the connection, the in-flight
 Meilisearch query is cancelled via an `AbortController` signal.
