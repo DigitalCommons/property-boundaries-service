@@ -98,7 +98,7 @@ describe("GET /api/proprietors", () => {
   });
 
   describe("successful response", () => {
-    it.only("returns 200 with correctly shaped results", async () => {
+    it("returns 200 with correctly shaped results", async () => {
       // Arrange
       const hits = [
         { id: 1, name: "Cambridge Council" },
