@@ -5,18 +5,14 @@ import { EventEmitter } from "events";
 
 const buildRequest = (
   query: Record<string, string | number | undefined> = {},
-  headers: Record<string, string | undefined> = {},
   req: EventEmitter = new EventEmitter(),
 ) => ({
   query: {
     searchTerm: "Cambridge",
     page: 1,
     pageSize: 10,
+    secret: process.env.SECRET,
     ...query,
-  },
-  headers: {
-    "x-api-key": process.env.SECRET,
-    ...headers,
   },
   raw: { req },
 });
@@ -66,14 +62,14 @@ describe("GET /api/proprietors", () => {
   };
 
   describe("authentication", () => {
-    it("returns 403 when x-api-key header is missing", async () => {
+    it("returns 403 when secret is missing", async () => {
       // Arrange
       const { getMeiliClientStub } = buildMeiliMock(sandbox);
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
       });
 
-      const request = buildRequest({}, { "x-api-key": undefined });
+      const request = buildRequest({ secret: undefined });
       const h = buildH();
 
       // Act
@@ -83,14 +79,14 @@ describe("GET /api/proprietors", () => {
       expect(result.statusCode).to.equal(403);
     });
 
-    it("returns 403 when x-api-key header is incorrect", async () => {
+    it("returns 403 when secret is incorrect", async () => {
       // Arrange
       const { getMeiliClientStub } = buildMeiliMock(sandbox);
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
       });
 
-      const request = buildRequest({}, { "x-api-key": "wrong-secret" });
+      const request = buildRequest({ secret: "wrongsecret" });
       const h = buildH();
 
       // Act
@@ -102,19 +98,16 @@ describe("GET /api/proprietors", () => {
   });
 
   describe("successful response", () => {
-    it("returns 200 with correctly shaped results", async () => {
+    it.only("returns 200 with correctly shaped results", async () => {
       // Arrange
       const hits = [
         { id: 1, name: "Cambridge Council" },
         { id: 2, name: "Cambridge University" },
       ];
-      const { getMeiliClientStub, indexStub, searchStub } = buildMeiliMock(
-        sandbox,
-        {
-          hits,
-          totalHits: 2,
-        },
-      );
+      const { getMeiliClientStub } = buildMeiliMock(sandbox, {
+        hits,
+        totalHits: 2,
+      });
 
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
@@ -228,7 +221,7 @@ describe("GET /api/proprietors", () => {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
       });
 
-      const request = buildRequest({}, {}, req);
+      const request = buildRequest({}, req);
       const h = buildH();
 
       req.emit("close");

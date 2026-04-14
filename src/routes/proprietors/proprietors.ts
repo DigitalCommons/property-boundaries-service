@@ -19,6 +19,7 @@ type GetProprietorsRequest = Request & {
     searchTerm: string;
     page: number;
     pageSize: number;
+    secret: string;
   };
 };
 
@@ -29,7 +30,7 @@ type ProprietorRecord = {
 
 /**
  * Searches the proprietors index in MeiliSearch and returns a paginated list of results.
- * @param request The incoming request, containing `searchTerm`, `page`, and `pageSize` query params and an `x-api-key` header
+ * @param request The incoming request, containing `searchTerm`, `page`, `pageSize` and api secret query params
  * @param h The Hapi response toolkit
  * @returns A paginated response containing matched proprietors, or an error response
  */
@@ -37,10 +38,9 @@ export const getProprietors = async (
   request: GetProprietorsRequest,
   h: ResponseToolkit,
 ): Promise<ResponseObject> => {
-  const { searchTerm, page, pageSize } = request.query;
-  const secret = request.headers["x-api-key"];
+  const { searchTerm, page, pageSize, secret } = request.query;
 
-  if (!secret || secret !== process.env.SECRET) {
+  if (secret !== process.env.SECRET) {
     return h.response().code(403);
   }
 
@@ -93,6 +93,7 @@ const querySchema = Joi.object({
     .max(MAX_PAGE_SIZE)
     .optional()
     .default(DEFAULT_PAGE_SIZE),
+  secret: Joi.string().required(),
 });
 
 export const proprietorsRoute: ServerRoute = {
