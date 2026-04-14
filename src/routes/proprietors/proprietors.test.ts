@@ -67,6 +67,7 @@ describe("GET /api/proprietors", () => {
 
   describe("authentication", () => {
     it("returns 403 when x-api-key header is missing", async () => {
+      // Arrange
       const { getMeiliClientStub } = buildMeiliMock(sandbox);
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
@@ -75,12 +76,15 @@ describe("GET /api/proprietors", () => {
       const request = buildRequest({}, { "x-api-key": undefined });
       const h = buildH();
 
+      // Act
       const result = await getProprietors(request, h);
 
+      // Assert
       expect(result.statusCode).to.equal(403);
     });
 
     it("returns 403 when x-api-key header is incorrect", async () => {
+      // Arrange
       const { getMeiliClientStub } = buildMeiliMock(sandbox);
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
@@ -89,32 +93,40 @@ describe("GET /api/proprietors", () => {
       const request = buildRequest({}, { "x-api-key": "wrong-secret" });
       const h = buildH();
 
+      // Act
       const result = await getProprietors(request, h);
 
+      // Assert
       expect(result.statusCode).to.equal(403);
     });
   });
 
   describe("successful response", () => {
     it("returns 200 with correctly shaped results", async () => {
+      // Arrange
       const hits = [
         { id: 1, name: "Cambridge Council" },
         { id: 2, name: "Cambridge University" },
       ];
-      const { getMeiliClientStub } = buildMeiliMock(sandbox, {
-        hits,
-        totalHits: 2,
-      });
+      const { getMeiliClientStub, indexStub, searchStub } = buildMeiliMock(
+        sandbox,
+        {
+          hits,
+          totalHits: 2,
+        },
+      );
 
       const { getProprietors } = await esmock("./proprietors.js", {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
       });
 
-      const request = buildRequest();
+      const request = buildRequest({ searchTerm: "Cambridge" });
       const h = buildH();
 
+      // Act
       const result = await getProprietors(request, h);
 
+      // Assert
       expect(result.statusCode).to.equal(200);
       expect(result.payload).to.deep.equal({
         results: [
@@ -127,7 +139,8 @@ describe("GET /api/proprietors", () => {
       });
     });
 
-    it("passes page and pageSize to MeiliSearch", async () => {
+    it("passes searchTerm, page and pageSize to MeiliSearch", async () => {
+      // Arrange
       const { getMeiliClientStub, searchStub } = buildMeiliMock(sandbox, {
         hits: [],
         totalHits: 100,
@@ -137,39 +150,29 @@ describe("GET /api/proprietors", () => {
         "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
       });
 
-      const request = buildRequest({ page: 3, pageSize: 10 });
-      const h = buildH();
-
-      await getProprietors(request, h);
-
-      expect(searchStub.firstCall.args[1]).to.deep.include({
-        hitsPerPage: 10,
+      const request = buildRequest({
+        searchTerm: "Cambri",
         page: 3,
+        pageSize: 10,
       });
-    });
-
-    it("passes searchTerm to MeiliSearch", async () => {
-      const { getMeiliClientStub, searchStub, indexStub } = buildMeiliMock(
-        sandbox,
-        { hits: [], totalHits: 0 },
-      );
-
-      const { getProprietors } = await esmock("./proprietors.js", {
-        "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
-      });
-
-      const request = buildRequest({ searchTerm: "Cambri" });
       const h = buildH();
 
+      // Act
       await getProprietors(request, h);
 
-      expect(indexStub.calledWith("proprietors")).to.be.true;
-      expect(searchStub.firstCall.args[0]).to.equal("Cambri");
+      // Assert
+      expect(
+        searchStub.calledWith("Cambri", {
+          hitsPerPage: 10,
+          page: 3,
+        }),
+      ).to.be.true;
     });
   });
 
   describe("error handling", () => {
     it("returns 500 when MeiliSearch throws an error", async () => {
+      // Arrange
       const searchStub = sandbox
         .stub()
         .rejects(new Error("MeiliSearch unavailable"));
@@ -183,13 +186,16 @@ describe("GET /api/proprietors", () => {
       const request = buildRequest();
       const h = buildH();
 
+      // Act
       const result = await getProprietors(request, h);
 
+      // Assert
       expect(result.statusCode).to.equal(500);
       expect(result.payload).to.equal("Internal server error");
     });
 
     it("returns 500 when MeiliSearch client is not initialised", async () => {
+      // Arrange
       const getMeiliClientStub = sandbox
         .stub()
         .throws(new Error("MeiliSearch client not initialised"));
@@ -201,9 +207,12 @@ describe("GET /api/proprietors", () => {
       const request = buildRequest();
       const h = buildH();
 
+      // Act
       const result = await getProprietors(request, h);
 
+      // Assert
       expect(result.statusCode).to.equal(500);
+      expect(result.payload).to.equal("Internal server error");
     });
   });
 
@@ -223,10 +232,10 @@ describe("GET /api/proprietors", () => {
       const h = buildH();
 
       req.emit("close");
-
       const result = await getProprietors(request, h);
 
       expect(result.statusCode).to.equal(499);
+      expect(result.payload).to.equal("Request aborted");
     });
   });
 });
