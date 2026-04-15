@@ -126,7 +126,7 @@ describe("MeiliSearch Client", () => {
 
       // Act
       await initMeiliSearch();
-      const meiliClientInstance = await getMeiliClient();
+      const meiliClientInstance = getMeiliClient();
 
       // Assert
       expect(meiliClientInstance).to.equal(mockInstance);

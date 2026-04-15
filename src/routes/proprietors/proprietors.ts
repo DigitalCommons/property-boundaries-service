@@ -24,7 +24,7 @@ type GetProprietorsRequest = Request & {
 };
 
 type ProprietorRecord = {
-  id: number;
+  id: string;
   name: string;
 };
 
@@ -40,14 +40,13 @@ export const getProprietors = async (
 ): Promise<ResponseObject> => {
   const { searchTerm, page, pageSize, secret } = request.query;
 
-  if (secret !== process.env.SECRET) {
-    return h.response().code(403);
+  if (!secret || secret !== process.env.SECRET) {
+    return h.response("missing or incorrect secret").code(403);
   }
 
   const abortController = new AbortController();
-  request.raw.req.on("close", () => {
-    abortController.abort();
-  });
+  const onClose = () => abortController.abort();
+  request.raw.req.on("close", onClose);
 
   try {
     const meiliClient = getMeiliClient();
@@ -81,11 +80,13 @@ export const getProprietors = async (
     }
     logger.error("Error searching proprietors:", error);
     return h.response("Internal server error").code(500);
+  } finally {
+    request.raw.req.off("close", onClose);
   }
 };
 
 const querySchema = Joi.object({
-  searchTerm: Joi.string().required(),
+  searchTerm: Joi.string().min(1).required(),
   page: Joi.number().integer().min(1).optional().default(DEFAULT_PAGE),
   pageSize: Joi.number()
     .integer()

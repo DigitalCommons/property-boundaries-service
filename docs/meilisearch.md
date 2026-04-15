@@ -36,10 +36,10 @@ The `proprietors` Meilisearch index holds all distinct proprietor names from the
 
 Each document has the shape:
 ```json
-{ "id": 123456789, "name": "Some Company Ltd" }
+{ "id": "a1b2c3d4e5f60718", "name": "Some Company Ltd" }
 ```
 
-The `id` is derived from a SHA-256 hash of the name, so it is consistent across pipeline runs.
+The `id` is the first 16 hex characters of a SHA-256 hash of the name, so it is consistent across pipeline runs.
 
 #### Updating the index
 
@@ -78,12 +78,6 @@ Frontend → LX Backend → GET /api/proprietors → Meilisearch (proprietors in
 
 If the Meilisearch client has not been initialised (e.g. Meilisearch is unavailable at startup), the endpoint returns a 500 error.
 
-Headers:
-
-| Header      | Required | Description                   |
-|-------------|----------|-------------------------------|
-| `x-api-key` | Yes      | API secret for authentication |
-
 Query parameters:
 
 | Parameter    | Required | Default | Description                              |
@@ -91,18 +85,18 @@ Query parameters:
 | `searchTerm` | Yes      | —       | The name (or partial name) to search for |
 | `page`       | No       | `1`     | Page number (positive integer)           |
 | `pageSize`   | No       | `10`    | Results per page (1–100)                 |
+| `secret`     | Yes      | —       | API secret for authentication            |
 
 Example request:
 ```
-GET /api/proprietors?searchTerm=Cambri&page=1&pageSize=10
-x-api-key: <secret>
+GET /api/proprietors?searchTerm=Cambri&page=1&pageSize=10&secret=<secret>
 ```
 
 Example response:
 ```json
 {
   "results": [
-    { "id": 1, "proprietorName": "Cambridge Council" }
+    { "id": "a1b2c3d4e5f60718", "proprietorName": "Cambridge Council" }
   ],
   "page": 1,
   "pageSize": 10,
