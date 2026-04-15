@@ -13,6 +13,7 @@ export const PROPRIETORS_INDEX = "proprietors";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
+const MAX_SEARCH_TERM_LENGTH = 200;
 
 type GetProprietorsRequest = Request & {
   query: {
@@ -86,7 +87,7 @@ export const getProprietors = async (
 };
 
 const querySchema = Joi.object({
-  searchTerm: Joi.string().min(1).required(),
+  searchTerm: Joi.string().min(1).max(MAX_SEARCH_TERM_LENGTH).required(),
   page: Joi.number().integer().min(1).optional().default(DEFAULT_PAGE),
   pageSize: Joi.number()
     .integer()
@@ -105,9 +106,11 @@ export const proprietorsRoute: ServerRoute = {
     auth: false,
     validate: {
       query: querySchema,
-      failAction: async (_request, _h, err) => {
-        throw err;
-      },
+      failAction: (request, h, err) =>
+        h
+          .response({ message: (err as Error).message })
+          .code(400)
+          .takeover(),
     },
   },
 };
