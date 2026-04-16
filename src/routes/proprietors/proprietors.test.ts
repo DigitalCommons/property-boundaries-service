@@ -132,6 +132,33 @@ describe("GET /api/proprietors", () => {
       });
     });
 
+    it("returns 200 with empty results array when there are no hits", async () => {
+      // Arrange
+      const { getMeiliClientStub } = buildMeiliMock(sandbox, {
+        hits: [],
+        totalHits: 0,
+      });
+
+      const { getProprietors } = await esmock("./proprietors.js", {
+        "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
+      });
+
+      const request = buildRequest({ searchTerm: "Xyzzy" });
+      const h = buildH();
+
+      // Act
+      const result = await getProprietors(request, h);
+
+      // Assert
+      expect(result.statusCode).to.equal(200);
+      expect(result.payload).to.deep.equal({
+        results: [],
+        page: 1,
+        pageSize: 10,
+        totalResults: 0,
+      });
+    });
+
     it("passes searchTerm, page and pageSize to MeiliSearch", async () => {
       // Arrange
       const { getMeiliClientStub, searchStub } = buildMeiliMock(sandbox, {
@@ -160,6 +187,27 @@ describe("GET /api/proprietors", () => {
           page: 3,
         }),
       ).to.be.true;
+    });
+
+    it("searches the correct MeiliSearch index", async () => {
+      // Arrange
+      const { getMeiliClientStub, indexStub } = buildMeiliMock(sandbox);
+
+      const { getProprietors, PROPRIETORS_INDEX } = await esmock(
+        "./proprietors.js",
+        {
+          "../../meilisearch/client.js": { getMeiliClient: getMeiliClientStub },
+        },
+      );
+
+      const request = buildRequest();
+      const h = buildH();
+
+      // Act
+      await getProprietors(request, h);
+
+      // Assert
+      expect(indexStub.calledWith(PROPRIETORS_INDEX)).to.be.true;
     });
   });
 
@@ -211,9 +259,13 @@ describe("GET /api/proprietors", () => {
 
   describe("abort handling", () => {
     it("returns 499 when the request is aborted", async () => {
+      // Arrange
       const req = new EventEmitter();
-      const abortError = new DOMException("Aborted", "AbortError");
-      const searchStub = sandbox.stub().rejects(abortError);
+      let rejectSearch!: (err: Error) => void;
+      const searchPromise = new Promise<never>((_, reject) => {
+        rejectSearch = reject;
+      });
+      const searchStub = sandbox.stub().returns(searchPromise);
       const indexStub = sandbox.stub().returns({ search: searchStub });
       const getMeiliClientStub = sandbox.stub().returns({ index: indexStub });
 
@@ -224,8 +276,13 @@ describe("GET /api/proprietors", () => {
       const request = buildRequest({}, req);
       const h = buildH();
 
+      // Start the handler so the close listener is registered, then abort and reject
+      //Act
+      const resultPromise = getProprietors(request, h);
       req.emit("close");
-      const result = await getProprietors(request, h);
+      rejectSearch(new Error("connection reset"));
+      // Assert
+      const result = await resultPromise;
 
       expect(result.statusCode).to.equal(499);
       expect(result.payload).to.equal("Request aborted");
