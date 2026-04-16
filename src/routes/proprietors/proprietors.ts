@@ -100,7 +100,7 @@ const querySchema = Joi.object({
 
 export const proprietorsRoute: ServerRoute = {
   method: "GET",
-  path: "/api/proprietors",
+  path: "/proprietors",
   handler: getProprietors,
   options: {
     auth: false,
