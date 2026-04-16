@@ -17,6 +17,7 @@ import {
   Geometry,
 } from "../queries/query.js";
 import { PipelineOptions, triggerPipelineRun } from "../pipeline/run.js";
+import { proprietorsRoute } from "./proprietors/proprietors.js";
 
 type GetPolygonsInBoxRequest = Request & {
   query: {
@@ -274,6 +275,7 @@ const routes = [
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,
+  ...(process.env.MEILISEARCH_ENABLED === "true" ? [proprietorsRoute] : []),
   // postTestDataRoute
 ];
 

@@ -7,6 +7,9 @@ let meiliClient: MeiliSearch | null = null;
 
 export async function initMeiliSearch(): Promise<void> {
   logger.info("Initialising MeiliSearch client...");
+  if (!process.env.MEILI_HOST || !process.env.MEILI_MASTER_KEY) {
+    throw new Error("MeiliSearch host or master key not configured");
+  }
   const masterClient = new MeiliSearch({
     host: process.env.MEILI_HOST,
     apiKey: process.env.MEILI_MASTER_KEY,

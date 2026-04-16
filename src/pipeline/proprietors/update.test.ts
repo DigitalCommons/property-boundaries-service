@@ -314,5 +314,42 @@ describe("update proprietors", () => {
         expect(mockMeiliClient.deleteIndex.called).to.be.true;
       }
     });
+
+    it("should skip update when MEILISEARCH_ENABLED is not 'true'", async () => {
+      //Arrange
+      const original = process.env.MEILISEARCH_ENABLED;
+      process.env.MEILISEARCH_ENABLED = "false";
+
+      try {
+        //Act
+        await update.updateProprietorsIndex();
+        //Assert
+        expect(getMeiliClientStub.called).to.be.false;
+        expect(mockMeiliClient.createIndex.called).to.be.false;
+      } finally {
+        process.env.MEILISEARCH_ENABLED = original;
+      }
+    });
+
+    it("should clean up new index on swap failure and rethrow", async () => {
+      //Arrange
+      getDistinctProprietorNamesStub.resolves(["Owner 1"]);
+      const failedTask = {
+        status: "failed",
+        error: { message: "Swap failed" },
+      };
+      mockMeiliClient.swapIndexes.returns({
+        waitTask: sandbox.stub().resolves(failedTask),
+      });
+
+      //Act & Assert
+      try {
+        await update.updateProprietorsIndex();
+        expect.fail("Should have thrown an error");
+      } catch (err: any) {
+        expect(err.message).to.include("Failed to swap");
+        expect(mockMeiliClient.deleteIndex.called).to.be.true;
+      }
+    });
   });
 });
