@@ -15,12 +15,16 @@ explains how to use the layer in more detail.
 To get an overview of the data we handle, and how it gets updated by the Ownerships + INSPIRE
 pipeline, see [pipeline.md](./pipeline.md).
 
+## Local services
+The service uses a Docker container for Meilisearch to enable fuzzy searching of proprietor names. For local setup details and client usage instructions, see [meilisearch.md](./meilisearch.md).
+
 ## Useful dev commands
 
 - `npx sequelize-cli db:migrate` to run new database migration(s)
 - `npx sequelize-cli db:migrate:undo:all` to reset database migrations
 - `npm run dev:serve` to start the server responding to API requests.
 - `npm run build && npm run plot` to plot some of the analysis after a pipeline has run
+- `npx sequelize-cli db:seed:all` to run the database seeders
 
 ## Troubleshooting
 

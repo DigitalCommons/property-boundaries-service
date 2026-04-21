@@ -5,6 +5,7 @@ import qs from "qs";
 import routes from "./routes/index.js";
 import { resumePipelineRunIfInterrupted } from "./pipeline/run.js";
 import { logger } from "./pipeline/logger.js";
+import { initMeiliSearch } from "./meilisearch/client.js";
 
 export const server: Server = Hapi.server({
   port: process.env.PORT || 4000,
@@ -45,6 +46,18 @@ async function start() {
 
   console.log(`Listening on ${server.settings.host}:${server.settings.port}`);
   server.start();
+
+  // initialise MeiliSearch client and check connection before starting to accept requests
+  try {
+    if (process.env.MEILISEARCH_ENABLED === "true") {
+      await initMeiliSearch();
+    }
+  } catch (error) {
+    logger.error(
+      error,
+      `Failed to initialize MeiliSearch client: ${error.message}`,
+    );
+  }
 
   // Resume pipeline run if interrupted
   try {
