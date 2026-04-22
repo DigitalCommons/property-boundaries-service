@@ -47,6 +47,11 @@ const tasks = [
     method: async (options: TaskOptions) => await updateOwnerships(options),
   },
   {
+    name: "updateProprietors",
+    desc: "Rebuild the Meilisearch proprietors index from the current land_ownerships data to keep proprietor search up to date.",
+    method: async (_options: TaskOptions) => await updateProprietorsIndex(),
+  },
+  {
     name: "downloadInspire",
     desc: "Download the latest INSPIRE polygons, backup the data, and store it in the pending_inspire_polygons DB table",
     method: async (options: TaskOptions) =>
@@ -57,11 +62,6 @@ const tasks = [
     desc: "Compare pending_inspire_polygons with the existing land_ownership_polygons and classify changes. Accept changes that meet criteria for a match and output detailed analysis about failed matches.",
     method: async (options: TaskOptions) =>
       await analyseAllPendingPolygons(options),
-  },
-  {
-    name: "updateProprietors",
-    desc: "Rebuild the Meilisearch proprietors index from the current land_ownerships data to keep proprietor search up to date.",
-    method: async (_options: TaskOptions) => await updateProprietorsIndex(),
   },
 ];
 
