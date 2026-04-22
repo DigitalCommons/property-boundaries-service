@@ -111,6 +111,22 @@ It runs these tasks in sequential order:
     ownership data. This stage is quite fast and non-destructive, since the government API provides all
     historical data since Nov 2017, so the new data is always written straight into the DB.
 
+1. `updateProprietors`: This task rebuilds the Meilisearch `proprietors` search index from the `land_ownerships` data that was updated in the previous step, so that proprietor name search is kept up to date.
+
+    It works as follows:
+
+    1. Queries all distinct, non-empty proprietor names from the four proprietor name columns (`proprietor_name_1`–`proprietor_name_4`) in the `land_ownerships` table.
+    1. Converts each name into a document `{ id, name }`, where `id` is a 16-character hex prefix of the SHA-256 hash of the name.
+    1. Builds the new index:
+        - Creates the live `proprietors` index if it doesn't already exist (so the swap step later has something to swap into).
+        - Deletes any leftover `proprietors_new` index from a previously failed run.
+        - Creates a fresh `proprietors_new` index and configures `name` as its only searchable attribute.
+        - Inserts all documents into `proprietors_new` in batches of 10,000.
+        - Swaps `proprietors_new` into `proprietors`, making the new data live with minimal downtime.
+        - Deletes `proprietors_new` (which now holds the old data after the swap).
+    1. If any step fails, `proprietors_new` is cleaned up and the error is re-thrown, leaving the live `proprietors` index untouched.
+
+    
 1.  `downloadInspire`: This task
 
     1. downloads the latest INSPIRE data
@@ -177,6 +193,8 @@ are specific to DCC infrastructure, see [this GitHub comment](https://github.com
 ## Analysing the pipeline output
 
 After the `updateOwnerships` task is complete, the new company ownership data should be visible in LX for all users.
+
+After the `updateProprietors` task is complete, the Meilisearch proprietor index should be updated to match the proprietors in the Landownership table. These are visible to all users via the search bar in the LX frontend.
 
 After the `downloadOwnerships` task, a LX super user can see the pending INSPIRE polygons that have been downloaded in a separate, secret data layer.
 
