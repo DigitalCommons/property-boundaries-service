@@ -43,7 +43,7 @@ The `id` is the first 16 hex characters of a SHA-256 hash of the name, so it is 
 
 #### Updating the index
 
-The proprietors index is rebuilt automatically at the end of each full pipeline run (`updateProprietors` task). The process is:
+The proprietors index is rebuilt automatically in the pipeline run (`updateProprietors` task). The process is:
 
 1. Ensure the live `proprietors` index exists (create it if not).
 2. Delete any leftover `proprietors_new` index from a previous failed run.
@@ -56,13 +56,13 @@ If anything fails, `proprietors_new` is cleaned up and the live `proprietors` in
 
 #### Refreshing the index standalone
 
-To rebuild the proprietors index without running the full pipeline, pass `startAtTask=updateProprietors` to the `/run-pipeline` endpoint (currently there is no endOfTask parameter needed as this is the last task in the list but double check this):
+To rebuild the proprietors index without running the full pipeline, pass `startAtTask=updateProprietors` and `stopBeforeTask=downloadInspire` to the `/run-pipeline` endpoint.
 
 ```
-GET /run-pipeline?secret=<SECRET>&startAtTask=updateProprietors
+GET /run-pipeline?secret=<SECRET>&startAtTask=updateProprietors&stopBeforeTask=downloadInspire
 ```
 
-This starts from the `updateProprietors` task only, using the existing data already in `land_ownerships`.
+This runs the `updateProprietors` task only, using the existing data already in `land_ownerships`.
 
 ### API endpoint
 
