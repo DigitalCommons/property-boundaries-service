@@ -40,8 +40,21 @@ RUN apk add --no-cache gdal-tools
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/config ./config
-RUN npm prune --omit=dev
+
+# DB migrations run at deploy time (e.g. Coolify's pre-deploy command:
+# `npx sequelize-cli db:migrate`, the same command scripts/deploy.sh uses).
+# Bring in the migration sources so the CLI can run from the repo root inside
+# this image, mirroring the layout deploy.sh expects.
+COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/seeders ./seeders
+
+# Strip dev deps to slim the image, then add back just the Sequelize CLI (a dev
+# dep) which is needed to run migrations at deploy time. Pinned to the major
+# version in package.json.
+RUN npm prune --omit=dev \
+    && npm install --no-save sequelize-cli@6
 
 USER node
 EXPOSE 4000
