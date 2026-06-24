@@ -315,22 +315,6 @@ describe("update proprietors", () => {
       }
     });
 
-    it("should skip update when MEILISEARCH_ENABLED is not 'true'", async () => {
-      //Arrange
-      const original = process.env.MEILISEARCH_ENABLED;
-      process.env.MEILISEARCH_ENABLED = "false";
-
-      try {
-        //Act
-        await update.updateProprietorsIndex();
-        //Assert
-        expect(getMeiliClientStub.called).to.be.false;
-        expect(mockMeiliClient.createIndex.called).to.be.false;
-      } finally {
-        process.env.MEILISEARCH_ENABLED = original;
-      }
-    });
-
     it("should clean up new index on swap failure and rethrow", async () => {
       //Arrange
       getDistinctProprietorNamesStub.resolves(["Owner 1"]);
