@@ -1,4 +1,4 @@
-import { DataTypes } from "sequelize";
+import { DataTypes, DATE } from "sequelize";
 import { sequelize } from "./database.js";
 
 export const PolygonModel = sequelize.define(
@@ -143,6 +143,65 @@ export const LandOwnershipModel = sequelize.define(
   },
   {
     tableName: "land_ownerships",
+  },
+);
+
+export const LandOwnershipHistoryModel = sequelize.define(
+  "LandOwnershipHistory",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    source_snapshot_date: {
+      allowNull: false,
+      type: DATE,
+    },
+    title_no: {
+      allowNull: false,
+      type: DataTypes.STRING,
+    },
+    tenure: DataTypes.STRING,
+    property_address: DataTypes.TEXT,
+    district: DataTypes.STRING,
+    county: DataTypes.STRING,
+    region: DataTypes.STRING,
+    postcode: DataTypes.STRING,
+    multiple_address_indicator: DataTypes.STRING,
+    price_paid: DataTypes.STRING,
+    proprietor_name_1: DataTypes.TEXT,
+    company_registration_no_1: DataTypes.STRING,
+    proprietor_category_1: DataTypes.STRING,
+    proprietor_1_address_1: DataTypes.TEXT,
+    proprietor_1_address_2: DataTypes.TEXT,
+    proprietor_1_address_3: DataTypes.TEXT,
+    proprietor_name_2: DataTypes.TEXT,
+    company_registration_no_2: DataTypes.STRING,
+    proprietor_category_2: DataTypes.STRING,
+    proprietor_2_address_1: DataTypes.TEXT,
+    proprietor_2_address_2: DataTypes.TEXT,
+    proprietor_2_address_3: DataTypes.TEXT,
+    proprietor_name_3: DataTypes.TEXT,
+    company_registration_no_3: DataTypes.STRING,
+    proprietor_category_3: DataTypes.STRING,
+    proprietor_3_address_1: DataTypes.TEXT,
+    proprietor_3_address_2: DataTypes.TEXT,
+    proprietor_3_address_3: DataTypes.TEXT,
+    proprietor_name_4: DataTypes.TEXT,
+    company_registration_no_4: DataTypes.STRING,
+    proprietor_category_4: DataTypes.STRING,
+    proprietor_4_address_1: DataTypes.TEXT,
+    proprietor_4_address_2: DataTypes.TEXT,
+    proprietor_4_address_3: DataTypes.TEXT,
+    date_proprietor_added: DataTypes.STRING,
+    additional_proprietor_indicator: DataTypes.STRING,
+    proprietor_uk_based: DataTypes.BOOLEAN,
+    createdAt: DataTypes.DATE,
+  },
+  {
+    tableName: "land_ownership_history",
   },
 );
 
