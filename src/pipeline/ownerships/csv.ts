@@ -1,64 +1,7 @@
-import "dotenv/config";
 import axios from "axios";
 import * as unzip from "unzip-stream";
 import csvParser, { CsvParser } from "csv-parser";
 import { logger } from "../logger.js";
-
-// These are all helper functions for the 2 main functions in ./update.ts
-
-export const getDatasetHistory = async (overseas: boolean) => {
-  const type = overseas ? "ocod" : "ccod";
-  const response = await axios.get(
-    `${process.env.GOV_API_URL}/datasets/history/${type}`,
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    },
-  );
-  if (response.status !== 200) {
-    logger.error(
-      `We failed to get ${type} dataset history, status code: ${response.status}`,
-    );
-    return;
-  }
-  return response.data.dataset_history.map((dataset) => ({
-    ...dataset,
-    type,
-    // convert to YYYY-MM-DD format
-    unsorted_date: dataset.unsorted_date.split("-").reverse().join("-"),
-    download: `${process.env.GOV_API_URL}/datasets/history/${type}/${dataset.filename}`,
-  }));
-};
-
-export const getLatestDatasets = async (overseas: boolean) => {
-  const type = overseas ? "ocod" : "ccod";
-  const response = await axios.get(
-    `${process.env.GOV_API_URL}/datasets/${type}`,
-    {
-      headers: {
-        Authorization: process.env.GOV_API_KEY,
-      },
-    },
-  );
-  if (response.status !== 200) {
-    logger.error(
-      `We failed to get the latest ${type} dataset, status code: ${response.status}`,
-    );
-    return;
-  }
-
-  return response.data.result.resources.map((dataset) => ({
-    // Include date of the data and map to the same format that is used elsewhere in the code
-    filename: dataset.file_name,
-    type,
-    file_size: dataset.file_size,
-    download: `${process.env.GOV_API_URL}/datasets/${type}/${dataset.file_name}`,
-    unsorted_date: new Date(response.data.result.last_updated) // convert to YYY-MM-DD
-      .toISOString()
-      .split("T")[0],
-  }));
-};
 
 /**
  * Fetch zipped CSV file from URL and pipe chunks of multiple rows of the data into a function.
