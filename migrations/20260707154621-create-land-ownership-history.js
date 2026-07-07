@@ -4,7 +4,7 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.sequelize.query(
-      `CREATE TABLE land_ownerships_history (
+      `CREATE TABLE land_ownership_history (
         id int NOT NULL AUTO_INCREMENT,
         source_snapshot_date DATE NOT NULL,
         title_no varchar(255) NOT NULL,
@@ -54,6 +54,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.sequelize.query(`DROP TABLE land_ownerships_history`);
+    await queryInterface.sequelize.query(`DROP TABLE land_ownership_history`);
   },
 };
