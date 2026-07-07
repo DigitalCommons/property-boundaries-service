@@ -10,7 +10,7 @@ import {
   setPipelineLatestOwnershipData,
 } from "../../queries/query.js";
 import {
-  fileDownload,
+  datasetDownload,
   getDatasetHistory,
   getFullOverseasDataset,
   getFullUKDataset,
@@ -47,20 +47,20 @@ export const updateOwnerships = async (options: any) => {
 
   const ccodHistoricalDatasets = await getDatasetHistory(false);
   if (!ccodHistoricalDatasets) {
-    return;
+    throw new Error("Failed to fetch CCOD dataset history");
   }
   const ocodHistoricalDatasets = await getDatasetHistory(true);
   if (!ocodHistoricalDatasets) {
-    return;
+    throw new Error("Failed to fetch OCOD dataset history");
   }
   // Add the latest datasets which are (annoyingly) not included in the history API's response
   const latestCcodDatasets = await getLatestDatasets(false);
   if (!latestCcodDatasets) {
-    return;
+    throw new Error("Failed to fetch latest CCOD datasets");
   }
   const latestOcodDatasets = await getLatestDatasets(true);
   if (!latestOcodDatasets) {
-    return;
+    throw new Error("Failed to fetch latest OCOD datasets");
   }
 
   const unsortedListOfDatasets = [
@@ -91,7 +91,7 @@ export const updateOwnerships = async (options: any) => {
     const ownershipAdditions: RawOwnership[] = [];
     const ownershipDeletions: RawOwnership[] = [];
 
-    /** Thhe function we'll use to process each CSV row and add it to the apprioriate array */
+    /** The function we'll use to process each CSV row and add it to the apprioriate array */
     const addOwnershipToArray = async (ownership: RawOwnership) => {
       if (!ownership || ownership["Title Number"] === "Row Count:") {
         // This is the last row of the CSV, which we can ignore
@@ -116,13 +116,16 @@ export const updateOwnerships = async (options: any) => {
       }
     };
 
-    const fileResponse = await fileDownload(file);
+    const fileResponse = await datasetDownload(file.download);
+    if (!fileResponse) {
+      throw new Error(`Failed to download file ${file.fileName}`);
+    }
 
     // The change files are small enough to keep all the data in memory, so we can just use a
     // chunk size of 1 and then do the DB operations later. We want to do this so that we can
     // filter additions and deletions and avoid data loss
     await pipeZippedCsvFromUrlIntoFun(
-      fileResponse.data.result.download_url,
+      fileResponse.downloadUrl,
       (ownershipsChunk) => addOwnershipToArray(ownershipsChunk[0]),
       1,
       false,
@@ -185,7 +188,7 @@ async function downloadOwnershipsFullData(month: number, year: number) {
 
   const datasetUKResponse = await getFullUKDataset(month, year);
   if (!datasetUKResponse) {
-    return;
+    throw new Error(`Failed to fetch UK dataset for ${paddedMonth}/${year}`);
   }
 
   // Reset the table to avoid conflicting data
@@ -201,7 +204,9 @@ async function downloadOwnershipsFullData(month: number, year: number) {
 
   const datasetOverseasResponse = await getFullOverseasDataset(month, year);
   if (!datasetOverseasResponse) {
-    return;
+    throw new Error(
+      `Failed to fetch overseas dataset for ${paddedMonth}/${year}`,
+    );
   }
 
   await pipeZippedCsvFromUrlIntoFun(
