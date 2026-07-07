@@ -1,5 +1,5 @@
 import { QueryTypes } from "sequelize";
-import { sequelize } from "./query.js";
+import { sequelize } from "./database.js";
 import { logger } from "../pipeline/logger.js";
 
 /**
