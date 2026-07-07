@@ -4,6 +4,8 @@ import {
   deleteAllLandOwnerships,
   bulkDeleteLandOwnerships,
   bulkCreateOrUpdateLandOwnerships,
+} from "../../queries/land-ownership-query.js";
+import {
   getLatestOwnershipDataDate,
   setPipelineLatestOwnershipData,
 } from "../../queries/query.js";
