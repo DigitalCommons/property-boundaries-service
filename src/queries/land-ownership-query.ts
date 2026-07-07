@@ -1,4 +1,4 @@
-import { LandOwnershipModel } from "./models";
+import { LandOwnershipModel } from "./models.js";
 
 export type RawOwnership = {
   "Title Number": string;
@@ -36,6 +36,7 @@ export type RawOwnership = {
   "Proprietor (4) Address (3)"?: string;
   "Date Proprietor Added"?: string;
   "Additional Proprietor Indicator"?: string;
+  "Change Indicator"?: string;
 };
 
 /**
