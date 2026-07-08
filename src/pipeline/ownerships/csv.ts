@@ -6,9 +6,9 @@ import { logger } from "../logger.js";
 /**
  * Fetch zipped CSV file from URL and pipe chunks of multiple rows of the data into a function.
  */
-export const pipeZippedCsvFromUrlIntoFun = async (
+export const pipeZippedCsvFromUrlIntoFun = async <T extends object>(
   downloadUrl: string,
-  processChunkOfRowsFunc: (chunkOfRows: any[]) => Promise<void>,
+  processChunkOfRowsFunc: (chunkOfRows: T[]) => Promise<void>,
   chunkSize: number,
   logProgress: boolean = true,
 ) => {
@@ -24,10 +24,10 @@ export const pipeZippedCsvFromUrlIntoFun = async (
       if (filePath.substr(filePath.lastIndexOf(".") + 1) === "csv") {
         const csvPipe: CsvParser = entry.pipe(csvParser());
         let rowCount = 0;
-        const rowsToSend = [];
+        const rowsToSend: T[] = [];
         let sendingChunk = false;
 
-        csvPipe.on("data", async (row) => {
+        csvPipe.on("data", async (row: T) => {
           rowCount++;
 
           // Check if we need send a chunk
