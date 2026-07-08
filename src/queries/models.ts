@@ -159,6 +159,10 @@ export const LandOwnershipHistoryModel = sequelize.define(
       allowNull: false,
       type: DATE,
     },
+    source_file: {
+      allowNull: false,
+      type: DataTypes.STRING,
+    },
     title_no: {
       allowNull: false,
       type: DataTypes.STRING,
@@ -197,11 +201,13 @@ export const LandOwnershipHistoryModel = sequelize.define(
     proprietor_4_address_3: DataTypes.TEXT,
     date_proprietor_added: DataTypes.STRING,
     additional_proprietor_indicator: DataTypes.STRING,
+    change_indicator: DataTypes.STRING,
     proprietor_uk_based: DataTypes.BOOLEAN,
     createdAt: DataTypes.DATE,
   },
   {
     tableName: "land_ownership_history",
+    updatedAt: false,
   },
 );
 
