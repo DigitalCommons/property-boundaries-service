@@ -44,7 +44,7 @@ const tasks = [
   {
     name: "ownerships",
     desc: "Get the latest UK & Overseas Companies property ownerhsip data and store it in the land_ownerships DB table",
-    method: async (options: TaskOptions) => await updateOwnerships(options),
+    method: async (_options: TaskOptions) => await updateOwnerships(),
   },
   {
     name: "updateProprietors",

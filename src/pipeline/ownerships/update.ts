@@ -1,9 +1,11 @@
 import chunk from "lodash.chunk";
 import {
-  deleteAllLandOwnerships,
   bulkDeleteLandOwnerships,
   bulkCreateOrUpdateLandOwnerships,
   RawOwnership,
+  bulkCreateLandOwnershipsHistory,
+  deleteAllLandOwnerships,
+  deleteAllRawHistoricLandOwnerships,
 } from "../../queries/land-ownership-query.js";
 import {
   getLatestOwnershipDataDate,
@@ -21,7 +23,7 @@ import { logger } from "../logger.js";
 import { notifyMatrix } from "../util.js";
 
 /**
- * Ensure the land_ownerships DB table is up-to-date.
+ * Ensure the land_ownerships and land_ownership_history_raw DB tables are up-to-date.
  *
  * We do this by:
  * - Checking the latest pipeline run date
@@ -29,7 +31,7 @@ import { notifyMatrix } from "../util.js";
  * - Downloading monthly changes to UK company + overseas company ownerships since the latest update
  * - Looping through the monthly changes chronologically and updating land_ownerships accordingly
  */
-export const updateOwnerships = async (options: any) => {
+export const updateOwnerships = async () => {
   let latestOwnershipDataDate = await getLatestOwnershipDataDate();
 
   if (latestOwnershipDataDate) {
@@ -124,7 +126,7 @@ export const updateOwnerships = async (options: any) => {
     // The change files are small enough to keep all the data in memory, so we can just use a
     // chunk size of 1 and then do the DB operations later. We want to do this so that we can
     // filter additions and deletions and avoid data loss
-    await pipeZippedCsvFromUrlIntoFun(
+    await pipeZippedCsvFromUrlIntoFun<RawOwnership>(
       fileResponse.downloadUrl,
       (ownershipsChunk) => addOwnershipToArray(ownershipsChunk[0]),
       1,
@@ -138,18 +140,30 @@ export const updateOwnerships = async (options: any) => {
     logger.info(`Deleting ${ownershipDeletionTitleNos.length} ownerships`);
     await bulkDeleteLandOwnerships(ownershipDeletionTitleNos);
 
-    // TODO: rather than just updating the entries of each title and overwriting old data, it would
-    // be nice to keep the old data (especially when there is a change of owner), so that we are
-    // eventually able to show users a list of ownership history. Since the history of these
-    // datasets is publicly available, this is a feature we can add later without storing all the
-    // data ourselves
-
     logger.info(`Creating ${ownershipAdditions.length} ownerships`);
 
     // break additions into chunks of 2000 so we don't hit max packet limit for MySQL
     const chunksOfAdditions = chunk(ownershipAdditions, 20000);
     for (const chunk of chunksOfAdditions) {
       await bulkCreateOrUpdateLandOwnerships(chunk, file.type === "ocod");
+    }
+
+    logger.info(
+      `Creating ${
+        ownershipAdditions.length + ownershipDeletions.length
+      } raw land ownership history records`,
+    );
+    // Store each change row in the history table
+    const chunksOfAllRows = chunk(
+      [...ownershipAdditions, ...ownershipDeletions],
+      20000,
+    );
+    for (const chunk of chunksOfAllRows) {
+      await bulkCreateLandOwnershipsHistory(
+        chunk,
+        file.type === "ocod",
+        file.fileName,
+      );
     }
 
     logger.info(`Finished processing ${file.fileName}`);
@@ -182,8 +196,19 @@ async function downloadOwnershipsFullData(month: number, year: number) {
   const paddedMonth = String(month).padStart(2, "0");
 
   /** The function we'll use to process each chunk of CSV rows and insert them into the DB */
-  const processOwnership = async (ownerships: any[], overseas: boolean) => {
+  const processOwnership = async (
+    ownerships: RawOwnership[],
+    overseas: boolean,
+    sourceFile: string,
+  ) => {
     await bulkCreateOrUpdateLandOwnerships(ownerships, overseas, false);
+    await bulkCreateLandOwnershipsHistory(
+      ownerships,
+      overseas,
+      sourceFile,
+      `${year}-${paddedMonth}-01`, //TODO check this date
+      false,
+    );
   };
 
   const datasetUKResponse = await getFullUKDataset(month, year);
@@ -194,12 +219,21 @@ async function downloadOwnershipsFullData(month: number, year: number) {
   // Reset the table to avoid conflicting data
   await deleteAllLandOwnerships();
   // Reset the history table to avoid conflicting data
-  // await deleteAllHistoricLandOwnerships();
+  await deleteAllRawHistoricLandOwnerships();
 
-  await pipeZippedCsvFromUrlIntoFun(
+  await pipeZippedCsvFromUrlIntoFun<RawOwnership>(
     datasetUKResponse.downloadUrl,
-    (ownership) => processOwnership(ownership, false),
+    (ownership) =>
+      processOwnership(
+        ownership,
+        false,
+        `CCOD_FULL_${year}_${paddedMonth}.zip`,
+      ),
     20000,
+  );
+
+  logger.info(
+    `Finished downloading the UK companies data from ${paddedMonth}/${year}`,
   );
 
   const datasetOverseasResponse = await getFullOverseasDataset(month, year);
@@ -209,9 +243,10 @@ async function downloadOwnershipsFullData(month: number, year: number) {
     );
   }
 
-  await pipeZippedCsvFromUrlIntoFun(
+  await pipeZippedCsvFromUrlIntoFun<RawOwnership>(
     datasetOverseasResponse.downloadUrl,
-    (ownership) => processOwnership(ownership, true),
+    (ownership) =>
+      processOwnership(ownership, true, `OCOD_FULL_${year}_${paddedMonth}.zip`),
     20000,
   );
 

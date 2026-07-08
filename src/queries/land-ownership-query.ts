@@ -1,4 +1,7 @@
-import { LandOwnershipModel } from "./models.js";
+import {
+  LandOwnershipHistoryModel as LandOwnershipHistoryRawModel,
+  LandOwnershipModel,
+} from "./models.js";
 
 export type RawOwnership = {
   "Title Number": string;
@@ -36,7 +39,8 @@ export type RawOwnership = {
   "Proprietor (4) Address (3)"?: string;
   "Date Proprietor Added"?: string;
   "Additional Proprietor Indicator"?: string;
-  "Change Indicator"?: string;
+  "Change Indicator"?: string; //Only exists on COU file raw data
+  "Change Date"?: string; //Only exists on COU file raw data
 };
 
 /**
@@ -68,52 +72,9 @@ export const bulkCreateOrUpdateLandOwnerships = async (
   overseas: boolean,
   logging = false,
 ) => {
-  const parsedOwnerships = ownerships.map((ownership) => ({
-    title_no: ownership["Title Number"],
-    tenure: ownership.Tenure,
-    property_address: ownership["Property Address"] || null,
-    district: ownership.District || null,
-    county: ownership.County || null,
-    region: ownership.Region || null,
-    postcode: ownership.Postcode || null,
-    multiple_address_indicator: ownership["Multiple Address Indicator"] || null,
-    price_paid: ownership["Price Paid"] || null,
-    proprietor_name_1: ownership["Proprietor Name (1)"] || null,
-    company_registration_no_1:
-      ownership["Company Registration No. (1)"] || null,
-    proprietor_category_1: ownership["Proprietorship Category (1)"] || null,
-    proprietor_1_address_1: ownership["Proprietor (1) Address (1)"] || null,
-    proprietor_1_address_2: ownership["Proprietor (1) Address (2)"] || null,
-    proprietor_1_address_3: ownership["Proprietor (1) Address (3)"] || null,
-    proprietor_name_2: ownership["Proprietor Name (2)"] || null,
-    company_registration_no_2:
-      ownership["Company Registration No. (2)"] || null,
-    proprietor_category_2: ownership["Proprietorship Category (2)"] || null,
-    proprietor_2_address_1: ownership["Proprietor (2) Address (1)"] || null,
-    proprietor_2_address_2: ownership["Proprietor (2) Address (2)"] || null,
-    proprietor_2_address_3: ownership["Proprietor (2) Address (3)"] || null,
-    proprietor_name_3: ownership["Proprietor Name (3)"] || null,
-    company_registration_no_3:
-      ownership["Company Registration No. (3)"] || null,
-    proprietor_category_3: ownership["Proprietorship Category (3)"] || null,
-    proprietor_3_address_1: ownership["Proprietor (3) Address (1)"] || null,
-    proprietor_3_address_2: ownership["Proprietor (3) Address (2)"] || null,
-    proprietor_3_address_3: ownership["Proprietor (3) Address (3)"] || null,
-    proprietor_name_4: ownership["Proprietor Name (4)"] || null,
-    company_registration_no_4:
-      ownership["Company Registration No. (4)"] || null,
-    proprietor_category_4: ownership["Proprietorship Category (4)"] || null,
-    proprietor_4_address_1: ownership["Proprietor (4) Address (1)"] || null,
-    proprietor_4_address_2: ownership["Proprietor (4) Address (2)"] || null,
-    proprietor_4_address_3: ownership["Proprietor (4) Address (3)"] || null,
-    date_proprietor_added:
-      // convert DD-MM-YYYY to YYYY-MM-DD
-      ownership["Date Proprietor Added"]?.split("-").reverse().join("-") ||
-      null,
-    additional_proprietor_indicator:
-      ownership["Additional Proprietor Indicator"] || null,
-    proprietor_uk_based: !overseas,
-  }));
+  const parsedOwnerships = ownerships.map((ownership) =>
+    mapRawOwnershipToDbOwnership(ownership, overseas),
+  );
 
   await LandOwnershipModel.bulkCreate(parsedOwnerships, {
     logging: logging ? console.log : false,
@@ -159,6 +120,81 @@ export const bulkCreateOrUpdateLandOwnerships = async (
 };
 
 /**
+ * Bulk create land ownership history records. This is used to keep a record of all changes to the
+ * land ownership data over time. Each record is associated with a source file and a snapshot date.
+ * @param ownerships array of ownership objects with the same keys as provided by the gov,
+ * documented here: https://use-land-property-data.service.gov.uk/datasets/ccod/tech-spec (note that
+ * some bad records don't match this spec though)
+ * @param overseas boolean flag to denote whether the land record is overseas
+ * @param sourceFile the name of the source file from which these records were derived
+ * @param logging whether to log out the SQL queries to the console
+ */
+export const bulkCreateLandOwnershipsHistory = async (
+  ownerships: RawOwnership[],
+  overseas: boolean,
+  sourceFile: string,
+  sourceDate?: string,
+  logging = false,
+) => {
+  const parsedOwnerships = ownerships.map((ownership) => ({
+    ...mapRawOwnershipToDbOwnership(ownership, overseas),
+    source_snapshot_date: sourceDate ?? ownership["Change Date"], //TODO look at this
+    source_file: sourceFile,
+    change_indicator: ownership["Change Indicator"] || null,
+  }));
+
+  await LandOwnershipHistoryRawModel.bulkCreate(parsedOwnerships, {
+    logging: logging ? console.log : false,
+    benchmark: true,
+  });
+};
+
+const mapRawOwnershipToDbOwnership = (
+  ownership: RawOwnership,
+  overseas: boolean,
+) => ({
+  title_no: ownership["Title Number"],
+  tenure: ownership.Tenure,
+  property_address: ownership["Property Address"] || null,
+  district: ownership.District || null,
+  county: ownership.County || null,
+  region: ownership.Region || null,
+  postcode: ownership.Postcode || null,
+  multiple_address_indicator: ownership["Multiple Address Indicator"] || null,
+  price_paid: ownership["Price Paid"] || null,
+  proprietor_name_1: ownership["Proprietor Name (1)"] || null,
+  company_registration_no_1: ownership["Company Registration No. (1)"] || null,
+  proprietor_category_1: ownership["Proprietorship Category (1)"] || null,
+  proprietor_1_address_1: ownership["Proprietor (1) Address (1)"] || null,
+  proprietor_1_address_2: ownership["Proprietor (1) Address (2)"] || null,
+  proprietor_1_address_3: ownership["Proprietor (1) Address (3)"] || null,
+  proprietor_name_2: ownership["Proprietor Name (2)"] || null,
+  company_registration_no_2: ownership["Company Registration No. (2)"] || null,
+  proprietor_category_2: ownership["Proprietorship Category (2)"] || null,
+  proprietor_2_address_1: ownership["Proprietor (2) Address (1)"] || null,
+  proprietor_2_address_2: ownership["Proprietor (2) Address (2)"] || null,
+  proprietor_2_address_3: ownership["Proprietor (2) Address (3)"] || null,
+  proprietor_name_3: ownership["Proprietor Name (3)"] || null,
+  company_registration_no_3: ownership["Company Registration No. (3)"] || null,
+  proprietor_category_3: ownership["Proprietorship Category (3)"] || null,
+  proprietor_3_address_1: ownership["Proprietor (3) Address (1)"] || null,
+  proprietor_3_address_2: ownership["Proprietor (3) Address (2)"] || null,
+  proprietor_3_address_3: ownership["Proprietor (3) Address (3)"] || null,
+  proprietor_name_4: ownership["Proprietor Name (4)"] || null,
+  company_registration_no_4: ownership["Company Registration No. (4)"] || null,
+  proprietor_category_4: ownership["Proprietorship Category (4)"] || null,
+  proprietor_4_address_1: ownership["Proprietor (4) Address (1)"] || null,
+  proprietor_4_address_2: ownership["Proprietor (4) Address (2)"] || null,
+  proprietor_4_address_3: ownership["Proprietor (4) Address (3)"] || null,
+  date_proprietor_added:
+    // convert DD-MM-YYYY to YYYY-MM-DD
+    ownership["Date Proprietor Added"]?.split("-").reverse().join("-") || null,
+  additional_proprietor_indicator:
+    ownership["Additional Proprietor Indicator"] || null,
+  proprietor_uk_based: !overseas,
+});
+
+/**
  * Bulk delete land ownership records for the given title numbers. This is used when processing
  * ownership change files, where we delete the old records for a title number before adding the new
  * records.
@@ -183,6 +219,14 @@ export const bulkDeleteLandOwnerships = async (
  */
 export const deleteAllLandOwnerships = async () => {
   await LandOwnershipModel.truncate();
+};
+
+/**
+ * Delete all land ownership history records. This is used when processing the full ownership data files, where
+ * we delete all existing history records before adding the new records.
+ */
+export const deleteAllRawHistoricLandOwnerships = async () => {
+  await LandOwnershipHistoryRawModel.truncate();
 };
 
 /**
