@@ -141,8 +141,8 @@ export const bulkCreateLandOwnershipsHistory = async (
     let snapshotDate: string | null | undefined = sourceDate;
     if (!snapshotDate) {
       // If no source date is provided, use the "Change Date" from the first ownership record
-      snapshotDate = ownerships[0]["Change Date"]
-        ? convertDateToYYYYMMDD(ownerships[0]["Change Date"])
+      snapshotDate = ownership["Change Date"]
+        ? convertDateToYYYYMMDD(ownership["Change Date"])
         : null;
     }
 

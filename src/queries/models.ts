@@ -206,7 +206,7 @@ export const LandOwnershipRawModel = sequelize.define(
     createdAt: DataTypes.DATE,
   },
   {
-    tableName: "land_ownership_raw",
+    tableName: "land_ownerships_raw",
     updatedAt: false,
   },
 );
