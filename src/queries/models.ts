@@ -146,8 +146,8 @@ export const LandOwnershipModel = sequelize.define(
   },
 );
 
-export const LandOwnershipHistoryModel = sequelize.define(
-  "LandOwnershipHistoryRaw",
+export const LandOwnershipRawModel = sequelize.define(
+  "LandOwnershipRaw",
   {
     id: {
       allowNull: false,
@@ -206,7 +206,7 @@ export const LandOwnershipHistoryModel = sequelize.define(
     createdAt: DataTypes.DATE,
   },
   {
-    tableName: "land_ownership_history_raw",
+    tableName: "land_ownership_raw",
     updatedAt: false,
   },
 );

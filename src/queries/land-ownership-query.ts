@@ -1,6 +1,6 @@
 import { convertDateToYYYYMMDD } from "../pipeline/ownerships/utils.js";
 import {
-  LandOwnershipHistoryModel as LandOwnershipHistoryRawModel,
+  LandOwnershipRawModel as LandOwnershipHistoryRawModel,
   LandOwnershipModel,
 } from "./models.js";
 
