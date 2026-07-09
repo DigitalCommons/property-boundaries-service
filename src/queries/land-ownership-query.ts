@@ -1,3 +1,4 @@
+import { convertDateToYYYYMMDD } from "../pipeline/ownerships/utils.js";
 import {
   LandOwnershipHistoryModel as LandOwnershipHistoryRawModel,
   LandOwnershipModel,
@@ -136,12 +137,22 @@ export const bulkCreateLandOwnershipsHistory = async (
   sourceDate?: string,
   logging = false,
 ) => {
-  const parsedOwnerships = ownerships.map((ownership) => ({
-    ...mapRawOwnershipToDbOwnership(ownership, overseas),
-    source_snapshot_date: sourceDate ?? ownership["Change Date"], //TODO look at this
-    source_file: sourceFile,
-    change_indicator: ownership["Change Indicator"] || null,
-  }));
+  const parsedOwnerships = ownerships.map((ownership) => {
+    let snapshotDate: string | null | undefined = sourceDate;
+    if (!snapshotDate) {
+      // If no source date is provided, use the "Change Date" from the first ownership record
+      snapshotDate = ownerships[0]["Change Date"]
+        ? convertDateToYYYYMMDD(ownerships[0]["Change Date"])
+        : null;
+    }
+
+    return {
+      ...mapRawOwnershipToDbOwnership(ownership, overseas),
+      source_snapshot_date: snapshotDate,
+      source_file: sourceFile,
+      change_indicator: ownership["Change Indicator"] || null,
+    };
+  });
 
   await LandOwnershipHistoryRawModel.bulkCreate(parsedOwnerships, {
     logging: logging ? console.log : false,
@@ -186,9 +197,9 @@ const mapRawOwnershipToDbOwnership = (
   proprietor_4_address_1: ownership["Proprietor (4) Address (1)"] || null,
   proprietor_4_address_2: ownership["Proprietor (4) Address (2)"] || null,
   proprietor_4_address_3: ownership["Proprietor (4) Address (3)"] || null,
-  date_proprietor_added:
-    // convert DD-MM-YYYY to YYYY-MM-DD
-    ownership["Date Proprietor Added"]?.split("-").reverse().join("-") || null,
+  date_proprietor_added: ownership["Date Proprietor Added"]
+    ? convertDateToYYYYMMDD(ownership["Date Proprietor Added"])
+    : null,
   additional_proprietor_indicator:
     ownership["Additional Proprietor Indicator"] || null,
   proprietor_uk_based: !overseas,

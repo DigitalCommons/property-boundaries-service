@@ -1,5 +1,6 @@
 import axios from "axios";
 import { logger } from "../logger.js";
+import { convertDateToYYYYMMDD } from "./utils.js";
 
 type DatasetHistoryResponse = {
   dataset: "ocod" | "ccod";
@@ -86,8 +87,7 @@ export const getDatasetHistory = async (
       lastUpdated: dataset.last_updated,
       fileSize: dataset.file_size,
       fileName: dataset.filename,
-      // convert to YYYY-MM-DD format
-      unsortedDate: dataset.unsorted_date.split("-").reverse().join("-"),
+      unsortedDate: convertDateToYYYYMMDD(dataset.unsorted_date),
       download: `${process.env.GOV_API_URL}/datasets/history/${type}/${dataset.filename}`,
     }));
   } catch (err) {
