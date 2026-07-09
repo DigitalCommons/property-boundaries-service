@@ -23,7 +23,7 @@ import { logger } from "../logger.js";
 import { notifyMatrix } from "../util.js";
 
 /**
- * Ensure the land_ownerships and land_ownership_history_raw DB tables are up-to-date.
+ * Ensure the land_ownerships and land_ownerships_raw DB tables are up-to-date.
  *
  * We do this by:
  * - Checking the latest pipeline run date
