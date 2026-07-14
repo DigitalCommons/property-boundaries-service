@@ -146,6 +146,38 @@ export const LandOwnershipModel = sequelize.define(
   },
 );
 
+export const LandOwnershipSnapshotModel = sequelize.define(
+  "LandOwnershipSnapshot",
+  {
+    id: {
+      allowNull: false,
+      autoIncrement: true,
+      primaryKey: true,
+      type: DataTypes.INTEGER,
+    },
+    title_no: {
+      allowNull: false,
+      type: DataTypes.STRING,
+    },
+    snapshot_date: {
+      allowNull: false,
+      type: DataTypes.DATEONLY,
+    },
+    proprietor_name: DataTypes.TEXT,
+    company_registration_no: DataTypes.STRING,
+    property_address: DataTypes.TEXT,
+    district: DataTypes.STRING,
+    county: DataTypes.STRING,
+    region: DataTypes.STRING,
+    postcode: DataTypes.STRING,
+  },
+  {
+    tableName: "land_ownership_snapshots",
+    createdAt: true,
+    updatedAt: false,
+  },
+);
+
 export const PipelineRunModel = sequelize.define(
   "PipelineRun",
   {
