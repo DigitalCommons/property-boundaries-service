@@ -1,6 +1,6 @@
 import { QueryTypes } from "sequelize";
-import { sequelize } from "./query.js";
 import { logger } from "../pipeline/logger.js";
+import { sequelize } from "./database.js";
 
 /**
  * Get all distinct non-empty proprietor names across all 4 proprietor columns.
