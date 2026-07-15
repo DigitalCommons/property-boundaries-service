@@ -197,6 +197,7 @@ export const PipelineRunModel = sequelize.define(
     startedAt: DataTypes.DATE,
     latest_ownership_data: DataTypes.DATEONLY,
     latest_inspire_data: DataTypes.DATEONLY,
+    latest_snapshot_ownership_data: DataTypes.DATEONLY,
     last_task: DataTypes.STRING,
     last_council_downloaded: DataTypes.STRING,
     last_poly_analysed: DataTypes.INTEGER,
