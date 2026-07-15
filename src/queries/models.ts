@@ -1,5 +1,5 @@
 import { DataTypes } from "sequelize";
-import { sequelize } from "./database";
+import { sequelize } from "./database.js";
 
 export const PolygonModel = sequelize.define(
   "Polygon",
@@ -170,6 +170,8 @@ export const LandOwnershipSnapshotModel = sequelize.define(
     county: DataTypes.STRING,
     region: DataTypes.STRING,
     postcode: DataTypes.STRING,
+    proprietor_uk_based: DataTypes.STRING,
+    date_proprietor_added: DataTypes.DATE,
   },
   {
     tableName: "land_ownership_snapshots",
