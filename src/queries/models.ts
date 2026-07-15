@@ -181,7 +181,7 @@ export const LandOwnershipSnapshotModel = sequelize.define(
       allowNull: false,
       type: DataTypes.BOOLEAN,
     },
-    date_proprietor_added: DataTypes.DATE,
+    date_proprietor_added: DataTypes.DATEONLY,
   },
   {
     tableName: "land_ownership_snapshots",
