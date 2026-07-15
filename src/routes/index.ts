@@ -275,7 +275,7 @@ const routes = [
   getPolygonsRoute,
   searchRoute,
   runPipelineRoute,
-  ...(process.env.MEILISEARCH_ENABLED === "true" ? [proprietorsRoute] : []),
+  proprietorsRoute,
   // postTestDataRoute
 ];
 

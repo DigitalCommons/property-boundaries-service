@@ -49,14 +49,14 @@ async function start() {
 
   // initialise MeiliSearch client and check connection before starting to accept requests
   try {
-    if (process.env.MEILISEARCH_ENABLED === "true") {
-      await initMeiliSearch();
-    }
+    await initMeiliSearch();
   } catch (error) {
-    logger.error(
-      error,
-      `Failed to initialize MeiliSearch client: ${error.message}`,
-    );
+    if (error instanceof Error) {
+      logger.error(
+        error,
+        `Failed to initialize MeiliSearch client: ${error.message}`,
+      );
+    }
   }
 
   // Resume pipeline run if interrupted
