@@ -163,14 +163,24 @@ export const LandOwnershipSnapshotModel = sequelize.define(
       allowNull: false,
       type: DataTypes.DATEONLY,
     },
-    proprietor_name: DataTypes.TEXT,
-    company_registration_no: DataTypes.STRING,
+    proprietor_name: {
+      allowNull: false,
+      type: DataTypes.TEXT,
+    },
+    company_registration_no: {
+      allowNull: false,
+      defaultValue: "",
+      type: DataTypes.STRING,
+    },
     property_address: DataTypes.TEXT,
     district: DataTypes.STRING,
     county: DataTypes.STRING,
     region: DataTypes.STRING,
     postcode: DataTypes.STRING,
-    proprietor_uk_based: DataTypes.STRING,
+    proprietor_uk_based: {
+      allowNull: false,
+      type: DataTypes.BOOLEAN,
+    },
     date_proprietor_added: DataTypes.DATE,
   },
   {
